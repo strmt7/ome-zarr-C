@@ -1,6 +1,7 @@
 # Documentation Index
 
 - `docs/reference/architecture-first-porting.md`: architecture-first porting map
+- `docs/reference/benchmark-suite.md`: pyperf benchmark architecture and scope
 - `docs/reference/ai-agent-context-routing.md`: smallest-correct-context router
 - `docs/reference/ai-agent-dos-and-donts.md`: agent operating rules from live porting work
 - `docs/reference/porting-contract.md`: non-negotiable porting rules

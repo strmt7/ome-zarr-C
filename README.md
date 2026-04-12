@@ -122,6 +122,13 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e .[dev]
 ```
 
+Install the benchmark dependency when you want to quantify upstream-vs-native
+performance on the verified in-memory slices:
+
+```bash
+.venv/bin/python -m pip install -e .[benchmark] --no-build-isolation
+```
+
 Run the current proven-safe local verification lane:
 
 ```bash
@@ -155,6 +162,31 @@ Converted code is added in small, reviewable slices:
 3. Add differential tests against the upstream implementation.
 4. Verify local parity before widening the converted area.
 5. Benchmark only after parity is established.
+
+## Benchmarking
+
+The repository ships a paired `pyperf` benchmark suite under `benchmarks/`.
+It compares the frozen upstream Python implementation and the native-backed
+implementation on the same benchmark inputs and aborts if the timed input loses
+parity.
+
+Common benchmark commands:
+
+```bash
+.venv/bin/python -m benchmarks.run --list
+.venv/bin/python -m benchmarks.run --verify-only
+.venv/bin/python -m benchmarks.run \
+  --processes 6 \
+  --values 10 \
+  --warmups 1 \
+  --min-time 0.02 \
+  --output /tmp/ome-zarr-c-bench.json
+.venv/bin/python -m benchmarks.report /tmp/ome-zarr-c-bench.json
+```
+
+The first suite intentionally excludes the runtime-blocked store-backed paths
+and focuses on parity-proven in-memory surfaces only. See
+`docs/reference/benchmark-suite.md` for the methodology and scope rules.
 
 For read-only surfaces that print absolute paths, parity tests should run the
 upstream and converted implementations against the same fixture path so the
