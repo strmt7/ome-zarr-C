@@ -764,6 +764,9 @@ void finder(py::object input_path, int port = 8000, bool dry_run = false) {
         server_dir = split[1];
     }
 
+    // Mirror the upstream recursive walk exactly: a directory with local
+    // metadata is treated as a terminal OME-Zarr root, otherwise we recurse
+    // into child directories and accumulate any discovered multiscale images.
     std::function<py::list(py::object)> walk = [&](py::object path) -> py::list {
         py::object dot_zattrs = true_divide(path, py::str(".zattrs"));
         py::object zarr_json = true_divide(path, py::str("zarr.json"));
@@ -798,6 +801,9 @@ void finder(py::object input_path, int port = 8000, bool dry_run = false) {
         return;
     }
 
+    // Build the BioFile Finder CSV using the same relative-path and timestamp
+    // semantics as upstream, including empty-name fallback and silent OSError
+    // handling when modification times cannot be read.
     py::list col_names;
     for (const char* name : {"File Path", "File Name", "Folders", "Uploaded"}) {
         col_names.append(py::str(name));
@@ -868,6 +874,9 @@ void finder(py::object input_path, int port = 8000, bool dry_run = false) {
               py::cast<std::string>(quoted_source)) +
           py::str("&v=2");
 
+    // The generated handler intentionally defers directory assignment until
+    // request translation so dry-run tests can instantiate the class without
+    // going through the normal HTTP server constructor.
     py::dict scope;
     scope["RangeRequestHandler"] = range_http_server.attr("RangeRequestHandler");
     scope["SimpleHTTPRequestHandler"] = http_server.attr("SimpleHTTPRequestHandler");
