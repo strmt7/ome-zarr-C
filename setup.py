@@ -1,5 +1,11 @@
+import sys
+
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import find_packages, setup
+
+define_macros = []
+if sys.version_info >= (3, 14):
+    define_macros.append(("OME_ZARR_C_PY_LIST_INDEX_GENERIC_NOT_FOUND", "1"))
 
 ext_modules = [
     Pybind11Extension(
@@ -19,6 +25,7 @@ ext_modules = [
             "cpp/native/writer.cpp",
         ],
         cxx_std=17,
+        define_macros=define_macros,
     ),
 ]
 
