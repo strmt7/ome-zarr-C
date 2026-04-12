@@ -17,6 +17,9 @@ Use this skill after any non-trivial change.
    and, after native-code changes, rebuild the editable install first
 5. after an AI-agent push, wait for the GitHub workflows on that pushed commit
    and fix failures before considering the change finished
+6. if workflows, CodeQL scope, or pinned tool versions changed, load
+   `workflow-supply-chain-maintenance` and verify the exact scanner config or
+   version source that justified the edit
 
 ## Reporting rule
 

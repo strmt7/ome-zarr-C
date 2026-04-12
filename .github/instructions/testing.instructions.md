@@ -6,3 +6,5 @@
 - For unbounded inputs, use boundary cases, randomized differential tests, and
   representative real-data checks.
 - Never claim broader parity or coverage than the executed tests actually prove.
+- When workflow or security-scan scope changes are made, verify the actual
+  scanner config and not just the workflow trigger stanza.

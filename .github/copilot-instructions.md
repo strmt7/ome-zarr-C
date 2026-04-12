@@ -10,6 +10,8 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Differential tests are required for ported surfaces.
 - Benchmarks are required before claiming speedups.
 - Use repo-local skills under `.agents/skills/` when they fit the task.
+- Keep frozen snapshots under `source_code_v*/` excluded from security scanning,
+  and update the exclusion whenever a new snapshot is added.
 
 ## Load order
 

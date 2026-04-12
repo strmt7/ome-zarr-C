@@ -8,6 +8,9 @@
 - Prefer narrow, trustworthy workflows over broad but noisy ones.
 - Once multiple ported surfaces exist, the tests workflow must exercise the full
   parity suite, not just an older subset.
+- Keep frozen snapshot directories matching `source_code_v*/` excluded from
+  security scanning. If a new frozen snapshot is added, update the exclusion in
+  the scanner config as part of the same change.
 - Never infer remote branch state from local Git alone. Verify the GitHub repo
   page or API before stating that a branch exists, is deleted, or is the
   default branch.
@@ -18,3 +21,6 @@
   done.
 - Treat the exact check-run set for the pushed commit as the source of truth.
   The combined commit status endpoint can lag after checks are already green.
+- Before changing workflow action versions or workflow-installed tool versions,
+  verify the current stable release from the official source instead of
+  guessing from old examples or cached docs.
