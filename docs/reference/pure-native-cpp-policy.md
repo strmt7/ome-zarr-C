@@ -36,6 +36,8 @@ code, not only future additions.
 - `scripts/check_pure_native_cpp.py` enforces that `cpp/native/` stays free of
   Python integration code and reports or fails on mixed debt elsewhere in
   `cpp/`.
+- `docs/reference/native-cpp-debt-baseline.json` ratchets the remaining mixed
+  debt so it can only decrease and cannot spread to new files.
 
 ## Migration rule
 

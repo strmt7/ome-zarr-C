@@ -39,6 +39,9 @@ To keep that boundary enforceable:
   related pseudo-C++ patterns in `cpp/`.
 - `scripts/check_pure_native_cpp.py` enforces that `cpp/native/` stays free of
   Python integration tokens and reports or fails on mixed debt elsewhere.
+- `docs/reference/native-cpp-debt-baseline.json` records the only allowed
+  remaining mixed-debt footprint until it is migrated away; CI should fail if
+  that debt grows or spreads.
 - CI should block both new pseudo-C++ patterns and layout violations.
 - Existing mixed files are native debt until split and should not be counted
   toward pure-native coverage.

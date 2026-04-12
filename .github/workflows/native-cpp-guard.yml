@@ -55,4 +55,5 @@ jobs:
           python scripts/check_pure_native_cpp.py \
             --enforce-pure-native-subtree \
             --report-existing-debt \
-            --fail-on-existing-debt
+            --baseline-json docs/reference/native-cpp-debt-baseline.json \
+            --fail-on-baseline-regression
