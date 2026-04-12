@@ -31,6 +31,10 @@ incrementally while keeping the imported upstream snapshot intact.
   Use boundary cases, randomized differential tests, and real-data checks. Do
   not claim mathematical 100% coverage when the input space is effectively
   unbounded.
+- Runtime-sensitive behavior:
+  If upstream behavior changes across Python versions, parity means matching the
+  upstream implementation on the same runtime. Do not freeze exception text or
+  unpack errors that the interpreter itself generates.
 - Performance:
   Use the same inputs, same machine class, same environment, and repeated runs.
   Report medians and version details.
@@ -48,5 +52,7 @@ incrementally while keeping the imported upstream snapshot intact.
 - The C++ path works but the upstream parity test is missing.
 - The test only checks the happy path when the upstream surface has meaningful
   edge cases.
+- The local test run did not rebuild the edited native extension before
+  execution.
 - A performance claim exists without measured data.
 - A change required editing the frozen snapshot.
