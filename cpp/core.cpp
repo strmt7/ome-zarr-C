@@ -1,3 +1,4 @@
+#include <pybind11/eval.h>
 #include <pybind11/pybind11.h>
 
 #include <algorithm>
@@ -415,18 +416,11 @@ void validate_well_dict_v01(py::dict well) {
 py::dict generate_well_dict_v04(const std::string& well,
                                 const py::sequence& rows,
                                 const py::sequence& columns) {
-    py::list split_parts = py::cast<py::list>(py::str(well).attr("split")("/"));
-    if (py::len(split_parts) < 2) {
-        throw py::value_error(
-            "not enough values to unpack (expected 2, got " +
-            std::to_string(py::len(split_parts)) + ")");
-    }
-    if (py::len(split_parts) > 2) {
-        throw py::value_error("too many values to unpack (expected 2)");
-    }
-
-    const std::string row = py::cast<std::string>(split_parts[0]);
-    const std::string column = py::cast<std::string>(split_parts[1]);
+    py::dict locals;
+    locals["well"] = py::str(well);
+    py::exec("row, column = well.split('/')", py::globals(), locals);
+    const std::string row = py::cast<std::string>(locals["row"]);
+    const std::string column = py::cast<std::string>(locals["column"]);
 
     py::list rows_list = py::list(rows);
     py::list columns_list = py::list(columns);
