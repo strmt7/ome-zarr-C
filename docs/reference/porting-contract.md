@@ -3,6 +3,21 @@
 This repository exists to port `ome/ome-zarr-py` release `v0.15.0` to C++
 incrementally while keeping the imported upstream snapshot intact.
 
+## Architecture priorities
+
+- Architecture is priority number 1. Preserve the repo's layered structure:
+  frozen upstream snapshot, native semantic core, thin compatibility wrappers,
+  and differential proof tests.
+- The C++ layer should own upstream behavior. Python wrappers should stay as
+  small as possible and only bridge dynamic Python APIs, imports, and
+  compatibility surfaces that cannot sensibly live in the extension.
+- Keep pure computational kernels separate from persistent-store and
+  external-side-effect code. Convert the pure deterministic layer first.
+- Runtime blockers are architectural facts, not invitations to improvise. If a
+  real store, filesystem, async path, or other boundary is broken in the local
+  runtime, classify the affected surfaces as blocked and leave them uncounted
+  until they can be proven.
+
 ## Hard boundaries
 
 - `source_code_v.0.15.0/` is immutable reference code.
@@ -49,6 +64,10 @@ incrementally while keeping the imported upstream snapshot intact.
   For functions that launch browsers, start servers, or cross similar external
   boundaries, patch the side-effecting call sites and compare the resulting
   outbound call payloads between upstream and the port.
+- Mocked boundaries:
+  Mocking is valid for isolating logic, but it does not close parity claims for
+  live store-backed or externally integrated behavior unless the same boundary
+  contract is the whole public surface being ported.
 - Path-sensitive output:
   If a read-only surface prints or serializes absolute paths, run the upstream
   and converted implementations against the same fixture path so parity checks
@@ -68,6 +87,13 @@ incrementally while keeping the imported upstream snapshot intact.
   Test modules and shared test helpers are repo-maintained code. Fix CodeQL,
   lint, and security findings in `tests/` by changing the underlying code or
   structure rather than suppressing them because they are "only tests".
+- Offline or sandboxed builds:
+  If build isolation tries to fetch dependencies in a constrained environment,
+  use the already-installed local toolchain with `--no-build-isolation` rather
+  than silently skipping rebuilds.
+- Documentation fidelity:
+  README and reference docs must reflect only what is actually proven on the
+  current runtime. Overstated coverage is a parity failure.
 
 ## Allowed local deviations
 
@@ -86,3 +112,6 @@ incrementally while keeping the imported upstream snapshot intact.
   execution.
 - A performance claim exists without measured data.
 - A change required editing the frozen snapshot.
+- A mocked or partial test proves helper logic but the live store-backed public
+  path is still unverified.
+- Repo docs still imply blocked or unverified surfaces are complete.

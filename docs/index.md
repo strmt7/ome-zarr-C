@@ -1,6 +1,8 @@
 # Documentation Index
 
+- `docs/reference/architecture-first-porting.md`: architecture-first porting map
 - `docs/reference/ai-agent-context-routing.md`: smallest-correct-context router
+- `docs/reference/ai-agent-dos-and-donts.md`: agent operating rules from live porting work
 - `docs/reference/porting-contract.md`: non-negotiable porting rules
 - `docs/reference/ai-agent-skills.md`: repo-local workflow catalog
 - `docs/reference/ai-agent-web-research-stack.md`: safe public-web research pattern
