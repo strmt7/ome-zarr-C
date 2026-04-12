@@ -1,0 +1,26 @@
+*.egg
+*.egg-info
+*.pyc
+var
+build
+dist/
+target/
+docs/build/
+*.DS_Store
+*Thumbs.db
+# Testing files
+.tox*
+.coverage*
+coverage.xml
+
+# Generated version file
+ome_zarr/_version.py
+
+# MyST build outputs
+_build
+
+# demo notebooks
+*.ome.zarr
+*.zarr
+*.ipynb_checkpoints
+*/jupyter_execute
