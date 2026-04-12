@@ -1,6 +1,6 @@
-# omero-zarr-C
+# ome-zarr-C
 
-`omero-zarr-C` is a release-anchored C++/pybind11 conversion workspace for
+`ome-zarr-C` is a release-anchored C++/pybind11 conversion workspace for
 [`ome/ome-zarr-py`](https://github.com/ome/ome-zarr-py).
 
 The exact upstream `v0.15.0` release snapshot is preserved under
@@ -26,7 +26,7 @@ never be edited directly.
 
 - `source_code_v.0.15.0/`: frozen upstream release snapshot
 - `cpp/`: C++ implementation files exposed via `pybind11`
-- `omero_zarr_c/`: thin Python wrappers around native code
+- `ome_zarr_c/`: thin Python wrappers around native code
 - `tests/`: differential and regression tests against the frozen snapshot
 - `docs/`: project rules, routing, and porting contract
 - `.agents/skills/`: reusable repo-local agent workflows
@@ -43,8 +43,8 @@ never be edited directly.
 
 The first parity slice is in place:
 
-- `omero_zarr_c.conversions` mirrors upstream integer/RGBA conversions in C++
-- `omero_zarr_c.axes` uses a C++ core plus a thin Python compatibility wrapper
+- `ome_zarr_c.conversions` mirrors upstream integer/RGBA conversions in C++
+- `ome_zarr_c.axes` uses a C++ core plus a thin Python compatibility wrapper
 - differential tests currently cover the converted `conversions` and `axes`
   surfaces against the frozen upstream implementation
 
