@@ -1,0 +1,9 @@
+# C++ Porting Instructions
+
+- Do not modify the frozen upstream snapshot under `source_code_v.0.15.0/`.
+- Port one small upstream surface at a time.
+- Keep Python wrappers as thin compatibility layers.
+- Preserve upstream exceptions and edge-case behavior unless an intentional
+  divergence is explicitly documented.
+- Add differential tests against the frozen snapshot before claiming parity.
+- Benchmark before claiming any performance improvement.
