@@ -47,7 +47,7 @@ The current native parity slices are:
 - `ome_zarr_c.axes` for axes normalization and validation
 - `ome_zarr_c.csv` for `parse_csv_value`, `dict_to_zarr`, and `csv_to_zarr`
 - `ome_zarr_c.utils` for `strip_common_prefix`, `splitall`, `find_multiscales`,
-  and `finder`
+  `finder`, and `view`
 - `ome_zarr_c.format` for version dispatch, metadata version lookup, well
   validation, and coordinate transformation generation/validation
 
