@@ -32,6 +32,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[dev]
 
+      - name: Verify frozen snapshot manifest
+        run: |
+          python scripts/frozen_source_manifest.py --verify
+
       - name: Run proven-safe parity suite
         run: |
           timeout 180s python -m pytest -q \
@@ -40,6 +44,7 @@ jobs:
             tests/test_dask_utils_equivalence.py \
             tests/test_data_equivalence.py \
             tests/test_format_equivalence.py \
+            tests/test_reader_equivalence.py \
             tests/test_scale_equivalence.py \
             tests/test_scaler_equivalence.py \
             tests/test_utils_equivalence.py \

@@ -17,10 +17,11 @@ default.
 1. Read `docs/reference/architecture-first-porting.md`.
 2. Read `docs/reference/porting-contract.md`.
 3. Read `docs/reference/ai-agent-dos-and-donts.md`.
-4. Read the upstream file under `source_code_v.0.15.0/`.
-5. Read the matching local wrapper or `cpp/` file.
-6. Read the nearest parity test.
-7. Run only the relevant differential test lanes.
+4. Read `docs/reference/immutable-parity-proof.md`.
+5. Read the upstream file under `source_code_v.0.15.0/`.
+6. Read the matching local wrapper or `cpp/` file.
+7. Read the nearest parity test.
+8. Run only the relevant differential test lanes.
 
 ### Workflow or tooling changes
 

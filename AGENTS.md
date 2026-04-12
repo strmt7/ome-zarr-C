@@ -68,6 +68,13 @@ snapshot to C++ without modifying the snapshot itself.
 27. Keep `README.md` strictly user-facing. Agent instructions, workflow rules,
     and AI operating contracts belong in `AGENTS.md`, `.github/instructions/`,
     and repo-local skills only.
+28. Before making or repeating a frozen-snapshot immutability claim, verify the
+    committed SHA256 manifest with
+    `.venv/bin/python scripts/frozen_source_manifest.py --verify`.
+29. If a change touches `cpp/`, scan it with
+    `.venv/bin/python scripts/check_native_cpp.py --all` and treat any
+    embedded-Python execution pattern in `cpp/` as native-debt rather than
+    fully converted C++ coverage.
 
 ## Fast load order
 
@@ -75,9 +82,10 @@ snapshot to C++ without modifying the snapshot itself.
 2. `docs/reference/ai-agent-context-routing.md`
 3. `docs/reference/porting-contract.md`
 4. `docs/reference/ai-agent-dos-and-donts.md`
-5. `docs/reference/ai-agent-skills.md`
-6. the touched upstream implementation file under `source_code_v.0.15.0/`
-7. the matching wrapper, C++ file, and nearest test module
+5. `docs/reference/immutable-parity-proof.md`
+6. `docs/reference/ai-agent-skills.md`
+7. the touched upstream implementation file under `source_code_v.0.15.0/`
+8. the matching wrapper, C++ file, and nearest test module
 
 ## Repository map
 
@@ -91,6 +99,7 @@ snapshot to C++ without modifying the snapshot itself.
 ## Verification minimum
 
 ```bash
+.venv/bin/python scripts/frozen_source_manifest.py --verify
 .venv/bin/python -m pip install -e . --no-build-isolation
 timeout 180s .venv/bin/python -m pytest -q \
   tests/test_axes_equivalence.py \
@@ -98,10 +107,12 @@ timeout 180s .venv/bin/python -m pytest -q \
   tests/test_dask_utils_equivalence.py \
   tests/test_data_equivalence.py \
   tests/test_format_equivalence.py \
+  tests/test_reader_equivalence.py \
   tests/test_scale_equivalence.py \
   tests/test_scaler_equivalence.py \
   tests/test_utils_equivalence.py \
   tests/test_writer_equivalence.py
+.venv/bin/python scripts/check_native_cpp.py --all
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```

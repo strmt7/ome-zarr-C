@@ -18,8 +18,10 @@ Use this skill when converting an upstream Python module or helper.
 4. If the port crosses Python runtime behavior such as iterators, truthiness,
    Python callbacks, or Python exception state, load
    `pybind11-runtime-parity` before finalizing the binding.
-5. Add differential tests against the upstream snapshot.
-6. If the observable output includes absolute paths and the surface is
+5. Load `immutable-parity-proof` before making any parity or native-coverage
+   claim.
+6. Add differential tests against the upstream snapshot.
+7. If the observable output includes absolute paths and the surface is
    read-only, run the upstream and converted implementations against the same
    fixture path to avoid false stdout mismatches.
-7. Benchmark only after parity holds.
+8. Benchmark only after parity holds.

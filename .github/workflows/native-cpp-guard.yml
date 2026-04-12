@@ -1,0 +1,51 @@
+name: native-cpp-guard
+
+on:
+  pull_request:
+    branches:
+      - main_v.0.15.0
+  push:
+    branches:
+      - main_v.0.15.0
+
+permissions:
+  contents: read
+
+jobs:
+  native-cpp-guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14.3"
+
+      - name: Block new pseudo-C++ patterns in cpp/
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          ZERO_SHA=0000000000000000000000000000000000000000
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            FROM_SHA="$BASE_SHA"
+            TO_SHA="$HEAD_SHA"
+          else
+            if [ "$BEFORE_SHA" = "$ZERO_SHA" ]; then
+              FROM_SHA="$CURRENT_SHA^"
+              TO_SHA="$CURRENT_SHA"
+            else
+              FROM_SHA="$BEFORE_SHA"
+              TO_SHA="$CURRENT_SHA"
+            fi
+          fi
+
+          python scripts/check_native_cpp.py --base "$FROM_SHA" --head "$TO_SHA"

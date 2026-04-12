@@ -21,6 +21,9 @@ Repo-local reusable skills live under `.agents/skills/`.
 - `benchmark-first`: benchmark before claiming speedups
 - `pybind11-runtime-parity`: preserve Python-visible behavior when C++ bindings
   call back into Python objects or expose iterator-style behavior
+- `immutable-parity-proof`: verify the frozen snapshot manifest, use
+  content-addressed parity evidence, and keep embedded-Python debt out of
+  native-conversion counts
 - `workflow-supply-chain-maintenance`: audit GitHub Actions, CodeQL, and
   Dependabot configuration against official current sources before changing
   automation or version pins
