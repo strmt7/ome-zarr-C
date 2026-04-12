@@ -1,0 +1,51 @@
+name: Protect Frozen Source Snapshot
+
+on:
+  pull_request:
+    branches:
+      - main_v.0.15.0
+  push:
+    branches:
+      - main_v.0.15.0
+
+jobs:
+  protect-frozen-source:
+    name: Protect Frozen Source Snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail if the frozen snapshot changes
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          ZERO_SHA=0000000000000000000000000000000000000000
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            FROM_SHA="$BASE_SHA"
+            TO_SHA="$HEAD_SHA"
+          else
+            if [ "$BEFORE_SHA" = "$ZERO_SHA" ]; then
+              echo "Initial branch push detected; skipping frozen snapshot diff check."
+              exit 0
+            fi
+            FROM_SHA="$BEFORE_SHA"
+            TO_SHA="$CURRENT_SHA"
+          fi
+
+          changed="$(git diff --name-only "$FROM_SHA" "$TO_SHA" -- 'source_code_v.0.15.0/**')"
+
+          if [ -n "$changed" ]; then
+            echo "Direct changes to source_code_v.0.15.0 are blocked:"
+            echo "$changed"
+            exit 1
+          fi
+
+          echo "Frozen snapshot unchanged."
