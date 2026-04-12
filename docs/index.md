@@ -2,6 +2,8 @@
 
 - `docs/reference/architecture-first-porting.md`: architecture-first porting map
 - `docs/reference/pure-native-cpp-policy.md`: strict native-vs-binding layout policy
+- `docs/reference/native-cpp-debt-baseline.json`: ratcheting baseline for the
+  remaining mixed C++ debt footprint
 - `docs/reference/benchmark-suite.md`: pyperf benchmark architecture and scope
 - `docs/reference/immutable-parity-proof.md`: content-addressed parity and
   native-C++ integrity rules
