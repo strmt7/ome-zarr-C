@@ -43,6 +43,10 @@ incrementally while keeping the imported upstream snapshot intact.
   For functions that mutate files, directories, or stores, compare the
   serialized on-disk results between upstream and the port. Return-value parity
   alone is not sufficient.
+- External side effects:
+  For functions that launch browsers, start servers, or cross similar external
+  boundaries, patch the side-effecting call sites and compare the resulting
+  outbound call payloads between upstream and the port.
 - Performance:
   Use the same inputs, same machine class, same environment, and repeated runs.
   Report medians and version details.

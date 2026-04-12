@@ -36,6 +36,10 @@ snapshot to C++ without modifying the snapshot itself.
 16. For ports that mutate persistent stores or files, parity tests must compare
     serialized on-disk effects between upstream and the port, not just return
     values.
+17. For ports that cross external boundaries such as browser launch, server
+    startup, or similar side effects, parity tests must patch those boundaries
+    and compare the resulting call payloads instead of triggering the real side
+    effect.
 
 ## Fast load order
 
