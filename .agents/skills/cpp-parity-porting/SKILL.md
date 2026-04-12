@@ -15,5 +15,8 @@ Use this skill when converting an upstream Python module or helper.
    Python wrapper for compatibility.
 3. Port behavior first, including exception types and messages when they are
    observable.
-4. Add differential tests against the upstream snapshot.
-5. Benchmark only after parity holds.
+4. If the port crosses Python runtime behavior such as iterators, truthiness,
+   Python callbacks, or Python exception state, load
+   `pybind11-runtime-parity` before finalizing the binding.
+5. Add differential tests against the upstream snapshot.
+6. Benchmark only after parity holds.

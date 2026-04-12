@@ -14,6 +14,11 @@ Repo-local reusable skills live under `.agents/skills/`.
 - `tdd-workflow`: drive features and fixes with tests first or tests alongside
 - `cpp-parity-porting`: port a single upstream surface to C++/pybind11
 - `benchmark-first`: benchmark before claiming speedups
+- `pybind11-runtime-parity`: preserve Python-visible behavior when C++ bindings
+  call back into Python objects or expose iterator-style behavior
+- `workflow-supply-chain-maintenance`: audit GitHub Actions, CodeQL, and
+  Dependabot configuration against official current sources before changing
+  automation or version pins
 
 Use the nearest matching skill before inventing a workflow from scratch. For
 pushes made by an AI agent, `verification-loop` includes waiting for the remote

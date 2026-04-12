@@ -46,6 +46,16 @@ snapshot to C++ without modifying the snapshot itself.
 19. When generating Python classes via `py::exec`, use a shared execution scope
     when methods depend on runtime names. Otherwise class methods may compile
     but fail later with missing-name errors.
+20. Security scanners in this repo must target repo-maintained code only.
+    Frozen snapshot directories matching `source_code_v*/` must stay excluded
+    from CodeQL and any future security scanning workflows.
+21. If a new frozen snapshot directory is added or the snapshot naming changes,
+    update the scanner exclusions in the same change before pushing.
+22. Before claiming a workflow action or tooling pin is "latest stable", verify
+    it against the official release or package index source instead of memory.
+23. If repo-local skill coverage is missing for pybind11 runtime-parity work or
+    workflow/dependency-governance work, add or update a repo-local skill with
+    official references before relying on ad-hoc process notes.
 
 ## Fast load order
 

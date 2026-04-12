@@ -11,6 +11,11 @@ Security reports should focus on the repo-maintained code and workflow surfaces
 outside the frozen upstream snapshot unless the issue is specifically about how
 the snapshot is imported, preserved, or validated.
 
+The CodeQL configuration excludes frozen snapshot directories matching
+`source_code_v*/**`. If another frozen snapshot is added in the future, keep
+that exclusion aligned in the same change so security alerts stay focused on
+repo-maintained code.
+
 ## Reporting
 
 Open a private security report through GitHub Security Advisories if available,

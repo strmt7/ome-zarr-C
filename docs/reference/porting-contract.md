@@ -56,6 +56,10 @@ incrementally while keeping the imported upstream snapshot intact.
 - Performance:
   Use the same inputs, same machine class, same environment, and repeated runs.
   Report medians and version details.
+- Security scan scope:
+  Frozen upstream snapshots under `source_code_v*/` are reference material and
+  must stay excluded from CodeQL and future repo security scanners. If the
+  snapshot path changes, update the exclusions in the same change.
 
 ## Allowed local deviations
 
