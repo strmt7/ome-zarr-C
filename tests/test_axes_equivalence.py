@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_axes = importlib.import_module("ome_zarr.axes")
 _py_format = importlib.import_module("ome_zarr.format")
-_cpp_axes = importlib.import_module("omero_zarr_c.axes")
+_cpp_axes = importlib.import_module("ome_zarr_c.axes")
 
 PythonAxes = _py_axes.Axes
 FormatV01 = _py_format.FormatV01

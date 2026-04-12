@@ -15,6 +15,9 @@ snapshot to C++ without modifying the snapshot itself.
 7. Do not use background agents or subagents unless the user explicitly asks.
 8. Before making any claim about branches, default branch, remotes, tags, or
    GitHub repo state, verify both local Git state and remote GitHub state.
+9. After any push performed by an AI agent, wait for all repository workflows on
+   the pushed commit to finish and treat the work as incomplete until they are
+   green or the remaining failures are explicitly explained and queued for fix.
 
 ## Fast load order
 
@@ -28,7 +31,7 @@ snapshot to C++ without modifying the snapshot itself.
 
 - `source_code_v.0.15.0/`: immutable upstream reference snapshot
 - `cpp/`: C++ implementations
-- `omero_zarr_c/`: Python compatibility wrappers
+- `ome_zarr_c/`: Python compatibility wrappers
 - `tests/`: parity and regression tests
 - `docs/`: repo rules, routing, and benchmarks
 - `.agents/skills/`: reusable repo-local workflows
@@ -37,8 +40,7 @@ snapshot to C++ without modifying the snapshot itself.
 
 ```bash
 .venv/bin/python -m pip install -e .[dev]
-.venv/bin/python -m pytest tests/test_conversions_equivalence.py -q
-.venv/bin/python -m pytest tests/test_axes_equivalence.py -q
+.venv/bin/python -m pytest -q
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```
