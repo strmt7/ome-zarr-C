@@ -25,6 +25,7 @@ const std::map<std::string, std::string> kKnownAxes = {
 };
 
 const std::vector<std::string> kColumnTypes = {"d", "l", "s", "b"};
+const std::array<const char*, 5> kFormatVersions = {"0.5", "0.4", "0.3", "0.2", "0.1"};
 
 std::string repr_object(const py::handle& obj) {
     return py::cast<std::string>(py::repr(obj));
@@ -94,12 +95,55 @@ bool object_truthy(const py::handle& obj) {
     return result == 1;
 }
 
+bool rich_compare_bool(const py::handle& left, const py::handle& right, int op) {
+    const int result = PyObject_RichCompareBool(left.ptr(), right.ptr(), op);
+    if (result < 0) {
+        throw py::error_already_set();
+    }
+    return result == 1;
+}
+
 py::object true_divide(const py::handle& left, const py::handle& right) {
     PyObject* result = PyNumber_TrueDivide(left.ptr(), right.ptr());
     if (result == nullptr) {
         throw py::error_already_set();
     }
     return py::reinterpret_steal<py::object>(result);
+}
+
+py::object floor_divide(const py::handle& left, const py::handle& right) {
+    PyObject* result = PyNumber_FloorDivide(left.ptr(), right.ptr());
+    if (result == nullptr) {
+        throw py::error_already_set();
+    }
+    return py::reinterpret_steal<py::object>(result);
+}
+
+py::object call_callable(
+    const py::handle& callable,
+    const std::vector<py::object>& leading_args,
+    const py::tuple& extra_args = py::tuple(),
+    const py::dict& kwargs = py::dict()) {
+    py::tuple call_args(leading_args.size() + extra_args.size());
+    py::size_t index = 0;
+    for (const py::object& arg : leading_args) {
+        call_args[index++] = arg;
+    }
+    for (const py::handle& arg : extra_args) {
+        call_args[index++] = py::reinterpret_borrow<py::object>(arg);
+    }
+
+    PyObject* result = PyObject_Call(callable.ptr(), call_args.ptr(), kwargs.ptr());
+    if (result == nullptr) {
+        throw py::error_already_set();
+    }
+    return py::reinterpret_steal<py::object>(result);
+}
+
+void set_item(const py::handle& obj, const py::handle& key, const py::handle& value) {
+    if (PyObject_SetItem(obj.ptr(), key.ptr(), value.ptr()) < 0) {
+        throw py::error_already_set();
+    }
 }
 
 py::object read_text_with_open(const py::object& path) {
@@ -143,6 +187,44 @@ void run_with_context_manager(const py::object& manager, Func&& func) {
         exit(py::none(), py::none(), py::none());
         throw;
     }
+}
+
+py::tuple output_slices_for_shape(const py::handle& shape) {
+    py::sequence shape_seq = py::cast<py::sequence>(shape);
+    const py::size_t ndim = py::len(shape_seq);
+    py::tuple slices(ndim);
+    for (py::size_t index = 0; index < ndim; ++index) {
+        slices[index] = py::slice(
+            py::int_(0),
+            py::reinterpret_borrow<py::object>(shape_seq[index]),
+            py::int_(1));
+    }
+    return slices;
+}
+
+std::string normalize_known_format_version(const py::handle& version) {
+    py::object candidate = py::reinterpret_borrow<py::object>(version);
+    if (PyFloat_Check(version.ptr())) {
+        candidate = py::str(version);
+    }
+
+    for (const char* known_version : kFormatVersions) {
+        if (objects_equal(py::str(known_version), candidate)) {
+            return known_version;
+        }
+    }
+
+    throw py::value_error(
+        "Version " + py::cast<std::string>(py::str(candidate)) + " not recognized");
+}
+
+bool is_known_format_version(const py::handle& version) {
+    for (const char* known_version : kFormatVersions) {
+        if (objects_equal(py::str(known_version), version)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace
@@ -975,6 +1057,1071 @@ class CORSRequestHandler(RangeRequestHandler):
         scope["CORSRequestHandler"], http_server.attr("HTTPServer"), py::arg("port") = port);
 }
 
+py::object get_valid_axes(
+    py::object ndim = py::none(),
+    py::object axes = py::none(),
+    py::object fmt = py::none()) {
+    py::object builtins = py::module_::import("builtins");
+    py::object logger = py::module_::import("logging").attr("getLogger")(
+        py::str("ome_zarr.writer"));
+
+    const std::string version = py::cast<std::string>(fmt.attr("version"));
+    if (version == "0.1" || version == "0.2") {
+        if (!axes.is_none()) {
+            logger.attr("info")("axes ignored for version 0.1 or 0.2");
+        }
+        return py::none();
+    }
+
+    if (axes.is_none()) {
+        if (!ndim.is_none() && objects_equal(ndim, py::int_(2))) {
+            py::list guessed_axes;
+            guessed_axes.append(py::str("y"));
+            guessed_axes.append(py::str("x"));
+            axes = guessed_axes;
+            logger.attr("info")("Auto using axes %s for 2D data", axes);
+        } else if (!ndim.is_none() && objects_equal(ndim, py::int_(5))) {
+            py::list guessed_axes;
+            guessed_axes.append(py::str("t"));
+            guessed_axes.append(py::str("c"));
+            guessed_axes.append(py::str("z"));
+            guessed_axes.append(py::str("y"));
+            guessed_axes.append(py::str("x"));
+            axes = guessed_axes;
+            logger.attr("info")("Auto using axes %s for 5D data", axes);
+        } else {
+            throw py::value_error(
+                "axes must be provided. Can't be guessed for 3D or 4D data");
+        }
+    }
+
+    if (py::isinstance<py::str>(axes)) {
+        axes = builtins.attr("list")(axes);
+    }
+
+    if (!ndim.is_none()) {
+        const py::int_ axes_len(py::len(axes));
+        if (!objects_equal(axes_len, ndim)) {
+            throw py::value_error(
+                "axes length (" + py::cast<std::string>(py::str(axes_len)) +
+                ") must match number of dimensions (" +
+                py::cast<std::string>(py::str(ndim)) + ")");
+        }
+    }
+
+    py::object axes_cls = py::module_::import("ome_zarr_c.axes").attr("Axes");
+    py::object axes_obj = axes_cls(axes, fmt);
+    return axes_obj.attr("to_list")(fmt);
+}
+
+py::tuple extract_dims_from_axes(py::object axes = py::none()) {
+    if (axes.is_none()) {
+        return py::make_tuple("t", "c", "z", "y", "x");
+    }
+
+    bool all_strings = true;
+    for (const py::handle& axis_handle : py::iterable(axes)) {
+        if (!py::isinstance<py::str>(axis_handle)) {
+            all_strings = false;
+            break;
+        }
+    }
+    if (all_strings) {
+        py::list names;
+        for (const py::handle& axis_handle : py::iterable(axes)) {
+            names.append(py::str(axis_handle));
+        }
+        return py::tuple(names);
+    }
+
+    bool all_named_dicts = true;
+    for (const py::handle& axis_handle : py::iterable(axes)) {
+        if (!py::isinstance<py::dict>(axis_handle)) {
+            all_named_dicts = false;
+            break;
+        }
+        py::dict axis = py::cast<py::dict>(axis_handle);
+        if (!axis.contains("name")) {
+            all_named_dicts = false;
+            break;
+        }
+    }
+    if (all_named_dicts) {
+        py::list names;
+        for (const py::handle& axis_handle : py::iterable(axes)) {
+            py::object axis = py::reinterpret_borrow<py::object>(axis_handle);
+            if (!py::isinstance<py::dict>(axis) ||
+                !py::cast<py::dict>(axis).contains("name")) {
+                throw py::type_error(
+                    "`axes` must be a list of dicts containing 'name'");
+            }
+            names.append(py::str(py::cast<py::dict>(axis)["name"]));
+        }
+        return py::tuple(names);
+    }
+
+    throw py::type_error(
+        "`axes` must be a list of strings or a list of dicts containing 'name'");
+}
+
+py::tuple retuple(py::object chunks, py::object shape) {
+    if (PyLong_Check(chunks.ptr())) {
+        const py::size_t shape_len = py::len(shape);
+        py::tuple result(shape_len);
+        for (py::size_t index = 0; index < shape_len; ++index) {
+            result[index] = chunks;
+        }
+        return result;
+    }
+
+    const py::ssize_t dims_to_add = py::len(shape) - py::len(chunks);
+    py::object prefix = py::reinterpret_borrow<py::object>(shape).attr("__getitem__")(
+        py::slice(0, dims_to_add, 1));
+    py::tuple chunk_tuple = py::tuple(
+        py::module_::import("builtins").attr("tuple")(chunks));
+
+    py::ssize_t prefix_size = 0;
+    for (const py::handle& value : py::iterable(prefix)) {
+        static_cast<void>(value);
+        ++prefix_size;
+    }
+
+    py::tuple result(prefix_size + py::len(chunk_tuple));
+    py::ssize_t index = 0;
+    for (const py::handle& value : py::iterable(prefix)) {
+        result[index++] = py::reinterpret_borrow<py::object>(value);
+    }
+    for (const py::handle& value : chunk_tuple) {
+        result[index++] = py::reinterpret_borrow<py::object>(value);
+    }
+    return result;
+}
+
+py::list validate_well_images(py::object images, py::object fmt = py::none()) {
+    static_cast<void>(fmt);
+    py::object logger = py::module_::import("logging").attr("getLogger")(
+        py::str("ome_zarr.writer"));
+    py::list validated_images;
+
+    for (const py::handle& image_handle : py::iterable(images)) {
+        py::object image = py::reinterpret_borrow<py::object>(image_handle);
+        if (py::isinstance<py::str>(image)) {
+            py::dict validated_image;
+            validated_image["path"] = py::str(image);
+            validated_images.append(validated_image);
+        } else if (py::isinstance<py::dict>(image)) {
+            py::dict image_dict = py::cast<py::dict>(image);
+
+            bool has_unexpected_key = false;
+            for (const auto& key_value : image_dict) {
+                const py::handle key_handle = key_value.first;
+                if (!objects_equal(key_handle, py::str("acquisition")) &&
+                    !objects_equal(key_handle, py::str("path"))) {
+                    has_unexpected_key = true;
+                    break;
+                }
+            }
+            if (has_unexpected_key) {
+                logger.attr("debug")("%s contains unspecified keys", image);
+            }
+
+            if (!image_dict.contains("path")) {
+                throw py::value_error(
+                    py::cast<std::string>(py::str(image)) +
+                    " must contain a path key");
+            }
+            if (!py::isinstance<py::str>(image_dict["path"])) {
+                throw py::value_error(
+                    py::cast<std::string>(py::str(image)) +
+                    " path must be of string type");
+            }
+            if (image_dict.contains("acquisition") &&
+                !PyLong_Check(image_dict["acquisition"].ptr())) {
+                throw py::value_error(
+                    py::cast<std::string>(py::str(image)) +
+                    " acquisition must be of int type");
+            }
+            validated_images.append(image);
+        } else {
+            throw py::value_error(
+                "Unrecognized type for " +
+                py::cast<std::string>(py::str(image)));
+        }
+    }
+
+    return validated_images;
+}
+
+py::object validate_plate_acquisitions(
+    py::object acquisitions,
+    py::object fmt = py::none()) {
+    static_cast<void>(fmt);
+    py::object logger = py::module_::import("logging").attr("getLogger")(
+        py::str("ome_zarr.writer"));
+
+    for (const py::handle& acquisition_handle : py::iterable(acquisitions)) {
+        py::object acquisition = py::reinterpret_borrow<py::object>(acquisition_handle);
+        if (!py::isinstance<py::dict>(acquisition)) {
+            throw py::value_error(
+                py::cast<std::string>(py::str(acquisition)) +
+                " must be a dictionary");
+        }
+
+        py::dict acquisition_dict = py::cast<py::dict>(acquisition);
+        bool has_unexpected_key = false;
+        for (const auto& key_value : acquisition_dict) {
+            const py::handle key_handle = key_value.first;
+            if (!objects_equal(key_handle, py::str("id")) &&
+                !objects_equal(key_handle, py::str("name")) &&
+                !objects_equal(key_handle, py::str("maximumfieldcount")) &&
+                !objects_equal(key_handle, py::str("description")) &&
+                !objects_equal(key_handle, py::str("starttime")) &&
+                !objects_equal(key_handle, py::str("endtime"))) {
+                has_unexpected_key = true;
+                break;
+            }
+        }
+        if (has_unexpected_key) {
+            logger.attr("debug")("%s contains unspecified keys", acquisition);
+        }
+
+        if (!acquisition_dict.contains("id")) {
+            throw py::value_error(
+                py::cast<std::string>(py::str(acquisition)) +
+                " must contain an id key");
+        }
+        if (!PyLong_Check(acquisition_dict["id"].ptr())) {
+            throw py::value_error(
+                py::cast<std::string>(py::str(acquisition)) +
+                " id must be of int type");
+        }
+    }
+
+    return acquisitions;
+}
+
+py::list validate_plate_rows_columns(
+    py::object rows_or_columns,
+    py::object fmt = py::none()) {
+    static_cast<void>(fmt);
+    py::object builtins = py::module_::import("builtins");
+
+    if (py::len(builtins.attr("set")(rows_or_columns)) != py::len(rows_or_columns)) {
+        throw py::value_error(
+            py::cast<std::string>(py::str(rows_or_columns)) +
+            " must contain unique elements");
+    }
+
+    py::list validated_list;
+    for (const py::handle& element_handle : py::iterable(rows_or_columns)) {
+        py::object element = py::reinterpret_borrow<py::object>(element_handle);
+        if (!object_truthy(element.attr("isalnum")())) {
+            throw py::value_error(
+                py::cast<std::string>(py::str(element)) +
+                " must contain alphanumeric characters");
+        }
+        py::dict validated_element;
+        validated_element["name"] = py::str(element);
+        validated_list.append(validated_element);
+    }
+
+    return validated_list;
+}
+
+py::object validate_datasets(
+    py::object datasets,
+    py::object dims,
+    py::object fmt = py::none()) {
+    if (datasets.is_none() || py::len(datasets) == 0) {
+        throw py::value_error("Empty datasets list");
+    }
+
+    py::list transformations;
+    for (const py::handle& dataset_handle : py::iterable(datasets)) {
+        py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
+        if (!py::isinstance<py::dict>(dataset)) {
+            throw py::value_error(
+                "Unrecognized type for " +
+                py::cast<std::string>(py::str(dataset)));
+        }
+
+        py::dict dataset_dict = py::cast<py::dict>(dataset);
+        py::object path = dataset_dict.attr("get")("path");
+        if (!object_truthy(path)) {
+            throw py::value_error("no 'path' in dataset");
+        }
+
+        py::object transformation =
+            dataset_dict.attr("get")("coordinateTransformations");
+        if (!transformation.is_none()) {
+            transformations.append(transformation);
+        }
+    }
+
+    fmt.attr("validate_coordinate_transformations")(
+        dims, py::len(datasets), transformations);
+    return datasets;
+}
+
+py::list validate_plate_wells(
+    py::object wells,
+    py::object rows,
+    py::object columns,
+    py::object fmt = py::none()) {
+    if (wells.is_none() || py::len(wells) == 0) {
+        throw py::value_error("Empty wells list");
+    }
+
+    py::list validated_wells;
+    for (const py::handle& well_handle : py::iterable(wells)) {
+        py::object well = py::reinterpret_borrow<py::object>(well_handle);
+        if (py::isinstance<py::str>(well)) {
+            py::object well_dict = fmt.attr("generate_well_dict")(well, rows, columns);
+            fmt.attr("validate_well_dict")(well_dict, rows, columns);
+            validated_wells.append(well_dict);
+        } else if (py::isinstance<py::dict>(well)) {
+            fmt.attr("validate_well_dict")(well, rows, columns);
+            validated_wells.append(well);
+        } else {
+            throw py::value_error(
+                "Unrecognized type for " +
+                py::cast<std::string>(py::str(well)));
+        }
+    }
+
+    return validated_wells;
+}
+
+py::object blosc_compressor() {
+    py::object blosc = py::module_::import("numcodecs").attr("Blosc");
+    return blosc(
+        py::arg("cname") = "zstd",
+        py::arg("clevel") = 5,
+        py::arg("shuffle") = blosc.attr("SHUFFLE"));
+}
+
+py::object resolve_storage_options(py::object storage_options, py::object path) {
+    py::dict options;
+    if (object_truthy(storage_options)) {
+        if (!py::isinstance<py::list>(storage_options)) {
+            options = py::cast<py::dict>(storage_options.attr("copy")());
+        } else {
+            return storage_options.attr("__getitem__")(path);
+        }
+    }
+    return options;
+}
+
+py::tuple better_chunksize(py::object image, py::object factors) {
+    py::object numpy = py::module_::import("numpy");
+    py::object int_type = py::module_::import("builtins").attr("int");
+
+    py::object chunksize_array = numpy.attr("array")(image.attr("chunksize"));
+    py::object better_chunks = py::tuple(
+        numpy
+            .attr("maximum")(
+                1,
+                numpy.attr("divide")(
+                    numpy.attr("round")(numpy.attr("multiply")(chunksize_array, factors)),
+                    factors))
+            .attr("astype")(int_type));
+
+    py::object block_output = py::tuple(
+        numpy
+            .attr("ceil")(
+                numpy.attr("multiply")(numpy.attr("array")(better_chunks), factors))
+            .attr("astype")(int_type));
+
+    return py::make_tuple(better_chunks, block_output);
+}
+
+py::object dask_resize(
+    py::object image,
+    py::object output_shape,
+    py::args args,
+    py::kwargs kwargs) {
+    py::object numpy = py::module_::import("numpy");
+    py::object dask_array = py::module_::import("dask.array");
+    py::object skimage_transform = py::module_::import("skimage.transform");
+    py::object float_type = py::module_::import("builtins").attr("float");
+
+    py::object factors = numpy.attr("divide")(
+        numpy.attr("array")(output_shape),
+        numpy.attr("array")(image.attr("shape")).attr("astype")(float_type));
+    py::tuple chunk_info = better_chunksize(image, factors);
+    py::object image_prepared = image.attr("rechunk")(chunk_info[0]);
+    py::tuple extra_args = py::reinterpret_borrow<py::tuple>(args);
+    py::dict call_kwargs = py::reinterpret_borrow<py::dict>(kwargs);
+
+    py::object resize_block = py::cpp_function(
+        [factors, skimage_transform, extra_args, call_kwargs](
+            py::object image_block,
+            py::object block_info = py::none()) {
+            static_cast<void>(block_info);
+            py::object numpy_inner = py::module_::import("numpy");
+            py::object int_type_inner = py::module_::import("builtins").attr("int");
+            py::object chunk_output_shape = py::tuple(
+                numpy_inner
+                    .attr("ceil")(
+                        numpy_inner.attr("multiply")(
+                            numpy_inner.attr("array")(image_block.attr("shape")),
+                            factors))
+                    .attr("astype")(int_type_inner));
+            py::object resized = call_callable(
+                skimage_transform.attr("resize"),
+                {image_block, chunk_output_shape},
+                extra_args,
+                call_kwargs);
+            return resized.attr("astype")(image_block.attr("dtype"));
+        },
+        py::arg("image_block"),
+        py::arg("block_info") = py::none());
+
+    py::object output = dask_array
+                            .attr("map_blocks")(
+                                resize_block,
+                                image_prepared,
+                                py::arg("dtype") = image.attr("dtype"),
+                                py::arg("chunks") = chunk_info[1])
+                            .attr("__getitem__")(output_slices_for_shape(output_shape));
+    return output.attr("rechunk")(image.attr("chunksize"))
+        .attr("astype")(image.attr("dtype"));
+}
+
+py::object dask_local_mean(
+    py::object image,
+    py::object output_shape,
+    py::args args,
+    py::kwargs kwargs) {
+    py::object numpy = py::module_::import("numpy");
+    py::object dask_array = py::module_::import("dask.array");
+    py::object float_type = py::module_::import("builtins").attr("float");
+    py::object int_type = py::module_::import("builtins").attr("int");
+    py::object downscale_local_mean =
+        py::module_::import("skimage.transform").attr("downscale_local_mean");
+
+    py::object factors = numpy.attr("divide")(
+        numpy.attr("array")(image.attr("shape")).attr("astype")(float_type),
+        numpy.attr("array")(output_shape));
+    py::tuple chunk_info = better_chunksize(
+        image, numpy.attr("divide")(1, factors));
+    py::object image_prepared = image.attr("rechunk")(chunk_info[0]);
+    py::tuple extra_args = py::reinterpret_borrow<py::tuple>(args);
+    py::dict call_kwargs = py::reinterpret_borrow<py::dict>(kwargs);
+    py::object factor_tuple = py::tuple(factors.attr("astype")(int_type));
+
+    py::object local_mean_block = py::cpp_function(
+        [downscale_local_mean, factor_tuple, extra_args, call_kwargs](
+            py::object image_block) {
+            py::object reduced = call_callable(
+                downscale_local_mean,
+                {image_block, factor_tuple},
+                extra_args,
+                call_kwargs);
+            return reduced.attr("astype")(image_block.attr("dtype"));
+        },
+        py::arg("image_block"));
+
+    py::object output = dask_array
+                            .attr("map_blocks")(
+                                local_mean_block,
+                                image_prepared,
+                                py::arg("dtype") = image.attr("dtype"),
+                                py::arg("chunks") = chunk_info[1])
+                            .attr("__getitem__")(output_slices_for_shape(output_shape));
+    return output.attr("rechunk")(image.attr("chunksize"))
+        .attr("astype")(image.attr("dtype"));
+}
+
+py::object dask_zoom(
+    py::object image,
+    py::object output_shape,
+    py::args args,
+    py::kwargs kwargs) {
+    static_cast<void>(args);
+    static_cast<void>(kwargs);
+    py::object numpy = py::module_::import("numpy");
+    py::object dask_array = py::module_::import("dask.array");
+    py::object float_type = py::module_::import("builtins").attr("float");
+    py::object scipy_zoom = py::module_::import("scipy.ndimage").attr("zoom");
+
+    py::object factors = numpy.attr("divide")(
+        numpy.attr("array")(image.attr("shape")).attr("astype")(float_type),
+        numpy.attr("array")(output_shape));
+    py::object inverse_factors = numpy.attr("divide")(1, factors);
+    py::tuple chunk_info = better_chunksize(image, inverse_factors);
+    py::object image_prepared = image.attr("rechunk")(chunk_info[0]);
+
+    py::object zoom_block = py::cpp_function(
+        [scipy_zoom, inverse_factors](py::object image_block) {
+            py::object zoomed = scipy_zoom(
+                image_block, inverse_factors, py::arg("order") = 1);
+            return zoomed.attr("astype")(image_block.attr("dtype"));
+        },
+        py::arg("image_block"));
+
+    py::tuple image_shape = py::cast<py::tuple>(image.attr("shape"));
+    py::tuple factors_tuple = py::cast<py::tuple>(factors);
+    py::tuple resized_output_shape(py::len(image_shape));
+    for (py::size_t index = 0; index < py::len(image_shape); ++index) {
+        resized_output_shape[index] =
+            floor_divide(image_shape[index], factors_tuple[index]);
+    }
+
+    py::object output = dask_array
+                            .attr("map_blocks")(
+                                zoom_block,
+                                image_prepared,
+                                py::arg("dtype") = image.attr("dtype"),
+                                py::arg("chunks") = chunk_info[1])
+                            .attr("__getitem__")(
+                                output_slices_for_shape(resized_output_shape));
+    return output.attr("rechunk")(image.attr("chunksize"))
+        .attr("astype")(image.attr("dtype"));
+}
+
+py::object downscale_nearest_dask(py::object image, py::object factors) {
+    py::tuple factor_tuple = py::tuple(factors);
+    py::tuple shape = py::cast<py::tuple>(image.attr("shape"));
+    const py::ssize_t factor_count = py::len(factor_tuple);
+    const py::ssize_t ndim = py::cast<py::ssize_t>(image.attr("ndim"));
+
+    if (factor_count != ndim) {
+        throw py::value_error(
+            "Dimension mismatch: " + py::cast<std::string>(py::str(image.attr("ndim"))) +
+            " image dimensions, " + std::to_string(factor_count) +
+            " scale factors");
+    }
+
+    for (py::size_t index = 0; index < static_cast<py::size_t>(factor_count); ++index) {
+        const py::handle factor = factor_tuple[index];
+        const py::handle dim = shape[index];
+        const bool valid = PyLong_Check(factor.ptr()) &&
+                           rich_compare_bool(factor, py::int_(0), Py_GT) &&
+                           rich_compare_bool(factor, dim, Py_LE);
+        if (!valid) {
+            throw py::value_error(
+                "All scale factors must not be greater than the dimension length: ("
+                + py::cast<std::string>(py::str(factor_tuple)) + ") <= (" +
+                py::cast<std::string>(py::str(shape)) + ")");
+        }
+    }
+
+    py::tuple slices(static_cast<py::size_t>(factor_count));
+    for (py::size_t index = 0; index < static_cast<py::size_t>(factor_count); ++index) {
+        slices[index] = py::slice(py::none(), py::none(), factor_tuple[index]);
+    }
+    return image.attr("__getitem__")(slices);
+}
+
+py::list build_pyramid(
+    py::object image,
+    py::object scale_factors,
+    py::object dims,
+    py::object method = py::str("nearest"),
+    py::object chunks = py::none()) {
+    py::object numpy = py::module_::import("numpy");
+    py::object dask_array = py::module_::import("dask.array");
+    py::object builtins = py::module_::import("builtins");
+    py::object warnings = py::module_::import("warnings");
+    py::object core = py::module_::import("ome_zarr_c._core");
+    py::tuple dims_tuple = py::tuple(dims);
+
+    if (py::isinstance(image, numpy.attr("ndarray"))) {
+        if (!chunks.is_none()) {
+            image = dask_array.attr("from_array")(image, py::arg("chunks") = chunks);
+        } else {
+            image = dask_array.attr("from_array")(image);
+        }
+    }
+
+    std::string method_key;
+    if (py::isinstance<py::str>(method)) {
+        method_key = py::cast<std::string>(method);
+    } else if (py::hasattr(method, "value") &&
+               py::isinstance<py::str>(method.attr("value"))) {
+        method_key = py::cast<std::string>(method.attr("value"));
+    }
+
+    bool all_int_scale_factors =
+        py::isinstance<py::list>(scale_factors) || py::isinstance<py::tuple>(scale_factors);
+    if (all_int_scale_factors) {
+        for (const py::handle& scale_factor : py::iterable(scale_factors)) {
+            if (!PyLong_Check(scale_factor.ptr())) {
+                all_int_scale_factors = false;
+                break;
+            }
+        }
+    }
+
+    py::object normalized_scale_factors = scale_factors;
+    if (all_int_scale_factors) {
+        py::list scales;
+        const bool contains_z = dims_tuple.attr("__contains__")("z").cast<bool>();
+        for (py::ssize_t level_index = 1; level_index <= py::len(scale_factors); ++level_index) {
+            py::dict scale;
+            for (const py::handle& dim_handle : dims_tuple) {
+                const std::string dim_name = py::cast<std::string>(dim_handle);
+                const bool is_spatial =
+                    dim_name == "z" || dim_name == "y" || dim_name == "x";
+                scale[dim_handle] = is_spatial ? py::int_(1 << level_index) : py::int_(1);
+            }
+            if (contains_z) {
+                scale["z"] = py::int_(1);
+            }
+            scales.append(scale);
+        }
+        normalized_scale_factors = scales;
+    } else {
+        for (py::ssize_t index = 0; index < py::len(scale_factors); ++index) {
+            py::object level = scale_factors.attr("__getitem__")(index);
+            py::dict reordered_level;
+            for (const py::handle& dim_handle : dims_tuple) {
+                reordered_level[dim_handle] = level.attr("get")(dim_handle, py::int_(1));
+            }
+            set_item(scale_factors, py::int_(index), reordered_level);
+        }
+    }
+
+    py::list images;
+    images.append(image);
+
+    for (py::ssize_t index = 0; index < py::len(normalized_scale_factors); ++index) {
+        py::object factor = normalized_scale_factors.attr("__getitem__")(index);
+        py::object relative_factors;
+        if (index == 0) {
+            relative_factors = numpy.attr("asarray")(
+                builtins.attr("list")(factor.attr("values")()));
+        } else {
+            py::object previous = normalized_scale_factors.attr("__getitem__")(index - 1);
+            relative_factors = numpy.attr("divide")(
+                numpy.attr("asarray")(builtins.attr("list")(factor.attr("values")())),
+                numpy.attr("asarray")(builtins.attr("list")(previous.attr("values")())));
+        }
+
+        py::tuple previous_shape = py::cast<py::tuple>(images[py::len(images) - 1].attr("shape"));
+        py::tuple relative_factor_tuple = py::tuple(relative_factors);
+        py::list target_shape;
+
+        for (py::size_t dim_index = 0; dim_index < py::len(previous_shape); ++dim_index) {
+            const std::string dim_name = py::cast<std::string>(dims_tuple[dim_index]);
+            py::object shape_value = previous_shape[dim_index];
+            py::object factor_value = relative_factor_tuple[dim_index];
+            const bool is_spatial =
+                dim_name == "z" || dim_name == "y" || dim_name == "x";
+
+            if (is_spatial) {
+                py::object scaled = floor_divide(shape_value, factor_value);
+                if (objects_equal(scaled, py::int_(0))) {
+                    target_shape.append(py::int_(1));
+                    warnings.attr("warn")(
+                        "Dimension " + dim_name + " is too small to downsample further.",
+                        builtins.attr("UserWarning"),
+                        py::arg("stacklevel") = 3);
+                } else {
+                    target_shape.append(builtins.attr("int")(scaled));
+                }
+            } else {
+                target_shape.append(builtins.attr("int")(shape_value));
+            }
+        }
+
+        py::object current_image = images[py::len(images) - 1];
+        py::object new_image;
+        if (method_key == "resize") {
+            new_image = core.attr("resize")(
+                current_image,
+                py::tuple(target_shape),
+                py::arg("order") = 1,
+                py::arg("mode") = "reflect",
+                py::arg("anti_aliasing") = true,
+                py::arg("preserve_range") = true);
+        } else if (method_key == "nearest") {
+            new_image = core.attr("resize")(
+                current_image,
+                py::tuple(target_shape),
+                py::arg("order") = 0,
+                py::arg("mode") = "reflect",
+                py::arg("anti_aliasing") = false,
+                py::arg("preserve_range") = true);
+        } else if (method_key == "local_mean") {
+            new_image = core.attr("local_mean")(current_image, py::tuple(target_shape));
+        } else if (method_key == "zoom") {
+            new_image = core.attr("zoom")(current_image, py::tuple(target_shape));
+        } else {
+            throw py::value_error(
+                "Unknown downsampling method: " +
+                py::cast<std::string>(py::str(method)));
+        }
+
+        images.append(new_image);
+    }
+
+    return images;
+}
+
+py::object scaler_resize_image(
+    py::object image,
+    py::int_ downscale = py::int_(2),
+    py::int_ order = py::int_(1)) {
+    py::object dask_array = py::module_::import("dask.array");
+    py::object skimage_transform = py::module_::import("skimage.transform");
+    py::object builtins = py::module_::import("builtins");
+
+    py::object resize_func = skimage_transform.attr("resize");
+    if (py::isinstance(image, dask_array.attr("Array"))) {
+        resize_func = py::module_::import("ome_zarr_c._core").attr("resize");
+    }
+
+    py::tuple image_shape = py::cast<py::tuple>(image.attr("shape"));
+    py::tuple out_shape(py::len(image_shape));
+    for (py::size_t index = 0; index < py::len(image_shape); ++index) {
+        out_shape[index] = image_shape[index];
+    }
+    out_shape[py::len(out_shape) - 1] =
+        floor_divide(image_shape[py::len(image_shape) - 1], downscale);
+    out_shape[py::len(out_shape) - 2] =
+        floor_divide(image_shape[py::len(image_shape) - 2], downscale);
+
+    py::object dtype = image.attr("dtype");
+    py::object resized = resize_func(
+        image.attr("astype")(builtins.attr("float")),
+        out_shape,
+        py::arg("order") = order,
+        py::arg("mode") = "reflect",
+        py::arg("anti_aliasing") = false);
+    return resized.attr("astype")(dtype);
+}
+
+py::list scaler_by_plane(
+    py::object base,
+    const std::function<py::object(py::object, py::ssize_t, py::ssize_t)>& transform,
+    py::int_ max_layer = py::int_(4)) {
+    py::object numpy = py::module_::import("numpy");
+    py::list rv;
+    rv.append(base);
+
+    for (py::ssize_t level_index = 0; level_index < max_layer; ++level_index) {
+        py::object stack_to_scale = rv[py::len(rv) - 1];
+        const py::ssize_t stack_ndim = py::cast<py::ssize_t>(stack_to_scale.attr("ndim"));
+        py::tuple stack_shape = py::cast<py::tuple>(stack_to_scale.attr("shape"));
+
+        std::array<py::ssize_t, 5> shape_5d = {1, 1, 1, 1, 1};
+        for (py::ssize_t dim_index = 0; dim_index < stack_ndim; ++dim_index) {
+            shape_5d[5 - stack_ndim + dim_index] = py::cast<py::ssize_t>(stack_shape[dim_index]);
+        }
+
+        const py::ssize_t T = shape_5d[0];
+        const py::ssize_t C = shape_5d[1];
+        const py::ssize_t Z = shape_5d[2];
+        const py::ssize_t Y = shape_5d[3];
+        const py::ssize_t X = shape_5d[4];
+
+        if (stack_ndim == 2) {
+            rv.append(transform(stack_to_scale, Y, X));
+            continue;
+        }
+
+        const py::ssize_t stack_dims = stack_ndim - 2;
+        py::object new_stack = py::none();
+
+        for (py::ssize_t t = 0; t < T; ++t) {
+            for (py::ssize_t c = 0; c < C; ++c) {
+                for (py::ssize_t z = 0; z < Z; ++z) {
+                    const std::array<py::ssize_t, 3> indices = {t, c, z};
+                    py::tuple dims_to_slice(stack_dims);
+                    for (py::ssize_t dim_index = 0; dim_index < stack_dims; ++dim_index) {
+                        dims_to_slice[dim_index] = py::int_(indices[3 - stack_dims + dim_index]);
+                    }
+
+                    py::object plane = stack_to_scale.attr("__getitem__")(dims_to_slice);
+                    py::object out = transform(plane, Y, X);
+
+                    if (new_stack.is_none()) {
+                        py::tuple out_shape = py::cast<py::tuple>(out.attr("shape"));
+                        py::tuple new_shape(stack_dims + 2);
+                        for (py::ssize_t dim_index = 0; dim_index < stack_dims; ++dim_index) {
+                            new_shape[dim_index] =
+                                py::int_(shape_5d[3 - stack_dims + dim_index]);
+                        }
+                        new_shape[stack_dims] = out_shape[0];
+                        new_shape[stack_dims + 1] = out_shape[1];
+                        new_stack = numpy.attr("zeros")(
+                            new_shape, py::arg("dtype") = base.attr("dtype"));
+                    }
+
+                    set_item(new_stack, dims_to_slice, out);
+                }
+            }
+        }
+
+        rv.append(new_stack);
+    }
+
+    return rv;
+}
+
+py::object scaler_nearest_plane(
+    py::object plane,
+    py::ssize_t size_y,
+    py::ssize_t size_x,
+    py::int_ downscale = py::int_(2)) {
+    py::object dask_array = py::module_::import("dask.array");
+    py::object resize_func = py::module_::import("skimage.transform").attr("resize");
+    if (py::isinstance(plane, dask_array.attr("Array"))) {
+        resize_func = py::module_::import("ome_zarr_c._core").attr("resize");
+    }
+
+    py::tuple output_shape(2);
+    output_shape[0] = floor_divide(py::int_(size_y), downscale);
+    output_shape[1] = floor_divide(py::int_(size_x), downscale);
+
+    return resize_func(
+               plane,
+               output_shape,
+               py::arg("order") = 0,
+               py::arg("preserve_range") = true,
+               py::arg("anti_aliasing") = false)
+        .attr("astype")(plane.attr("dtype"));
+}
+
+py::list scaler_nearest(
+    py::object base,
+    py::int_ downscale = py::int_(2),
+    py::int_ max_layer = py::int_(4)) {
+    return scaler_by_plane(
+        base,
+        [downscale](py::object plane, py::ssize_t size_y, py::ssize_t size_x) {
+            return scaler_nearest_plane(plane, size_y, size_x, downscale);
+        },
+        max_layer);
+}
+
+py::list scaler_gaussian(
+    py::object base,
+    py::int_ downscale = py::int_(2),
+    py::int_ max_layer = py::int_(4)) {
+    py::object pyramid = py::module_::import("skimage.transform").attr("pyramid_gaussian")(
+        base,
+        py::arg("downscale") = downscale,
+        py::arg("max_layer") = max_layer,
+        py::arg("channel_axis") = py::none());
+
+    py::list result;
+    py::object dtype = base.attr("dtype");
+    for (const py::handle& level : py::iterable(pyramid)) {
+        result.append(py::reinterpret_borrow<py::object>(level).attr("astype")(dtype));
+    }
+    return result;
+}
+
+py::list scaler_laplacian(
+    py::object base,
+    py::int_ downscale = py::int_(2),
+    py::int_ max_layer = py::int_(4)) {
+    py::object pyramid =
+        py::module_::import("skimage.transform").attr("pyramid_laplacian")(
+            base,
+            py::arg("downscale") = downscale,
+            py::arg("max_layer") = max_layer,
+            py::arg("channel_axis") = py::none());
+
+    py::list result;
+    py::object dtype = base.attr("dtype");
+    for (const py::handle& level : py::iterable(pyramid)) {
+        result.append(py::reinterpret_borrow<py::object>(level).attr("astype")(dtype));
+    }
+    return result;
+}
+
+py::list scaler_local_mean(
+    py::object base,
+    py::int_ downscale = py::int_(2),
+    py::int_ max_layer = py::int_(4)) {
+    py::object downscale_local_mean =
+        py::module_::import("skimage.transform").attr("downscale_local_mean");
+    py::list rv;
+    rv.append(base);
+
+    const py::ssize_t stack_dims = py::cast<py::ssize_t>(base.attr("ndim")) - 2;
+    py::tuple factors(stack_dims + 2);
+    for (py::ssize_t index = 0; index < stack_dims; ++index) {
+        factors[index] = py::int_(1);
+    }
+    factors[stack_dims] = downscale;
+    factors[stack_dims + 1] = downscale;
+
+    for (py::ssize_t level_index = 0; level_index < max_layer; ++level_index) {
+        py::object next_level = downscale_local_mean(rv[py::len(rv) - 1], py::arg("factors") = factors)
+                                    .attr("astype")(base.attr("dtype"));
+        rv.append(next_level);
+    }
+
+    return rv;
+}
+
+py::list scaler_zoom(
+    py::object base,
+    py::int_ downscale = py::int_(2),
+    py::int_ max_layer = py::int_(4)) {
+    py::object scipy_zoom = py::module_::import("scipy.ndimage").attr("zoom");
+    py::list rv;
+    rv.append(base);
+    py::print(base.attr("shape"));
+    for (py::ssize_t level_index = 0; level_index < max_layer; ++level_index) {
+        py::print(level_index, downscale);
+        const long zoom_factor = static_cast<long>(
+            std::pow(py::cast<long>(downscale), static_cast<long>(level_index)));
+        rv.append(scipy_zoom(base, py::int_(zoom_factor)));
+        py::print(rv[py::len(rv) - 1].attr("shape"));
+    }
+
+    py::list reversed_result;
+    for (py::ssize_t index = py::len(rv) - 1; index >= 0; --index) {
+        reversed_result.append(rv[index]);
+        if (index == 0) {
+            break;
+        }
+    }
+    return reversed_result;
+}
+
+void data_make_circle(
+    py::int_ height,
+    py::int_ width,
+    py::object value,
+    py::object target) {
+    const py::ssize_t h = py::cast<py::ssize_t>(height);
+    const py::ssize_t w = py::cast<py::ssize_t>(width);
+    const py::ssize_t cx = w / 2;
+    const py::ssize_t cy = h / 2;
+    const py::ssize_t radius = std::min(w, h) / 2;
+    const py::ssize_t radius_squared = radius * radius;
+
+    for (py::ssize_t y = 0; y < h; ++y) {
+        for (py::ssize_t x = 0; x < w; ++x) {
+            const py::ssize_t dx = x - cx;
+            const py::ssize_t dy = y - cy;
+            if (dx * dx + dy * dy < radius_squared) {
+                set_item(target, py::make_tuple(y, x), value);
+            }
+        }
+    }
+}
+
+py::object data_rgb_to_5d(py::object pixels) {
+    py::object numpy = py::module_::import("numpy");
+    const py::ssize_t ndim = py::cast<py::ssize_t>(pixels.attr("ndim"));
+    if (ndim == 2) {
+        py::object stack = numpy.attr("array")(py::make_tuple(pixels));
+        py::object channels = numpy.attr("array")(py::make_tuple(stack));
+        return numpy.attr("array")(py::make_tuple(channels));
+    }
+    if (ndim == 3) {
+        py::tuple pixel_shape = py::cast<py::tuple>(pixels.attr("shape"));
+        const py::ssize_t size_c = py::cast<py::ssize_t>(pixel_shape[2]);
+        py::list channels;
+        for (py::ssize_t channel_index = 0; channel_index < size_c; ++channel_index) {
+            py::object channel = pixels.attr("__getitem__")(
+                py::make_tuple(py::slice(py::none(), py::none(), py::none()),
+                               py::slice(py::none(), py::none(), py::none()),
+                               py::int_(channel_index)));
+            channels.append(numpy.attr("array")(py::make_tuple(channel)));
+        }
+        return numpy.attr("array")(py::make_tuple(channels));
+    }
+    PyErr_SetString(
+        PyExc_AssertionError,
+        ("expecting 2 or 3d: (" + py::cast<std::string>(py::str(pixels.attr("shape"))) + ")")
+            .c_str());
+    throw py::error_already_set();
+}
+
+py::tuple data_coins() {
+    py::object scipy_zoom = py::module_::import("scipy.ndimage").attr("zoom");
+    py::object skimage_data = py::module_::import("skimage.data");
+    py::object threshold_otsu =
+        py::module_::import("skimage.filters").attr("threshold_otsu");
+    py::object label = py::module_::import("skimage.measure").attr("label");
+    py::object clear_border =
+        py::module_::import("skimage.segmentation").attr("clear_border");
+    py::object morphology = py::module_::import("skimage.morphology");
+    py::object closing = morphology.attr("closing");
+    py::object footprint_rectangle = morphology.attr("footprint_rectangle");
+    py::object remove_small_objects = morphology.attr("remove_small_objects");
+
+    py::object image = skimage_data.attr("coins")().attr("__getitem__")(
+        py::make_tuple(py::slice(50, -50, 1), py::slice(50, -50, 1)));
+    py::object thresh = threshold_otsu(image);
+    py::object bw = closing(
+        py::reinterpret_borrow<py::object>(PyObject_RichCompare(
+            image.ptr(), thresh.ptr(), Py_GT)),
+        footprint_rectangle(py::make_tuple(4, 4)));
+    py::object cleared = remove_small_objects(clear_border(bw), py::arg("max_size") = 20);
+    py::object label_image = label(cleared);
+
+    py::list pyramid;
+    py::list labels;
+    for (py::ssize_t index = 3; index >= 0; --index) {
+        const long scale = static_cast<long>(std::pow(2, index));
+        pyramid.append(scipy_zoom(image, py::int_(scale), py::arg("order") = 3));
+        labels.append(scipy_zoom(label_image, py::int_(scale), py::arg("order") = 0));
+    }
+
+    return py::make_tuple(pyramid, labels);
+}
+
+py::tuple data_astronaut() {
+    py::object numpy = py::module_::import("numpy");
+    py::object skimage_data = py::module_::import("skimage.data");
+
+    py::object astro = skimage_data.attr("astronaut")();
+    py::object red = astro.attr("__getitem__")(
+        py::make_tuple(py::slice(py::none(), py::none(), py::none()),
+                       py::slice(py::none(), py::none(), py::none()),
+                       py::int_(0)));
+    py::object green = astro.attr("__getitem__")(
+        py::make_tuple(py::slice(py::none(), py::none(), py::none()),
+                       py::slice(py::none(), py::none(), py::none()),
+                       py::int_(1)));
+    py::object blue = astro.attr("__getitem__")(
+        py::make_tuple(py::slice(py::none(), py::none(), py::none()),
+                       py::slice(py::none(), py::none(), py::none()),
+                       py::int_(2)));
+    astro = numpy.attr("array")(py::make_tuple(red, green, blue));
+    py::object pixels = numpy.attr("tile")(astro, py::make_tuple(1, 2, 2));
+    py::list pyramid = scaler_nearest(pixels);
+
+    py::list shape = py::cast<py::list>(pyramid[0].attr("shape"));
+    py::ssize_t y = py::cast<py::ssize_t>(shape[1]);
+    py::ssize_t x = py::cast<py::ssize_t>(shape[2]);
+    py::object label = numpy.attr("zeros")(
+        py::make_tuple(y, x), py::arg("dtype") = numpy.attr("int8"));
+
+    py::object first_target = label.attr("__getitem__")(
+        py::make_tuple(py::slice(200, 300, 1), py::slice(200, 300, 1)));
+    data_make_circle(py::int_(100), py::int_(100), py::int_(1), first_target);
+
+    py::object second_target = label.attr("__getitem__")(
+        py::make_tuple(py::slice(250, 400, 1), py::slice(250, 400, 1)));
+    data_make_circle(py::int_(150), py::int_(150), py::int_(2), second_target);
+
+    py::list labels = scaler_nearest(label);
+    return py::make_tuple(pyramid, labels);
+}
+
+py::list format_versions() {
+    py::list versions;
+    for (const char* version : kFormatVersions) {
+        versions.append(py::str(version));
+    }
+    return versions;
+}
+
+py::str resolve_format_version(const py::handle& version) {
+    return py::str(normalize_known_format_version(version));
+}
+
 py::object get_metadata_version(py::dict metadata) {
     py::list multiscales = py::cast<py::list>(metadata.attr("get")("multiscales", py::list()));
     if (py::len(multiscales) > 0) {
@@ -993,6 +2140,53 @@ py::object get_metadata_version(py::dict metadata) {
     }
 
     return py::none();
+}
+
+py::object detect_format_version(py::dict metadata) {
+    if (py::len(metadata) == 0) {
+        return py::none();
+    }
+
+    py::object version = get_metadata_version(metadata);
+    if (version.is_none() || !is_known_format_version(version)) {
+        return py::none();
+    }
+
+    return version;
+}
+
+bool format_matches(const std::string& version, py::dict metadata) {
+    py::object metadata_version = get_metadata_version(metadata);
+    if (metadata_version.is_none()) {
+        return false;
+    }
+    return objects_equal(py::str(normalize_known_format_version(py::str(version))), metadata_version);
+}
+
+int format_zarr_format(const std::string& version) {
+    const std::string normalized = normalize_known_format_version(py::str(version));
+    if (normalized == "0.5") {
+        return 3;
+    }
+    return 2;
+}
+
+py::dict format_chunk_key_encoding(const std::string& version) {
+    const std::string normalized = normalize_known_format_version(py::str(version));
+    py::dict encoding;
+    if (normalized == "0.1") {
+        encoding["name"] = py::str("v2");
+        encoding["separator"] = py::str(".");
+        return encoding;
+    }
+    if (normalized == "0.5") {
+        encoding["name"] = py::str("default");
+        encoding["separator"] = py::str("/");
+        return encoding;
+    }
+    encoding["name"] = py::str("v2");
+    encoding["separator"] = py::str("/");
+    return encoding;
 }
 
 void validate_well_dict_v01(py::dict well) {
@@ -1268,7 +2462,39 @@ PYBIND11_MODULE(_core, m) {
     m.def("info_lines", &info_lines, py::arg("node"), py::arg("stats") = false);
     m.def("finder", &finder, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false);
     m.def("view", &view, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false, py::arg("force") = false);
+    m.def("_get_valid_axes", &get_valid_axes, py::arg("ndim") = py::none(), py::arg("axes") = py::none(), py::arg("fmt"));
+    m.def("_extract_dims_from_axes", &extract_dims_from_axes, py::arg("axes") = py::none());
+    m.def("_retuple", &retuple, py::arg("chunks"), py::arg("shape"));
+    m.def("_validate_well_images", &validate_well_images, py::arg("images"), py::arg("fmt"));
+    m.def("_validate_plate_acquisitions", &validate_plate_acquisitions, py::arg("acquisitions"), py::arg("fmt"));
+    m.def("_validate_plate_rows_columns", &validate_plate_rows_columns, py::arg("rows_or_columns"), py::arg("fmt"));
+    m.def("_validate_datasets", &validate_datasets, py::arg("datasets"), py::arg("dims"), py::arg("fmt"));
+    m.def("_validate_plate_wells", &validate_plate_wells, py::arg("wells"), py::arg("rows"), py::arg("columns"), py::arg("fmt"));
+    m.def("_blosc_compressor", &blosc_compressor);
+    m.def("_resolve_storage_options", &resolve_storage_options, py::arg("storage_options"), py::arg("path"));
+    m.def("_better_chunksize", &better_chunksize, py::arg("image"), py::arg("factors"));
+    m.def("resize", &dask_resize, py::arg("image"), py::arg("output_shape"));
+    m.def("local_mean", &dask_local_mean, py::arg("image"), py::arg("output_shape"));
+    m.def("zoom", &dask_zoom, py::arg("image"), py::arg("output_shape"));
+    m.def("downscale_nearest", &downscale_nearest_dask, py::arg("image"), py::arg("factors"));
+    m.def("_build_pyramid", &build_pyramid, py::arg("image"), py::arg("scale_factors"), py::arg("dims"), py::arg("method") = py::str("nearest"), py::arg("chunks") = py::none());
+    m.def("scaler_resize_image", &scaler_resize_image, py::arg("image"), py::arg("downscale") = 2, py::arg("order") = 1);
+    m.def("scaler_nearest", &scaler_nearest, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
+    m.def("scaler_gaussian", &scaler_gaussian, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
+    m.def("scaler_laplacian", &scaler_laplacian, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
+    m.def("scaler_local_mean", &scaler_local_mean, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
+    m.def("scaler_zoom", &scaler_zoom, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
+    m.def("data_make_circle", &data_make_circle, py::arg("h"), py::arg("w"), py::arg("value"), py::arg("target"));
+    m.def("data_rgb_to_5d", &data_rgb_to_5d, py::arg("pixels"));
+    m.def("data_coins", &data_coins);
+    m.def("data_astronaut", &data_astronaut);
+    m.def("format_versions", &format_versions);
+    m.def("resolve_format_version", &resolve_format_version, py::arg("version"));
     m.def("get_metadata_version", &get_metadata_version);
+    m.def("detect_format_version", &detect_format_version);
+    m.def("format_matches", &format_matches, py::arg("version"), py::arg("metadata"));
+    m.def("format_zarr_format", &format_zarr_format, py::arg("version"));
+    m.def("format_chunk_key_encoding", &format_chunk_key_encoding, py::arg("version"));
     m.def("validate_well_dict_v01", &validate_well_dict_v01);
     m.def("generate_well_dict_v04", &generate_well_dict_v04);
     m.def("validate_well_dict_v04", &validate_well_dict_v04);

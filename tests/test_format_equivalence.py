@@ -67,12 +67,19 @@ def test_format_from_version_matches_upstream() -> None:
     )
 
 
+def test_format_implementations_order_matches_upstream() -> None:
+    expected = [_format_signature(fmt) for fmt in _py_format.format_implementations()]
+    actual = [_format_signature(fmt) for fmt in _cpp_format.format_implementations()]
+    assert expected == actual
+
+
 def test_detect_format_matches_upstream() -> None:
     default_py = _py_format.FormatV03()
     default_cpp = _cpp_format.FormatV03()
     metadata_cases = [
         {},
         {"multiscales": [{"version": "0.5"}]},
+        {"multiscales": [{"version": 0.5}]},
         {"plate": {"version": "0.4"}},
         {"well": {"version": "0.3"}},
         {"image-label": {"version": "0.2"}},

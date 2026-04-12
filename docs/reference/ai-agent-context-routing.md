@@ -14,11 +14,13 @@ default.
 
 ### Porting one upstream module
 
-1. Read `docs/reference/porting-contract.md`.
-2. Read the upstream file under `source_code_v.0.15.0/`.
-3. Read the matching local wrapper or `cpp/` file.
-4. Read the nearest parity test.
-5. Run only the relevant differential test lanes.
+1. Read `docs/reference/architecture-first-porting.md`.
+2. Read `docs/reference/porting-contract.md`.
+3. Read `docs/reference/ai-agent-dos-and-donts.md`.
+4. Read the upstream file under `source_code_v.0.15.0/`.
+5. Read the matching local wrapper or `cpp/` file.
+6. Read the nearest parity test.
+7. Run only the relevant differential test lanes.
 
 ### Workflow or tooling changes
 

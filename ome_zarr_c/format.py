@@ -15,27 +15,18 @@ LOGGER = logging.getLogger("ome_zarr_c.format")
 
 
 def format_from_version(version: str | float) -> Format:
-    if isinstance(version, float):
-        version = str(version)
-    for fmt in format_implementations():
-        if fmt.version == version:
-            return fmt
-    raise ValueError(f"Version {version} not recognized")
+    return _format_class_for_version(str(_core.resolve_format_version(version)))()
 
 
 def format_implementations() -> Iterator[Format]:
-    yield FormatV05()
-    yield FormatV04()
-    yield FormatV03()
-    yield FormatV02()
-    yield FormatV01()
+    for version in _core.format_versions():
+        yield _format_class_for_version(str(version))()
 
 
 def detect_format(metadata: dict, default: Format) -> Format:
-    if metadata:
-        for fmt in format_implementations():
-            if fmt.matches(metadata):
-                return fmt
+    detected = _core.detect_format_version(metadata)
+    if detected is not None:
+        return _format_class_for_version(str(detected))()
     return default
 
 
@@ -66,9 +57,8 @@ class Format(ABC):
     def init_channels(self) -> None:
         raise NotImplementedError()
 
-    def _get_metadata_version(self, metadata: dict) -> str | None:
-        result = _core.get_metadata_version(metadata)
-        return None if result is None else str(result)
+    def _get_metadata_version(self, metadata: dict):
+        return _core.get_metadata_version(metadata)
 
     def __repr__(self) -> str:
         return self.__class__.__name__
@@ -104,25 +94,30 @@ class Format(ABC):
         raise NotImplementedError()
 
 
-class FormatV01(Format):
-    REQUIRED_PLATE_WELL_KEYS: Mapping[str, type] = {"path": str}
+class _VersionedFormat(Format):
+    _VERSION: str
 
     @property
     def version(self) -> str:
-        return "0.1"
+        return self._VERSION
 
     @property
     def zarr_format(self) -> int:
-        return 2
+        return int(_core.format_zarr_format(self._VERSION))
 
     @property
     def chunk_key_encoding(self) -> dict[str, str]:
-        return {"name": "v2", "separator": "."}
+        return dict(_core.format_chunk_key_encoding(self._VERSION))
 
     def matches(self, metadata: dict) -> bool:
         version = self._get_metadata_version(metadata)
         LOGGER.debug("%s matches %s?", self.version, version)
-        return version == self.version
+        return bool(_core.format_matches(self._VERSION, metadata))
+
+
+class FormatV01(_VersionedFormat):
+    REQUIRED_PLATE_WELL_KEYS: Mapping[str, type] = {"path": str}
+    _VERSION = "0.1"
 
     def init_store(self, path: str, mode: str = "r") -> FsspecStore | LocalStore:
         read_only = mode == "r"
@@ -163,19 +158,11 @@ class FormatV01(Format):
 
 
 class FormatV02(FormatV01):
-    @property
-    def version(self) -> str:
-        return "0.2"
-
-    @property
-    def chunk_key_encoding(self) -> dict[str, str]:
-        return {"name": "v2", "separator": "/"}
+    _VERSION = "0.2"
 
 
 class FormatV03(FormatV02):
-    @property
-    def version(self) -> str:
-        return "0.3"
+    _VERSION = "0.3"
 
 
 class FormatV04(FormatV03):
@@ -184,10 +171,7 @@ class FormatV04(FormatV03):
         "rowIndex": int,
         "columnIndex": int,
     }
-
-    @property
-    def version(self) -> str:
-        return "0.4"
+    _VERSION = "0.4"
 
     def generate_well_dict(
         self, well: str, rows: list[str], columns: list[str]
@@ -216,17 +200,17 @@ class FormatV04(FormatV03):
 
 
 class FormatV05(FormatV04):
-    @property
-    def version(self) -> str:
-        return "0.5"
+    _VERSION = "0.5"
 
-    @property
-    def zarr_format(self) -> int:
-        return 3
 
-    @property
-    def chunk_key_encoding(self) -> dict[str, str]:
-        return {"name": "default", "separator": "/"}
+def _format_class_for_version(version: str) -> type[Format]:
+    return {
+        "0.1": FormatV01,
+        "0.2": FormatV02,
+        "0.3": FormatV03,
+        "0.4": FormatV04,
+        "0.5": FormatV05,
+    }[version]
 
 
 CurrentFormat = FormatV05

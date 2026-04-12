@@ -71,11 +71,13 @@ snapshot to C++ without modifying the snapshot itself.
 
 ## Fast load order
 
-1. `docs/reference/ai-agent-context-routing.md`
-2. `docs/reference/porting-contract.md`
-3. `docs/reference/ai-agent-skills.md`
-4. the touched upstream implementation file under `source_code_v.0.15.0/`
-5. the matching wrapper, C++ file, and nearest test module
+1. `docs/reference/architecture-first-porting.md`
+2. `docs/reference/ai-agent-context-routing.md`
+3. `docs/reference/porting-contract.md`
+4. `docs/reference/ai-agent-dos-and-donts.md`
+5. `docs/reference/ai-agent-skills.md`
+6. the touched upstream implementation file under `source_code_v.0.15.0/`
+7. the matching wrapper, C++ file, and nearest test module
 
 ## Repository map
 
@@ -89,11 +91,20 @@ snapshot to C++ without modifying the snapshot itself.
 ## Verification minimum
 
 ```bash
-.venv/bin/python -m pip install -e .[dev]
-.venv/bin/python -m pytest -q
+.venv/bin/python -m pip install -e . --no-build-isolation
+timeout 180s .venv/bin/python -m pytest -q \
+  tests/test_axes_equivalence.py \
+  tests/test_conversions_equivalence.py \
+  tests/test_dask_utils_equivalence.py \
+  tests/test_data_equivalence.py \
+  tests/test_format_equivalence.py \
+  tests/test_scale_equivalence.py \
+  tests/test_scaler_equivalence.py \
+  tests/test_utils_equivalence.py \
+  tests/test_writer_equivalence.py
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```
 
 Run only the narrowest relevant suites while iterating, but report exactly what
-was verified.
+was verified. Do not claim blocked store-backed lanes are green by implication.

@@ -34,9 +34,10 @@ directory.
 - `tests/`: differential and regression tests
 - `docs/`: project references, design notes, and benchmark material
 
-## Converted Surfaces
+## Verified Native-Backed Surfaces
 
-The current native-backed parity slices are:
+The following upstream behaviors are native-backed and currently proven by
+differential tests on this runtime:
 
 - `ome_zarr_c.conversions`
   - `int_to_rgba`
@@ -47,24 +48,69 @@ The current native-backed parity slices are:
   - axis-name extraction
   - OME-Zarr axis validation logic
 - `ome_zarr_c.format`
-  - format dispatch
+  - format implementation ordering
+  - `format_from_version`
+  - `detect_format`
+  - per-format matching
+  - per-format Zarr/chunk-key properties
   - metadata version lookup
   - well-dict generation and validation
   - coordinate-transformation generation and validation
 - `ome_zarr_c.csv`
   - `parse_csv_value`
-  - `dict_to_zarr`
-  - `csv_to_zarr`
 - `ome_zarr_c.utils`
   - `strip_common_prefix`
   - `splitall`
   - `find_multiscales`
   - `finder`
   - `view`
-  - `info`
+- `ome_zarr_c.writer`
+  - `_blosc_compressor`
+  - `_get_valid_axes`
+  - `_extract_dims_from_axes`
+  - `_retuple`
+  - `_resolve_storage_options`
+  - `_validate_well_images`
+  - `_validate_plate_acquisitions`
+  - `_validate_plate_rows_columns`
+  - `_validate_datasets`
+  - `_validate_plate_wells`
+- `ome_zarr_c.dask_utils`
+  - `_better_chunksize`
+  - `downscale_nearest`
+  - `local_mean`
+  - `resize`
+  - `zoom`
+- `ome_zarr_c.scale`
+  - `_build_pyramid`
+  - `Scaler.resize_image`
+  - `Scaler.nearest`
+  - `Scaler.gaussian`
+  - `Scaler.laplacian`
+  - `Scaler.local_mean`
+  - `Scaler.zoom`
+- `ome_zarr_c.data`
+  - `coins`
+  - `astronaut`
+  - `make_circle`
+  - `rgb_to_5d`
 
 Each converted surface is validated against the frozen upstream release with
 parity tests under `tests/`.
+
+## Runtime-Blocked Surfaces
+
+Some native-backed or partially ported paths are intentionally not counted in
+the verified set above because this runtime currently hangs on local and
+in-memory Zarr store operations. Until that blocker is resolved and the
+relevant differential lanes are green, these surfaces remain unverified:
+
+- `ome_zarr_c.csv.dict_to_zarr`
+- `ome_zarr_c.csv.csv_to_zarr`
+- `ome_zarr_c.utils.info`
+- `ome_zarr_c.data.create_zarr`
+- metadata-writing and path/store-writing functions in `ome_zarr_c.writer`
+- other reader/writer/io surfaces that require live Zarr store creation or open
 
 ## Local Development
 
@@ -76,10 +122,19 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e .[dev]
 ```
 
-Run the full local verification lane:
+Run the current proven-safe local verification lane:
 
 ```bash
-.venv/bin/python -m pytest -q
+timeout 180s .venv/bin/python -m pytest -q \
+  tests/test_axes_equivalence.py \
+  tests/test_conversions_equivalence.py \
+  tests/test_dask_utils_equivalence.py \
+  tests/test_data_equivalence.py \
+  tests/test_format_equivalence.py \
+  tests/test_scale_equivalence.py \
+  tests/test_scaler_equivalence.py \
+  tests/test_utils_equivalence.py \
+  tests/test_writer_equivalence.py
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```
@@ -88,7 +143,7 @@ After editing native code under `cpp/`, rebuild the editable install before
 re-running tests so the suite exercises the current extension binary:
 
 ```bash
-.venv/bin/python -m pip install -e .[dev]
+.venv/bin/python -m pip install -e . --no-build-isolation
 ```
 
 ## Porting Approach
