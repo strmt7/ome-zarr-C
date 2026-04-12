@@ -242,13 +242,12 @@ void validate_axes_types(const py::sequence& axes) {
 
     const int channel_last_index = last_index("channel");
     if (channel_last_index >= 0) {
-        const auto space_first =
-            std::find(axes_types.begin(), axes_types.end(), "space");
-        if (space_first == axes_types.end()) {
-            throw py::value_error("'space' is not in list");
+        py::list axes_types_list;
+        for (const auto& axis_type : axes_types) {
+            axes_types_list.append(py::str(axis_type));
         }
         const int first_space_index =
-            static_cast<int>(std::distance(axes_types.begin(), space_first));
+            py::cast<int>(axes_types_list.attr("index")(py::str("space")));
         if (channel_last_index > first_space_index) {
             throw py::value_error("'space' axes must come after 'channel'");
         }
