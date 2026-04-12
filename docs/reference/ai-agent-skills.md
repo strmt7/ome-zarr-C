@@ -17,4 +17,5 @@ Repo-local reusable skills live under `.agents/skills/`.
 
 Use the nearest matching skill before inventing a workflow from scratch. For
 pushes made by an AI agent, `verification-loop` includes waiting for the remote
-workflow set on the pushed commit.
+workflow set on the pushed commit, and it assumes exact failing run logs are
+inspected before a CI fix is attempted.

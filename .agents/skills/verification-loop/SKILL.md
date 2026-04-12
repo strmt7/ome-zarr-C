@@ -14,6 +14,7 @@ Use this skill after any non-trivial change.
 2. `ruff check .`
 3. `ruff format --check .`
 4. any module-specific build or benchmark check required by the touched files
+   and, after native-code changes, rebuild the editable install first
 5. after an AI-agent push, wait for the GitHub workflows on that pushed commit
    and fix failures before considering the change finished
 
@@ -21,4 +22,5 @@ Use this skill after any non-trivial change.
 
 State exactly which suites ran. Do not imply whole-repo parity when only one
 ported surface was checked. After an AI-agent push, state whether the remote
-workflow set is green for that exact commit.
+workflow set is green for that exact commit. If remote CI fails, inspect the
+exact failing run logs for that repo before changing code.

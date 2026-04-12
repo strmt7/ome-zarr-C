@@ -18,6 +18,18 @@ snapshot to C++ without modifying the snapshot itself.
 9. After any push performed by an AI agent, wait for all repository workflows on
    the pushed commit to finish and treat the work as incomplete until they are
    green or the remaining failures are explicitly explained and queued for fix.
+10. If package names, module paths, or repo naming change, remove stale build
+    artifacts and editable-install metadata and rebuild before trusting tests.
+11. If parity depends on Python runtime exception text, derive it from the live
+    interpreter behavior instead of hard-coding strings that may vary by
+    version.
+12. Do not force-push to solve divergence on the default branch. Fetch, inspect
+    the remote delta, then rebase or merge intentionally.
+13. When using `gh` for Actions or remote repo checks, pin the target repo with
+    `-R owner/repo` unless the active `gh` repo context has been explicitly
+    verified.
+14. After any C++ or extension-build change, reinstall the editable package
+    before rerunning parity tests so the checks exercise the current binary.
 
 ## Fast load order
 

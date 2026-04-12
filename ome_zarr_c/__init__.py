@@ -15,7 +15,7 @@ from .format import (
     format_from_version,
     format_implementations,
 )
-from .utils import strip_common_prefix
+from .utils import splitall, strip_common_prefix
 
 __all__ = [
     "Axes",
@@ -35,5 +35,6 @@ __all__ = [
     "int_to_rgba_255",
     "parse_csv_value",
     "rgba_to_int",
+    "splitall",
     "strip_common_prefix",
 ]

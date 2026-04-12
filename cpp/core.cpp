@@ -75,6 +75,14 @@ bool is_number_like(const py::handle& value) {
     return PyFloat_Check(value.ptr()) || PyLong_Check(value.ptr());
 }
 
+bool objects_equal(const py::handle& left, const py::handle& right) {
+    const int result = PyObject_RichCompareBool(left.ptr(), right.ptr(), Py_EQ);
+    if (result < 0) {
+        throw py::error_already_set();
+    }
+    return result == 1;
+}
+
 std::string repr_joined_lines(const py::list& parts) {
     std::string message = "No common prefix:\n";
     for (const py::handle& part_handle : parts) {
@@ -375,6 +383,28 @@ py::str strip_common_prefix(py::list parts) {
     return common;
 }
 
+py::list splitall(py::object path) {
+    py::list allparts;
+    py::object current = path;
+    py::object os_path = py::module_::import("os").attr("path");
+
+    while (true) {
+        py::tuple parts = py::cast<py::tuple>(os_path.attr("split")(current));
+        if (objects_equal(parts[0], current)) {
+            allparts.attr("insert")(0, parts[0]);
+            break;
+        }
+        if (objects_equal(parts[1], current)) {
+            allparts.attr("insert")(0, parts[1]);
+            break;
+        }
+        current = parts[0];
+        allparts.attr("insert")(0, parts[1]);
+    }
+
+    return allparts;
+}
+
 py::object get_metadata_version(py::dict metadata) {
     py::list multiscales = py::cast<py::list>(metadata.attr("get")("multiscales", py::list()));
     if (py::len(multiscales) > 0) {
@@ -661,6 +691,7 @@ PYBIND11_MODULE(_core, m) {
     m.def("rgba_to_int", &rgba_to_int);
     m.def("parse_csv_value", &parse_csv_value);
     m.def("strip_common_prefix", &strip_common_prefix);
+    m.def("splitall", &splitall);
     m.def("get_metadata_version", &get_metadata_version);
     m.def("validate_well_dict_v01", &validate_well_dict_v01);
     m.def("generate_well_dict_v04", &generate_well_dict_v04);
