@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,27 @@ namespace ome_zarr_c::native_code {
 struct ChunkKeyEncoding {
     std::string name;
     std::string separator;
+};
+
+struct MetadataSummary {
+    bool is_empty;
+    bool has_multiscales_version;
+    bool multiscales_version_is_string;
+    std::string multiscales_version;
+    bool has_plate_version;
+    bool plate_version_is_string;
+    std::string plate_version;
+    bool has_well_version;
+    bool well_version_is_string;
+    std::string well_version;
+    bool has_image_label_version;
+    bool image_label_version_is_string;
+    std::string image_label_version;
+};
+
+struct WellDictV01Input {
+    bool has_path;
+    bool path_is_string;
 };
 
 struct CoordinateTransformation {
@@ -95,6 +117,12 @@ std::string normalize_known_format_version(const std::string& version);
 
 bool is_known_format_version_string(const std::string& version);
 
+std::optional<std::string> get_metadata_version(const MetadataSummary& metadata);
+
+std::optional<std::string> detect_format_version(const MetadataSummary& metadata);
+
+bool format_matches(const std::string& version, const MetadataSummary& metadata);
+
 int format_zarr_format(const std::string& version);
 
 ChunkKeyEncoding format_chunk_key_encoding(const std::string& version);
@@ -123,5 +151,7 @@ WellDictV04 generate_well_v04(
     const std::string& path,
     const std::vector<std::string>& rows,
     const std::vector<std::string>& columns);
+
+void validate_well_v01(const WellDictV01Input& well);
 
 }  // namespace ome_zarr_c::native_code

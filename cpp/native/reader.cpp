@@ -1,0 +1,79 @@
+#include "reader.hpp"
+
+#include <sstream>
+#include <stdexcept>
+
+namespace ome_zarr_c::native_code {
+
+std::vector<std::string> reader_matching_specs(const ReaderSpecFlags& flags) {
+    std::vector<std::string> matches;
+    if (flags.has_labels) {
+        matches.push_back("Labels");
+    }
+    if (flags.has_image_label) {
+        matches.push_back("Label");
+    }
+    if (flags.has_zgroup && flags.has_multiscales) {
+        matches.push_back("Multiscales");
+    }
+    if (flags.has_omero) {
+        matches.push_back("OMERO");
+    }
+    if (flags.has_plate) {
+        matches.push_back("Plate");
+    }
+    if (flags.has_well) {
+        matches.push_back("Well");
+    }
+    return matches;
+}
+
+std::string reader_node_repr(const std::string& zarr_repr, bool visible) {
+    return visible ? zarr_repr : zarr_repr + " (hidden)";
+}
+
+ReaderMultiscalesPlan reader_multiscales_plan(
+    const std::vector<ReaderMultiscalesDatasetInput>& datasets) {
+    ReaderMultiscalesPlan plan{};
+    for (const auto& dataset : datasets) {
+        plan.paths.push_back(dataset.path);
+        plan.any_coordinate_transformations =
+            plan.any_coordinate_transformations || dataset.has_coordinate_transformations;
+    }
+    return plan;
+}
+
+ReaderOmeroChannelPlan reader_omero_channel_plan(
+    const std::string& model,
+    bool has_color,
+    const std::string& color,
+    bool has_label,
+    const std::string& label,
+    bool has_active,
+    bool active_truthy,
+    bool has_window,
+    bool has_window_start,
+    bool has_window_end) {
+    ReaderOmeroChannelPlan plan{};
+    plan.has_color = has_color;
+    if (has_color) {
+        for (int offset = 0; offset < 3; ++offset) {
+            const auto component = std::stoi(color.substr(offset * 2, 2), nullptr, 16);
+            plan.rgb[offset] = static_cast<double>(component) / 255.0;
+        }
+        plan.force_greyscale_rgb = model == "greyscale";
+    }
+    plan.has_label = has_label;
+    plan.label = label;
+    if (!has_active) {
+        plan.visible_mode = ReaderVisibleMode::default_true;
+    } else if (active_truthy) {
+        plan.visible_mode = ReaderVisibleMode::node_visible_if_active;
+    } else {
+        plan.visible_mode = ReaderVisibleMode::keep_raw_active;
+    }
+    plan.has_complete_window = has_window && has_window_start && has_window_end;
+    return plan;
+}
+
+}  // namespace ome_zarr_c::native_code

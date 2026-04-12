@@ -74,6 +74,67 @@ bool is_known_format_version_string(const std::string& version) {
     return false;
 }
 
+std::optional<std::string> get_metadata_version(const MetadataSummary& metadata) {
+    if (metadata.has_multiscales_version) {
+        return metadata.multiscales_version;
+    }
+    if (metadata.has_plate_version) {
+        return metadata.plate_version;
+    }
+    if (metadata.has_well_version) {
+        return metadata.well_version;
+    }
+    if (metadata.has_image_label_version) {
+        return metadata.image_label_version;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> detect_format_version(const MetadataSummary& metadata) {
+    if (metadata.is_empty) {
+        return std::nullopt;
+    }
+
+    if (metadata.has_multiscales_version) {
+        if (!metadata.multiscales_version_is_string ||
+            !is_known_format_version_string(metadata.multiscales_version)) {
+            return std::nullopt;
+        }
+        return metadata.multiscales_version;
+    }
+    if (metadata.has_plate_version) {
+        if (!metadata.plate_version_is_string ||
+            !is_known_format_version_string(metadata.plate_version)) {
+            return std::nullopt;
+        }
+        return metadata.plate_version;
+    }
+    if (metadata.has_well_version) {
+        if (!metadata.well_version_is_string ||
+            !is_known_format_version_string(metadata.well_version)) {
+            return std::nullopt;
+        }
+        return metadata.well_version;
+    }
+    if (metadata.has_image_label_version) {
+        if (!metadata.image_label_version_is_string ||
+            !is_known_format_version_string(metadata.image_label_version)) {
+            return std::nullopt;
+        }
+        return metadata.image_label_version;
+    }
+
+    return std::nullopt;
+}
+
+bool format_matches(const std::string& version, const MetadataSummary& metadata) {
+    const auto detected = detect_format_version(metadata);
+    if (!detected.has_value()) {
+        return false;
+    }
+    return normalize_known_format_version(version) == detected.value();
+}
+
 int format_zarr_format(const std::string& version) {
     const std::string normalized = normalize_known_format_version(version);
     if (normalized == "0.5") {
@@ -326,6 +387,12 @@ WellDictV04 generate_well_v04(
         std::distance(rows.begin(), row_it),
         std::distance(columns.begin(), column_it),
     };
+}
+
+void validate_well_v01(const WellDictV01Input& well) {
+    if (!well.has_path || !well.path_is_string) {
+        throw std::invalid_argument("invalid well");
+    }
 }
 
 }  // namespace ome_zarr_c::native_code
