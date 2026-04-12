@@ -56,6 +56,18 @@ snapshot to C++ without modifying the snapshot itself.
 23. If repo-local skill coverage is missing for pybind11 runtime-parity work or
     workflow/dependency-governance work, add or update a repo-local skill with
     official references before relying on ad-hoc process notes.
+24. Treat tests as first-class repo code. If CodeQL, lint, or security findings
+    land in `tests/`, fix the underlying structure or logic instead of muting
+    the finding because the code lives under `tests/`.
+25. If multiple test modules share helpers, keep those helpers importable in
+    both narrow invocations and whole-suite collection. Prefer an explicit
+    `tests` package over fragile path-dependent imports.
+26. If a parity surface prints or serializes absolute paths, run the upstream
+    and converted implementations against the same fixture path whenever the
+    surface is read-only so path text does not create false mismatches.
+27. Keep `README.md` strictly user-facing. Agent instructions, workflow rules,
+    and AI operating contracts belong in `AGENTS.md`, `.github/instructions/`,
+    and repo-local skills only.
 
 ## Fast load order
 

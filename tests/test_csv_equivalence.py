@@ -10,6 +10,8 @@ from pathlib import Path
 
 import zarr
 
+from tests._outcomes import err, ok
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
@@ -59,9 +61,9 @@ def _run_dict_to_zarr(func, props_to_add, zarr_path: Path, zarr_id: str):
     payload = copy.deepcopy(props_to_add)
     try:
         func(payload, str(zarr_path), zarr_id)
-        return ("ok", _snapshot_tree(zarr_path))
+        return ok(tree=_snapshot_tree(zarr_path))
     except Exception as exc:  # noqa: BLE001
-        return ("err", type(exc), str(exc), _snapshot_tree(zarr_path))
+        return err(exc, tree=_snapshot_tree(zarr_path))
 
 
 def _run_csv_to_zarr(
@@ -74,9 +76,9 @@ def _run_csv_to_zarr(
 ):
     try:
         func(str(csv_path), csv_id, csv_keys, str(zarr_path), zarr_id)
-        return ("ok", _snapshot_tree(zarr_path))
+        return ok(tree=_snapshot_tree(zarr_path))
     except Exception as exc:  # noqa: BLE001
-        return ("err", type(exc), str(exc), _snapshot_tree(zarr_path))
+        return err(exc, tree=_snapshot_tree(zarr_path))
 
 
 def _assert_parse_case(value: str, col_type: str) -> None:

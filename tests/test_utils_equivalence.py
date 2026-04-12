@@ -13,6 +13,8 @@ from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from tests._outcomes import err, ok
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
@@ -24,16 +26,16 @@ def _run_strip_common_prefix(func, parts):
     payload = [list(path) for path in parts]
     try:
         result = func(payload)
-        return ("ok", result, payload)
+        return ok(value=result, payload=payload)
     except Exception as exc:  # noqa: BLE001
-        return ("err", type(exc), str(exc), payload)
+        return err(exc, payload=payload)
 
 
 def _run_splitall(func, path):
     try:
-        return ("ok", func(path))
+        return ok(value=func(path))
     except Exception as exc:  # noqa: BLE001
-        return ("err", type(exc), str(exc))
+        return err(exc)
 
 
 def _run_find_multiscales(func, path):
@@ -55,9 +57,9 @@ def _run_find_multiscales(func, path):
     try:
         with redirect_stdout(stream):
             try:
-                return ("ok", func(path), stream.getvalue(), records)
+                return ok(value=func(path), stdout=stream.getvalue(), records=records)
             except Exception as exc:  # noqa: BLE001
-                return ("err", type(exc), str(exc), stream.getvalue(), records)
+                return err(exc, stdout=stream.getvalue(), records=records)
     finally:
         logger.removeHandler(handler)
         logger.setLevel(previous_level)
@@ -192,22 +194,19 @@ def _run_finder(
         with redirect_stdout(stream):
             try:
                 func(path, port=port, dry_run=dry_run)
-                return (
-                    "ok",
-                    stream.getvalue(),
-                    _snapshot_tree(Path(path)),
-                    browser_calls,
-                    test_calls,
+                return ok(
+                    stdout=stream.getvalue(),
+                    tree=_snapshot_tree(Path(path)),
+                    browser_calls=browser_calls,
+                    test_calls=test_calls,
                 )
             except Exception as exc:  # noqa: BLE001
-                return (
-                    "err",
-                    type(exc),
-                    str(exc),
-                    stream.getvalue(),
-                    _snapshot_tree(Path(path)),
-                    browser_calls,
-                    test_calls,
+                return err(
+                    exc,
+                    stdout=stream.getvalue(),
+                    tree=_snapshot_tree(Path(path)),
+                    browser_calls=browser_calls,
+                    test_calls=test_calls,
                 )
 
 
@@ -293,15 +292,17 @@ def _run_view(
         with redirect_stdout(stream):
             try:
                 func(path, port=port, dry_run=dry_run, force=force)
-                return ("ok", stream.getvalue(), browser_calls, test_calls)
+                return ok(
+                    stdout=stream.getvalue(),
+                    browser_calls=browser_calls,
+                    test_calls=test_calls,
+                )
             except Exception as exc:  # noqa: BLE001
-                return (
-                    "err",
-                    type(exc),
-                    str(exc),
-                    stream.getvalue(),
-                    browser_calls,
-                    test_calls,
+                return err(
+                    exc,
+                    stdout=stream.getvalue(),
+                    browser_calls=browser_calls,
+                    test_calls=test_calls,
                 )
 
 
