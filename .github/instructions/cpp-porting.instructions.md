@@ -3,6 +3,8 @@
 - Do not modify the frozen upstream snapshot under `source_code_v.0.15.0/`.
 - Port one small upstream surface at a time.
 - Keep Python wrappers as thin compatibility layers.
+- Keep real semantics in `cpp/native/` and limit Python binding glue to
+  `cpp/bindings/` when there is no pragmatic alternative.
 - Verify the frozen snapshot manifest before claiming upstream immutability.
 - Preserve upstream exceptions and edge-case behavior unless an intentional
   divergence is explicitly documented.
@@ -21,6 +23,9 @@
 - Do not introduce embedded-Python execution patterns such as `py::exec`,
   `py::eval`, or raw Python source blocks into `cpp/`. If such debt already
   exists, do not count the affected surface as fully native-converted coverage.
+- Do not add new Python-integrated semantics to mixed C++ files outside
+  `cpp/bindings/`. Existing mixed files are debt and should be split, not
+  expanded.
 - If `py::exec` defines Python classes whose methods reference runtime names,
   use a shared scope for globals and locals so those names remain available
   when the methods execute later.

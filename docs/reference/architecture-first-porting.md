@@ -7,15 +7,20 @@ if it preserves the repo's structure and leaves a clear proof path behind it.
 
 1. Frozen reference:
    `source_code_v.0.15.0/` is the immutable upstream truth source.
-2. Native semantic core:
-   `cpp/core.cpp` should hold the actual converted behavior whenever the logic
+2. Pure-native semantic core:
+   `cpp/native/` should hold the actual converted behavior whenever the logic
    is deterministic and self-contained.
-3. Thin compatibility wrapper:
-   `ome_zarr_c/` should mostly adapt imports, Python object plumbing, and
-   unavoidable runtime integration points.
-4. Differential proof:
+3. Minimal binding layer:
+   `cpp/bindings/` should expose Python-facing entry points and nothing more.
+4. Thin compatibility wrapper:
+   `ome_zarr_c/` should mostly adapt imports and unavoidable runtime
+   integration points.
+5. Differential proof:
    `tests/` must compare the frozen upstream behavior against the converted
    behavior on the same runtime.
+
+Existing mixed files under `cpp/` that combine semantics and Python glue are
+not grandfathered in. They are migration debt and should be split.
 
 ## Conversion order
 
@@ -58,14 +63,18 @@ Port in this order unless there is a compelling reason not to:
 
 ## Architectural do's
 
-- Keep behavior in C++ and compatibility in Python.
+- Keep behavior in pure C++ and compatibility at the boundary only.
 - Separate pure logic from store mutation when designing the port.
 - Treat runtime blockers as a stop sign for parity claims.
 - Update the docs whenever the proof boundary changes.
+- Move mixed legacy code toward `cpp/native/` plus `cpp/bindings/`, not toward
+  a larger monolithic `core.cpp`.
 
 ## Architectural don'ts
 
 - Do not use a wrapper-heavy design to hide unported logic.
+- Do not add new Python-integrated semantics to mixed C++ files just because
+  they are already impure.
 - Do not count blocked store-backed surfaces as done because a partial wrapper
   exists.
 - Do not let mocked tests stand in for live persistent-store parity.

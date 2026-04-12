@@ -11,6 +11,11 @@
 #include <string>
 #include <vector>
 
+#include "native/conversions.hpp"
+#include "native/csv.hpp"
+#include "native/dask_utils.hpp"
+#include "native/format.hpp"
+
 namespace py = pybind11;
 
 namespace {
@@ -24,7 +29,6 @@ const std::map<std::string, std::string> kKnownAxes = {
 };
 
 const std::vector<std::string> kColumnTypes = {"d", "l", "s", "b"};
-const std::array<const char*, 5> kFormatVersions = {"0.5", "0.4", "0.3", "0.2", "0.1"};
 
 std::string repr_object(const py::handle& obj) {
     return py::cast<std::string>(py::repr(obj));
@@ -59,19 +63,6 @@ std::vector<std::string> axis_names(const py::sequence& axes) {
 [[noreturn]] void raise_overflow_error(const std::string& message) {
     PyErr_SetString(PyExc_OverflowError, message.c_str());
     throw py::error_already_set();
-}
-
-std::string metadata_version_from_key(const py::dict& metadata, const char* key) {
-    py::object obj = metadata.attr("get")(py::str(key));
-    if (obj.is_none()) {
-        return "";
-    }
-    py::dict value = py::cast<py::dict>(obj);
-    py::object version = value.attr("get")(py::str("version"), py::none());
-    if (version.is_none()) {
-        return "";
-    }
-    return py::cast<std::string>(version);
 }
 
 bool is_number_like(const py::handle& value) {
@@ -201,32 +192,9 @@ py::tuple output_slices_for_shape(const py::handle& shape) {
     return slices;
 }
 
-std::string normalize_known_format_version(const py::handle& version) {
-    py::object candidate = py::reinterpret_borrow<py::object>(version);
-    if (PyFloat_Check(version.ptr())) {
-        candidate = py::str(version);
-    }
-
-    for (const char* known_version : kFormatVersions) {
-        if (objects_equal(py::str(known_version), candidate)) {
-            return known_version;
-        }
-    }
-
-    throw py::value_error(
-        "Version " + py::cast<std::string>(py::str(candidate)) + " not recognized");
-}
-
-bool is_known_format_version(const py::handle& version) {
-    for (const char* known_version : kFormatVersions) {
-        if (objects_equal(py::str(known_version), version)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 }  // namespace
+
+void register_format_bindings(py::module_& m);
 
 py::list axes_to_dicts(const py::sequence& axes) {
     py::list result;
@@ -397,18 +365,8 @@ void validate_axes_types(const py::sequence& axes) {
     }
 }
 
-std::array<std::uint8_t, 4> int_to_rgba_255_bytes(std::int32_t value) {
-    const std::uint32_t raw = static_cast<std::uint32_t>(value);
-    return {
-        static_cast<std::uint8_t>((raw >> 24U) & 0xFFU),
-        static_cast<std::uint8_t>((raw >> 16U) & 0xFFU),
-        static_cast<std::uint8_t>((raw >> 8U) & 0xFFU),
-        static_cast<std::uint8_t>(raw & 0xFFU),
-    };
-}
-
 py::list int_to_rgba_255(std::int32_t value) {
-    const auto bytes = int_to_rgba_255_bytes(value);
+    const auto bytes = ome_zarr_c::native_code::int_to_rgba_255_bytes(value);
     py::list result;
     for (const auto byte : bytes) {
         result.append(py::int_(byte));
@@ -417,10 +375,10 @@ py::list int_to_rgba_255(std::int32_t value) {
 }
 
 py::list int_to_rgba(std::int32_t value) {
-    const auto bytes = int_to_rgba_255_bytes(value);
+    const auto rgba = ome_zarr_c::native_code::int_to_rgba(value);
     py::list result;
-    for (const auto byte : bytes) {
-        result.append(py::float_(static_cast<double>(byte) / 255.0));
+    for (const auto channel : rgba) {
+        result.append(py::float_(channel));
     }
     return result;
 }
@@ -429,39 +387,25 @@ std::int32_t rgba_to_int(std::uint8_t r,
                          std::uint8_t g,
                          std::uint8_t b,
                          std::uint8_t a) {
-    const std::uint32_t raw =
-        (static_cast<std::uint32_t>(r) << 24U) |
-        (static_cast<std::uint32_t>(g) << 16U) |
-        (static_cast<std::uint32_t>(b) << 8U) |
-        static_cast<std::uint32_t>(a);
-    return static_cast<std::int32_t>(raw);
+    return ome_zarr_c::native_code::rgba_to_int(r, g, b, a);
 }
 
 py::object parse_csv_value(const std::string& value, const std::string& col_type) {
     try {
-        if (col_type == "d") {
-            return py::float_(std::stod(value));
+        const auto parsed = ome_zarr_c::native_code::parse_csv_value(value, col_type);
+        if (const auto* text = std::get_if<std::string>(&parsed)) {
+            return py::str(*text);
         }
-        if (col_type == "l") {
-            const double parsed = std::stod(value);
-            if (std::isnan(parsed)) {
-                return py::str(value);
-            }
-            if (std::isinf(parsed)) {
-                raise_overflow_error("cannot convert float infinity to integer");
-            }
-            return py::int_(static_cast<long long>(std::nearbyint(parsed)));
+        if (const auto* number = std::get_if<double>(&parsed)) {
+            return py::float_(*number);
         }
-        if (col_type == "b") {
-            return py::bool_(!value.empty());
+        if (const auto* integer = std::get_if<std::int64_t>(&parsed)) {
+            return py::int_(*integer);
         }
-    } catch (const std::invalid_argument&) {
-        return py::str(value);
-    } catch (const std::out_of_range&) {
-        return py::str(value);
+        return py::bool_(std::get<bool>(parsed));
+    } catch (const std::overflow_error& exc) {
+        raise_overflow_error(exc.what());
     }
-
-    return py::str(value);
 }
 
 void dict_to_zarr(py::dict props_to_add,
@@ -1397,24 +1341,26 @@ py::object resolve_storage_options(py::object storage_options, py::object path) 
 
 py::tuple better_chunksize(py::object image, py::object factors) {
     py::object numpy = py::module_::import("numpy");
-    py::object int_type = py::module_::import("builtins").attr("int");
+    py::object numpy_int64 = numpy.attr("int64");
+    std::vector<std::int64_t> native_chunksize;
+    std::vector<double> native_factors;
 
-    py::object chunksize_array = numpy.attr("array")(image.attr("chunksize"));
-    py::object better_chunks = py::tuple(
-        numpy
-            .attr("maximum")(
-                1,
-                numpy.attr("divide")(
-                    numpy.attr("round")(numpy.attr("multiply")(chunksize_array, factors)),
-                    factors))
-            .attr("astype")(int_type));
+    for (const py::handle& chunk : image.attr("chunksize")) {
+        native_chunksize.push_back(py::cast<std::int64_t>(chunk));
+    }
+    for (const py::handle& factor : factors) {
+        native_factors.push_back(py::cast<double>(factor));
+    }
 
-    py::object block_output = py::tuple(
-        numpy
-            .attr("ceil")(
-                numpy.attr("multiply")(numpy.attr("array")(better_chunks), factors))
-            .attr("astype")(int_type));
+    const auto [better_chunks_native, block_output_native] =
+        ome_zarr_c::native_code::better_chunksize(native_chunksize, native_factors);
 
+    py::tuple better_chunks(better_chunks_native.size());
+    py::tuple block_output(block_output_native.size());
+    for (py::size_t index = 0; index < better_chunks_native.size(); ++index) {
+        better_chunks[index] = numpy_int64(better_chunks_native[index]);
+        block_output[index] = numpy_int64(block_output_native[index]);
+    }
     return py::make_tuple(better_chunks, block_output);
 }
 
@@ -2093,309 +2039,6 @@ py::tuple data_astronaut() {
     return py::make_tuple(pyramid, labels);
 }
 
-py::list format_versions() {
-    py::list versions;
-    for (const char* version : kFormatVersions) {
-        versions.append(py::str(version));
-    }
-    return versions;
-}
-
-py::str resolve_format_version(const py::handle& version) {
-    return py::str(normalize_known_format_version(version));
-}
-
-py::object get_metadata_version(py::dict metadata) {
-    py::list multiscales = py::cast<py::list>(metadata.attr("get")("multiscales", py::list()));
-    if (py::len(multiscales) > 0) {
-        py::dict dataset = py::cast<py::dict>(multiscales[0]);
-        py::object version = dataset.attr("get")("version", py::none());
-        if (!version.is_none()) {
-            return version;
-        }
-    }
-
-    for (const char* key : {"plate", "well", "image-label"}) {
-        const std::string version = metadata_version_from_key(metadata, key);
-        if (!version.empty()) {
-            return py::str(version);
-        }
-    }
-
-    return py::none();
-}
-
-py::object detect_format_version(py::dict metadata) {
-    if (py::len(metadata) == 0) {
-        return py::none();
-    }
-
-    py::object version = get_metadata_version(metadata);
-    if (version.is_none() || !is_known_format_version(version)) {
-        return py::none();
-    }
-
-    return version;
-}
-
-bool format_matches(const std::string& version, py::dict metadata) {
-    py::object metadata_version = get_metadata_version(metadata);
-    if (metadata_version.is_none()) {
-        return false;
-    }
-    return objects_equal(py::str(normalize_known_format_version(py::str(version))), metadata_version);
-}
-
-int format_zarr_format(const std::string& version) {
-    const std::string normalized = normalize_known_format_version(py::str(version));
-    if (normalized == "0.5") {
-        return 3;
-    }
-    return 2;
-}
-
-py::dict format_chunk_key_encoding(const std::string& version) {
-    const std::string normalized = normalize_known_format_version(py::str(version));
-    py::dict encoding;
-    if (normalized == "0.1") {
-        encoding["name"] = py::str("v2");
-        encoding["separator"] = py::str(".");
-        return encoding;
-    }
-    if (normalized == "0.5") {
-        encoding["name"] = py::str("default");
-        encoding["separator"] = py::str("/");
-        return encoding;
-    }
-    encoding["name"] = py::str("v2");
-    encoding["separator"] = py::str("/");
-    return encoding;
-}
-
-void validate_well_dict_v01(py::dict well) {
-    if (!well.contains("path")) {
-        py::tuple args(4);
-        args[0] = py::str("%s must contain a %s key of type %s");
-        args[1] = well;
-        args[2] = py::str("path");
-        args[3] = py::type::of(py::str(""));
-        raise_value_error_args(args);
-    }
-    if (!PyUnicode_Check(well["path"].ptr())) {
-        py::tuple args(3);
-        args[0] = py::str("%s path must be of %s type");
-        args[1] = well;
-        args[2] = py::type::of(py::str(""));
-        raise_value_error_args(args);
-    }
-}
-
-void validate_well_dict_v04(py::dict well,
-                            const py::sequence& rows,
-                            const py::sequence& columns) {
-    validate_well_dict_v01(well);
-
-    if (!well.contains("rowIndex")) {
-        py::tuple args(4);
-        args[0] = py::str("%s must contain a %s key of type %s");
-        args[1] = well;
-        args[2] = py::str("rowIndex");
-        args[3] = py::type::of(py::int_(0));
-        raise_value_error_args(args);
-    }
-    if (!well.contains("columnIndex")) {
-        py::tuple args(4);
-        args[0] = py::str("%s must contain a %s key of type %s");
-        args[1] = well;
-        args[2] = py::str("columnIndex");
-        args[3] = py::type::of(py::int_(0));
-        raise_value_error_args(args);
-    }
-    if (!PyLong_Check(well["rowIndex"].ptr())) {
-        py::tuple args(3);
-        args[0] = py::str("%s path must be of %s type");
-        args[1] = well;
-        args[2] = py::type::of(py::int_(0));
-        raise_value_error_args(args);
-    }
-    if (!PyLong_Check(well["columnIndex"].ptr())) {
-        py::tuple args(3);
-        args[0] = py::str("%s path must be of %s type");
-        args[1] = well;
-        args[2] = py::type::of(py::int_(0));
-        raise_value_error_args(args);
-    }
-
-    const std::string path = py::cast<std::string>(well["path"]);
-    py::list path_parts = py::module_::import("builtins").attr("str")(path).attr("split")("/");
-    if (py::len(path_parts) != 2) {
-        py::tuple args(2);
-        args[0] = py::str("%s path must exactly be composed of 2 groups");
-        args[1] = well;
-        raise_value_error_args(args);
-    }
-
-    const std::string row = py::cast<std::string>(path_parts[0]);
-    const std::string column = py::cast<std::string>(path_parts[1]);
-    py::list rows_list = py::list(rows);
-    py::list columns_list = py::list(columns);
-
-    if (!rows_list.contains(py::str(row))) {
-        py::tuple args(2);
-        args[0] = py::str("%s is not defined in the plate rows");
-        args[1] = py::str(row);
-        raise_value_error_args(args);
-    }
-    if (py::cast<int>(well["rowIndex"]) != py::cast<int>(rows_list.attr("index")(py::str(row)))) {
-        py::tuple args(2);
-        args[0] = py::str("Mismatching row index for %s");
-        args[1] = well;
-        raise_value_error_args(args);
-    }
-    if (!columns_list.contains(py::str(column))) {
-        py::tuple args(2);
-        args[0] = py::str("%s is not defined in the plate columns");
-        args[1] = py::str(column);
-        raise_value_error_args(args);
-    }
-    if (py::cast<int>(well["columnIndex"]) !=
-        py::cast<int>(columns_list.attr("index")(py::str(column)))) {
-        py::tuple args(2);
-        args[0] = py::str("Mismatching column index for %s");
-        args[1] = well;
-        raise_value_error_args(args);
-    }
-}
-
-py::list generate_coordinate_transformations(py::sequence shapes) {
-    py::list shapes_list = py::list(shapes);
-    py::sequence data_shape = py::cast<py::sequence>(shapes_list[0]);
-    py::list coordinate_transformations;
-
-    for (const py::handle& shape_handle : shapes_list) {
-        py::sequence shape = py::cast<py::sequence>(shape_handle);
-        if (py::len(shape) != py::len(data_shape)) {
-            throw py::value_error("Shape lengths must match");
-        }
-        const py::ssize_t shape_length = static_cast<py::ssize_t>(py::len(shape));
-        py::list scale;
-        for (py::ssize_t index = 0; index < shape_length; ++index) {
-            const double full = py::cast<double>(data_shape[index]);
-            const double level = py::cast<double>(shape[index]);
-            scale.append(py::float_(full / level));
-        }
-        py::dict transform;
-        transform["type"] = py::str("scale");
-        transform["scale"] = scale;
-        py::list level_transforms;
-        level_transforms.append(transform);
-        coordinate_transformations.append(level_transforms);
-    }
-
-    return coordinate_transformations;
-}
-
-void validate_coordinate_transformations(
-    int ndim,
-    int nlevels,
-    py::object coordinate_transformations_obj = py::none()) {
-    if (coordinate_transformations_obj.is_none()) {
-        throw py::value_error("coordinate_transformations must be provided");
-    }
-
-    py::list coordinate_transformations = py::cast<py::list>(coordinate_transformations_obj);
-    const int ct_count = static_cast<int>(py::len(coordinate_transformations));
-    if (ct_count != nlevels) {
-        throw py::value_error(
-            "coordinate_transformations count: " + std::to_string(ct_count) +
-            " must match datasets " + std::to_string(nlevels));
-    }
-
-    for (const py::handle& transformations_handle : coordinate_transformations) {
-        py::list transformations = py::cast<py::list>(transformations_handle);
-        py::list types;
-        for (const py::handle& transformation_handle : transformations) {
-            py::dict transformation = py::cast<py::dict>(transformation_handle);
-            types.append(transformation.attr("get")("type", py::none()));
-        }
-
-        for (const py::handle& type_handle : types) {
-            if (type_handle.is_none()) {
-                throw py::value_error(
-                    "Missing type in: " + repr_object(transformations));
-            }
-        }
-
-        int scale_count = 0;
-        for (const py::handle& type_handle : types) {
-            if (py::cast<std::string>(type_handle) == "scale") {
-                scale_count += 1;
-            }
-        }
-        if (scale_count != 1) {
-            throw py::value_error(
-                "Must supply 1 'scale' item in coordinate_transformations");
-        }
-        if (py::cast<std::string>(types[0]) != "scale") {
-            throw py::value_error("First coordinate_transformations must be 'scale'");
-        }
-
-        py::dict first = py::cast<py::dict>(transformations[0]);
-        if (!first.contains("scale")) {
-            throw py::value_error(
-                "Missing scale argument in: " + repr_object(first));
-        }
-        py::object scale = first["scale"];
-        py::sequence scale_values = py::cast<py::sequence>(scale);
-        if (py::len(scale_values) != static_cast<py::size_t>(ndim)) {
-            throw py::value_error(
-                "'scale' list " + repr_object(scale) +
-                " must match number of image dimensions: " + std::to_string(ndim));
-        }
-        for (const py::handle& value : scale_values) {
-            if (!is_number_like(value)) {
-                throw py::value_error(
-                    "'scale' values must all be numbers: " + repr_object(scale));
-            }
-        }
-
-        int translation_count = 0;
-        int translation_index = -1;
-        const py::ssize_t types_length = static_cast<py::ssize_t>(py::len(types));
-        for (py::ssize_t index = 0; index < types_length; ++index) {
-            if (py::cast<std::string>(types[index]) == "translation") {
-                translation_count += 1;
-                translation_index = static_cast<int>(index);
-            }
-        }
-        if (translation_count > 1) {
-            throw py::value_error(
-                "Must supply 0 or 1 'translation' item incoordinate_transformations");
-        }
-        if (translation_count == 1) {
-            py::dict transformation = py::cast<py::dict>(transformations[translation_index]);
-            if (!transformation.contains("translation")) {
-                throw py::value_error(
-                    "Missing scale argument in: " + repr_object(first));
-            }
-            py::object translation = transformation["translation"];
-            py::sequence translation_values = py::cast<py::sequence>(translation);
-            if (py::len(translation_values) != static_cast<py::size_t>(ndim)) {
-                throw py::value_error(
-                    "'translation' list " + repr_object(translation) +
-                    " must match image dimensions count: " + std::to_string(ndim));
-            }
-            for (const py::handle& value : translation_values) {
-                if (!is_number_like(value)) {
-                    throw py::value_error(
-                        "'translation' values must all be numbers: " +
-                        repr_object(translation));
-                }
-            }
-        }
-    }
-}
-
 PYBIND11_MODULE(_core, m) {
     m.def("axes_to_dicts", &axes_to_dicts);
     m.def("get_names", &get_names);
@@ -2443,15 +2086,5 @@ PYBIND11_MODULE(_core, m) {
     m.def("data_rgb_to_5d", &data_rgb_to_5d, py::arg("pixels"));
     m.def("data_coins", &data_coins);
     m.def("data_astronaut", &data_astronaut);
-    m.def("format_versions", &format_versions);
-    m.def("resolve_format_version", &resolve_format_version, py::arg("version"));
-    m.def("get_metadata_version", &get_metadata_version);
-    m.def("detect_format_version", &detect_format_version);
-    m.def("format_matches", &format_matches, py::arg("version"), py::arg("metadata"));
-    m.def("format_zarr_format", &format_zarr_format, py::arg("version"));
-    m.def("format_chunk_key_encoding", &format_chunk_key_encoding, py::arg("version"));
-    m.def("validate_well_dict_v01", &validate_well_dict_v01);
-    m.def("validate_well_dict_v04", &validate_well_dict_v04);
-    m.def("generate_coordinate_transformations", &generate_coordinate_transformations);
-    m.def("validate_coordinate_transformations", &validate_coordinate_transformations);
+    register_format_bindings(m);
 }

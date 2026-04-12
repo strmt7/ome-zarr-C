@@ -5,8 +5,10 @@
 
 The project preserves the exact upstream `v0.15.0` release snapshot under
 `source_code_v.0.15.0/` and implements converted functionality outside that
-snapshot in native-backed modules. The working rule for converted code is
-behavioral parity first, performance claims second.
+snapshot in native-backed modules. Under the stricter current architecture,
+`cpp/native/` holds semantics, `cpp/bindings/` holds boundary glue, and mixed
+files outside those roots remain remediation debt. The working rule for
+converted code is behavioral parity first, performance claims second.
 
 ## Goals
 
@@ -36,6 +38,10 @@ directory.
 
 ## Verified Native-Backed Surfaces
 
+These are parity-proven native-backed surfaces. This is not the same as
+pure-native coverage under the stricter `cpp/native/` plus `cpp/bindings/`
+policy.
+
 The following upstream behaviors are native-backed and currently proven by
 differential tests on this runtime:
 
@@ -54,7 +60,7 @@ differential tests on this runtime:
   - per-format matching
   - per-format Zarr/chunk-key properties
   - metadata version lookup
-  - well-dict generation and validation
+  - well-dict validation
   - coordinate-transformation generation and validation
 - `ome_zarr_c.csv`
   - `parse_csv_value`
@@ -62,8 +68,6 @@ differential tests on this runtime:
   - `strip_common_prefix`
   - `splitall`
   - `find_multiscales`
-  - `finder`
-  - `view`
 - `ome_zarr_c.writer`
   - `_blosc_compressor`
   - `_get_valid_axes`

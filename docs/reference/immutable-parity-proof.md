@@ -27,17 +27,21 @@ Use the smallest proof that matches the surface:
 
 ## Native C++ integrity
 
-Converted behavior only counts as native when the semantics live in `cpp/`.
-Thin Python wrappers are allowed for object plumbing, imports, and unavoidable
-runtime integration, but wrapper-heavy behavior remains uncounted.
+Converted behavior only counts as pure-native when the semantics live in
+`cpp/native/`.
+Minimal binding glue may exist in `cpp/bindings/` when there is no pragmatic
+alternative, but mixed binding-plus-semantic files do not count as pure-native
+conversion.
 
 To keep that boundary enforceable:
 
 - `scripts/check_native_cpp.py --all` inventories embedded-Python execution and
   related pseudo-C++ patterns in `cpp/`.
-- CI should block new occurrences in diffs under `cpp/`.
-- Existing occurrences are native-debt until removed and should not be counted
-  toward native-converted coverage.
+- `scripts/check_pure_native_cpp.py` enforces that `cpp/native/` stays free of
+  Python integration tokens and reports or fails on mixed debt elsewhere.
+- CI should block both new pseudo-C++ patterns and layout violations.
+- Existing mixed files are native debt until split and should not be counted
+  toward pure-native coverage.
 
 ## Recommended workflow
 
