@@ -93,8 +93,7 @@ def main() -> int:
         if qualname not in spans:
             upstream_file_name = entry["upstream_file"]
             raise SystemExit(
-                f"missing qualname {qualname!r} in upstream file "
-                f"{upstream_file_name}"
+                f"missing qualname {qualname!r} in upstream file {upstream_file_name}"
             )
 
         line_count = spans[qualname].line_count
