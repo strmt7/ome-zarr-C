@@ -1,5 +1,7 @@
 #include "reader.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <sstream>
 #include <stdexcept>
 
@@ -30,6 +32,19 @@ std::vector<std::string> reader_matching_specs(const ReaderSpecFlags& flags) {
 
 std::string reader_node_repr(const std::string& zarr_repr, bool visible) {
     return visible ? zarr_repr : zarr_repr + " (hidden)";
+}
+
+ReaderNodeAddPlan reader_node_add_plan(
+    bool already_seen,
+    bool plate_labels,
+    bool has_explicit_visibility,
+    bool explicit_visibility,
+    bool current_visibility) {
+    ReaderNodeAddPlan plan{};
+    plan.should_add = !(already_seen && !plate_labels);
+    plan.visibility =
+        has_explicit_visibility ? explicit_visibility : current_visibility;
+    return plan;
 }
 
 ReaderMultiscalesPlan reader_multiscales_plan(
@@ -74,6 +89,42 @@ ReaderOmeroChannelPlan reader_omero_channel_plan(
     }
     plan.has_complete_window = has_window && has_window_start && has_window_end;
     return plan;
+}
+
+ReaderWellPlan reader_well_plan(const std::vector<std::string>& image_paths) {
+    ReaderWellPlan plan{};
+    plan.image_paths = image_paths;
+    const auto field_count = static_cast<double>(image_paths.size());
+    plan.column_count = static_cast<std::size_t>(std::ceil(std::sqrt(field_count)));
+    if (plan.column_count == 0) {
+        plan.row_count = 0;
+    } else {
+        plan.row_count = static_cast<std::size_t>(
+            std::ceil(field_count / static_cast<double>(plan.column_count)));
+    }
+    return plan;
+}
+
+ReaderPlatePlan reader_plate_plan(
+    const std::vector<std::string>& row_names,
+    const std::vector<std::string>& col_names,
+    const std::vector<std::string>& well_paths) {
+    ReaderPlatePlan plan{};
+    plan.row_names = row_names;
+    plan.col_names = col_names;
+    plan.well_paths = well_paths;
+    std::sort(plan.well_paths.begin(), plan.well_paths.end());
+    plan.row_count = row_names.size();
+    plan.column_count = col_names.size();
+    return plan;
+}
+
+std::string reader_plate_tile_path(
+    const std::string& row_name,
+    const std::string& col_name,
+    const std::string& first_field_path,
+    const std::string& dataset_path) {
+    return row_name + "/" + col_name + "/" + first_field_path + "/" + dataset_path;
 }
 
 }  // namespace ome_zarr_c::native_code

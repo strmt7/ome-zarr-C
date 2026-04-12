@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -90,13 +89,7 @@ class Scaler:
 
     @staticmethod
     def methods():
-        funcs = inspect.getmembers(Scaler, predicate=inspect.isfunction)
-        for name, _func in funcs:
-            if name in ("methods", "scale"):
-                continue
-            if name.startswith("_"):
-                continue
-            yield name
+        yield from _core.scaler_methods()
 
     def scale(self, input_array: str, output_directory: str) -> None:
         func = self.func
@@ -115,10 +108,9 @@ class Scaler:
 
     @property
     def func(self):
-        func = getattr(self, self.method, None)
-        if not func:
+        if self.method not in set(_core.scaler_methods()):
             raise Exception
-        return func
+        return getattr(self, self.method)
 
     def __assert_values(self, pyramid: list[np.ndarray]) -> None:
         expected = set(np.unique(pyramid[0]))

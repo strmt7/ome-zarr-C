@@ -54,6 +54,26 @@ std::vector<std::string> extract_dims_from_axes(
     return get_names(axes);
 }
 
+std::vector<std::size_t> retuple_prefix(
+    std::size_t shape_len,
+    std::size_t chunks_len) {
+    const long long dims_to_add = static_cast<long long>(shape_len) -
+                                  static_cast<long long>(chunks_len);
+    long long prefix_len = dims_to_add;
+    if (prefix_len < 0) {
+        prefix_len = static_cast<long long>(shape_len) + prefix_len;
+    }
+    if (prefix_len < 0) {
+        prefix_len = 0;
+    }
+    std::vector<std::size_t> prefix;
+    prefix.reserve(static_cast<std::size_t>(prefix_len));
+    for (std::size_t index = 0; index < static_cast<std::size_t>(prefix_len); ++index) {
+        prefix.push_back(index);
+    }
+    return prefix;
+}
+
 WellImageResult validate_well_image(const WellImageInput& image) {
     if (image.is_string) {
         WellImageResult result{};

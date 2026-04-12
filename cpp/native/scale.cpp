@@ -12,7 +12,25 @@ bool is_spatial_dim(const std::string& dim) {
     return dim == "z" || dim == "y" || dim == "x";
 }
 
+const std::vector<std::string> kScalerMethods = {
+    "gaussian",
+    "laplacian",
+    "local_mean",
+    "nearest",
+    "resize_image",
+    "zoom",
+};
+
 }  // namespace
+
+std::vector<std::string> scaler_methods() {
+    return kScalerMethods;
+}
+
+bool scaler_has_method(const std::string& method) {
+    return std::find(kScalerMethods.begin(), kScalerMethods.end(), method) !=
+           kScalerMethods.end();
+}
 
 std::vector<std::int64_t> scaler_resize_image_shape(
     const std::vector<std::int64_t>& shape,

@@ -27,6 +27,10 @@ void validate_axes_length(std::size_t axes_len, std::int64_t ndim);
 std::vector<std::string> extract_dims_from_axes(
     const std::vector<AxisRecord>& axes);
 
+std::vector<std::size_t> retuple_prefix(
+    std::size_t shape_len,
+    std::size_t chunks_len);
+
 struct WellImageInput {
     bool is_string;
     bool is_dict;
