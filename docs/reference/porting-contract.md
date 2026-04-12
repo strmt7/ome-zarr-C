@@ -9,6 +9,8 @@ incrementally while keeping the imported upstream snapshot intact.
 - All new implementation work happens in `cpp/`, `ome_zarr_c/`, `tests/`,
   `docs/`, and related repo-local support files.
 - Do not silently "improve" upstream behavior during a parity port.
+- Do not normalize output, exceptions, control flow, or side effects just
+  because a C++ implementation could be cleaner. Default to identical behavior.
 - If upstream has a quirk or bug and parity is the goal, preserve it until a
   separately documented change deliberately fixes it.
 
@@ -47,6 +49,10 @@ incrementally while keeping the imported upstream snapshot intact.
   For functions that launch browsers, start servers, or cross similar external
   boundaries, patch the side-effecting call sites and compare the resulting
   outbound call payloads between upstream and the port.
+- `py::exec`-generated classes:
+  If a port defines Python classes through `py::exec` and their methods depend
+  on runtime names, execute them in a shared scope so those names remain
+  visible when the methods run.
 - Performance:
   Use the same inputs, same machine class, same environment, and repeated runs.
   Report medians and version details.

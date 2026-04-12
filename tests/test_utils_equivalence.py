@@ -100,6 +100,12 @@ def _build_nested_finder_tree(root: Path) -> None:
     os.utime(field, (1_700_000_123, 1_700_000_123))
 
 
+def _build_simple_view_tree(root: Path) -> None:
+    image = root / "image.zarr"
+    image.mkdir(parents=True)
+    (image / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
+
+
 def _run_finder(
     func,
     path,
@@ -112,18 +118,59 @@ def _run_finder(
     stream = io.StringIO()
     browser_calls = []
     test_calls = []
+    parent_path, server_dir = os.path.split(path)
+    if len(server_dir) == 0:
+        parent_path, server_dir = os.path.split(parent_path)
+    expected_directory = str(parent_path)
 
     def fake_open(url):
         browser_calls.append(url)
         return None
 
     def fake_test(handler_cls, server_cls, port=8000):
+        translate_info = None
+        headers = []
+        end_headers_calls = []
+
+        def fake_translate(self, path):
+            return f"{self.directory}|{path}"
+
+        def fake_end_headers(self):
+            end_headers_calls.append("base")
+            return None
+
+        with (
+            patch(
+                "RangeHTTPServer.RangeRequestHandler.translate_path", new=fake_translate
+            ),
+            patch(
+                "http.server.SimpleHTTPRequestHandler.end_headers", new=fake_end_headers
+            ),
+        ):
+            translate_instance = handler_cls.__new__(handler_cls)
+            translate_result = handler_cls.translate_path(translate_instance, "/demo")
+            translate_info = (
+                getattr(translate_instance, "directory", None) == expected_directory,
+                translate_result == f"{expected_directory}|/demo",
+            )
+
+            header_instance = handler_cls.__new__(handler_cls)
+
+            def send_header(name, value):
+                headers.append((name, value))
+
+            header_instance.send_header = send_header
+            handler_cls.end_headers(header_instance)
+
         test_calls.append(
             (
                 handler_cls.__name__,
                 handler_cls.__mro__[1].__name__,
                 server_cls.__name__,
                 port,
+                translate_info,
+                headers,
+                end_headers_calls,
             )
         )
         return None
@@ -164,6 +211,100 @@ def _run_finder(
                 )
 
 
+def _run_view(
+    func,
+    path,
+    *,
+    port: int = 8000,
+    dry_run: bool = False,
+    force: bool = False,
+    patch_runtime: bool = False,
+):
+    stream = io.StringIO()
+    browser_calls = []
+    test_calls = []
+    parent_dir, image_name = os.path.split(path)
+    if len(image_name) == 0:
+        parent_dir, image_name = os.path.split(parent_dir)
+    expected_directory = str(parent_dir)
+
+    def fake_open(url):
+        browser_calls.append(url)
+        return None
+
+    def fake_test(handler_cls, server_cls, port=8000):
+        translate_info = None
+        headers = []
+        end_headers_calls = []
+
+        def fake_translate(self, path):
+            return f"{self.directory}|{path}"
+
+        def fake_end_headers(self):
+            end_headers_calls.append("base")
+            return None
+
+        with (
+            patch(
+                "RangeHTTPServer.RangeRequestHandler.translate_path", new=fake_translate
+            ),
+            patch(
+                "http.server.SimpleHTTPRequestHandler.end_headers", new=fake_end_headers
+            ),
+        ):
+            translate_instance = handler_cls.__new__(handler_cls)
+            translate_result = handler_cls.translate_path(translate_instance, "/demo")
+            translate_info = (
+                getattr(translate_instance, "directory", None) == expected_directory,
+                translate_result == f"{expected_directory}|/demo",
+            )
+
+            header_instance = handler_cls.__new__(handler_cls)
+
+            def send_header(name, value):
+                headers.append((name, value))
+
+            header_instance.send_header = send_header
+            handler_cls.end_headers(header_instance)
+
+        test_calls.append(
+            (
+                handler_cls.__name__,
+                handler_cls.__mro__[1].__name__,
+                server_cls.__name__,
+                port,
+                translate_info,
+                headers,
+                end_headers_calls,
+            )
+        )
+        return None
+
+    with ExitStack() as stack:
+        if patch_runtime:
+            stack.enter_context(patch("webbrowser.open", side_effect=fake_open))
+            if func is _py_utils.view:
+                stack.enter_context(
+                    patch.object(_py_utils, "test", side_effect=fake_test)
+                )
+            else:
+                stack.enter_context(patch("http.server.test", side_effect=fake_test))
+
+        with redirect_stdout(stream):
+            try:
+                func(path, port=port, dry_run=dry_run, force=force)
+                return ("ok", stream.getvalue(), browser_calls, test_calls)
+            except Exception as exc:  # noqa: BLE001
+                return (
+                    "err",
+                    type(exc),
+                    str(exc),
+                    stream.getvalue(),
+                    browser_calls,
+                    test_calls,
+                )
+
+
 def _assert_strip_case(parts) -> None:
     expected = _run_strip_common_prefix(_py_utils.strip_common_prefix, parts)
     actual = _run_strip_common_prefix(_cpp_utils.strip_common_prefix, parts)
@@ -185,6 +326,12 @@ def _assert_find_multiscales_case(path) -> None:
 def _assert_finder_case(path, **kwargs) -> None:
     expected = _run_finder(_py_utils.finder, path, **kwargs)
     actual = _run_finder(_cpp_utils.finder, path, **kwargs)
+    assert expected == actual
+
+
+def _assert_view_case(path, **kwargs) -> None:
+    expected = _run_view(_py_utils.view, path, **kwargs)
+    actual = _run_view(_cpp_utils.view, path, **kwargs)
     assert expected == actual
 
 
@@ -445,6 +592,93 @@ def test_finder_matches_upstream_for_non_dry_run_side_effects(tmp_path) -> None:
         cpp_data,
         port=8234,
         dry_run=False,
+        patch_runtime=True,
+    )
+    assert expected == actual
+
+
+def test_view_matches_upstream_for_missing_input_path(tmp_path) -> None:
+    missing = tmp_path / "missing-image.zarr"
+    _assert_view_case(missing, dry_run=False, force=False, patch_runtime=True)
+
+
+def test_view_matches_upstream_for_valid_image_dry_run(tmp_path) -> None:
+    path = tmp_path / "image.zarr"
+    path.mkdir()
+    (path / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
+    _assert_view_case(path, port=8124, dry_run=True, force=False, patch_runtime=True)
+
+
+def test_view_matches_upstream_for_non_dry_run_side_effects(tmp_path) -> None:
+    py_root = tmp_path / "py-case" / "data"
+    cpp_root = tmp_path / "cpp-case" / "data"
+    _build_simple_view_tree(py_root)
+    _build_simple_view_tree(cpp_root)
+
+    expected = _run_view(
+        _py_utils.view,
+        py_root / "image.zarr",
+        port=8125,
+        dry_run=False,
+        force=False,
+        patch_runtime=True,
+    )
+    actual = _run_view(
+        _cpp_utils.view,
+        cpp_root / "image.zarr",
+        port=8125,
+        dry_run=False,
+        force=False,
+        patch_runtime=True,
+    )
+    assert expected == actual
+
+
+def test_view_matches_upstream_for_force_true_without_metadata(tmp_path) -> None:
+    py_root = tmp_path / "py-case" / "raw"
+    cpp_root = tmp_path / "cpp-case" / "raw"
+    py_root.mkdir(parents=True)
+    cpp_root.mkdir(parents=True)
+
+    expected = _run_view(
+        _py_utils.view,
+        py_root / "not-zarr",
+        port=8126,
+        dry_run=False,
+        force=True,
+        patch_runtime=True,
+    )
+    actual = _run_view(
+        _cpp_utils.view,
+        cpp_root / "not-zarr",
+        port=8126,
+        dry_run=False,
+        force=True,
+        patch_runtime=True,
+    )
+    assert expected == actual
+
+
+def test_view_matches_upstream_for_trailing_slash_image_path(tmp_path) -> None:
+    py_root = tmp_path / "py-case" / "data"
+    cpp_root = tmp_path / "cpp-case" / "data"
+    _build_simple_view_tree(py_root)
+    _build_simple_view_tree(cpp_root)
+
+    expected = _run_view(
+        _py_utils.view,
+        f"{py_root / 'image.zarr'}{os.sep}",
+        port=8127,
+        dry_run=False,
+        force=False,
+        patch_runtime=True,
+    )
+    actual = _run_view(
+        _cpp_utils.view,
+        f"{cpp_root / 'image.zarr'}{os.sep}",
+        port=8127,
+        dry_run=False,
+        force=False,
         patch_runtime=True,
     )
     assert expected == actual

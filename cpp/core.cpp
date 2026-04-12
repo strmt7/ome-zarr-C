@@ -807,10 +807,10 @@ void finder(py::object input_path, int port = 8000, bool dry_run = false) {
               py::cast<std::string>(quoted_source)) +
           py::str("&v=2");
 
-    py::dict locals;
-    locals["RangeRequestHandler"] = range_http_server.attr("RangeRequestHandler");
-    locals["SimpleHTTPRequestHandler"] = http_server.attr("SimpleHTTPRequestHandler");
-    locals["parent_path"] = parent_path;
+    py::dict scope;
+    scope["RangeRequestHandler"] = range_http_server.attr("RangeRequestHandler");
+    scope["SimpleHTTPRequestHandler"] = http_server.attr("SimpleHTTPRequestHandler");
+    scope["parent_path"] = parent_path;
     py::exec(
         R"PY(
 class CORSRequestHandler(RangeRequestHandler):
@@ -823,8 +823,8 @@ class CORSRequestHandler(RangeRequestHandler):
         super_path = super().translate_path(path)
         return super_path
 )PY",
-        py::globals(),
-        locals);
+        scope,
+        scope);
 
     if (dry_run) {
         return;
@@ -832,7 +832,77 @@ class CORSRequestHandler(RangeRequestHandler):
 
     webbrowser.attr("open")(url);
     http_server.attr("test")(
-        locals["CORSRequestHandler"], http_server.attr("HTTPServer"), py::arg("port") = port);
+        scope["CORSRequestHandler"], http_server.attr("HTTPServer"), py::arg("port") = port);
+}
+
+void view(py::object input_path,
+          int port = 8000,
+          bool dry_run = false,
+          bool force = false) {
+    py::object builtins = py::module_::import("builtins");
+    py::object http_server = py::module_::import("http.server");
+    py::object os_path = py::module_::import("os").attr("path");
+    py::object path_cls = py::module_::import("pathlib").attr("Path");
+    py::object range_http_server = py::module_::import("RangeHTTPServer");
+    py::object webbrowser = py::module_::import("webbrowser");
+
+    if (!force) {
+        py::list zarrs;
+        py::object path_obj = path_cls(input_path);
+        if (py::cast<bool>(true_divide(path_obj, py::str(".zattrs")).attr("exists")()) ||
+            py::cast<bool>(true_divide(path_obj, py::str("zarr.json")).attr("exists")())) {
+            zarrs = find_multiscales(path_obj);
+        }
+        if (py::len(zarrs) == 0) {
+            builtins.attr("print")(
+                py::str("No OME-Zarr images found in ") + py::str(input_path) +
+                py::str(". Try $ ome_zarr finder ") + py::str(input_path) +
+                py::str(" or use -f to force open in browser."));
+            return;
+        }
+    }
+
+    py::tuple split = py::cast<py::tuple>(os_path.attr("split")(input_path));
+    py::object parent_dir = split[0];
+    py::object image_name = split[1];
+    if (py::len(image_name) == 0) {
+        split = py::cast<py::tuple>(os_path.attr("split")(parent_dir));
+        parent_dir = split[0];
+        image_name = split[1];
+    }
+    parent_dir = py::str(parent_dir);
+
+    py::str url = py::str("https://ome.github.io/ome-ngff-validator/?source=http://localhost:") +
+                  py::str(std::to_string(port)) +
+                  py::str("/") +
+                  py::str(image_name);
+
+    py::dict scope;
+    scope["RangeRequestHandler"] = range_http_server.attr("RangeRequestHandler");
+    scope["SimpleHTTPRequestHandler"] = http_server.attr("SimpleHTTPRequestHandler");
+    scope["parent_dir"] = parent_dir;
+    py::exec(
+        R"PY(
+class CORSRequestHandler(RangeRequestHandler):
+    def end_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        SimpleHTTPRequestHandler.end_headers(self)
+
+    def translate_path(self, path):
+        self.directory = parent_dir
+        super_path = super().translate_path(path)
+        return super_path
+)PY",
+        scope,
+        scope);
+
+    if (dry_run) {
+        return;
+    }
+
+    webbrowser.attr("open")(url);
+    http_server.attr("test")(
+        scope["CORSRequestHandler"], http_server.attr("HTTPServer"), py::arg("port") = port);
 }
 
 py::object get_metadata_version(py::dict metadata) {
@@ -1126,6 +1196,7 @@ PYBIND11_MODULE(_core, m) {
     m.def("splitall", &splitall);
     m.def("find_multiscales", &find_multiscales);
     m.def("finder", &finder, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false);
+    m.def("view", &view, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false, py::arg("force") = false);
     m.def("get_metadata_version", &get_metadata_version);
     m.def("validate_well_dict_v01", &validate_well_dict_v01);
     m.def("generate_well_dict_v04", &generate_well_dict_v04);

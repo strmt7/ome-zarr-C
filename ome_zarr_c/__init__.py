@@ -15,7 +15,7 @@ from .format import (
     format_from_version,
     format_implementations,
 )
-from .utils import find_multiscales, finder, splitall, strip_common_prefix
+from .utils import find_multiscales, finder, splitall, strip_common_prefix, view
 
 __all__ = [
     "Axes",
@@ -41,4 +41,5 @@ __all__ = [
     "csv_to_zarr",
     "splitall",
     "strip_common_prefix",
+    "view",
 ]

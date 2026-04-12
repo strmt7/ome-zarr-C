@@ -40,6 +40,12 @@ snapshot to C++ without modifying the snapshot itself.
     startup, or similar side effects, parity tests must patch those boundaries
     and compare the resulting call payloads instead of triggering the real side
     effect.
+18. Do not normalize, simplify, or otherwise "improve" upstream behavior during
+    a parity port. Identical behavior is the default requirement unless an
+    intentional divergence is explicitly documented.
+19. When generating Python classes via `py::exec`, use a shared execution scope
+    when methods depend on runtime names. Otherwise class methods may compile
+    but fail later with missing-name errors.
 
 ## Fast load order
 
