@@ -30,6 +30,9 @@ snapshot to C++ without modifying the snapshot itself.
     verified.
 14. After any C++ or extension-build change, reinstall the editable package
     before rerunning parity tests so the checks exercise the current binary.
+15. In pybind11 ports, do not use `py::cast<bool>` as a generic replacement for
+    Python truthiness on arbitrary objects such as lists or `None`. Use Python
+    truth-value evaluation so `if obj:` behavior matches upstream.
 
 ## Fast load order
 

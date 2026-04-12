@@ -35,6 +35,10 @@ incrementally while keeping the imported upstream snapshot intact.
   If upstream behavior changes across Python versions, parity means matching the
   upstream implementation on the same runtime. Do not freeze exception text or
   unpack errors that the interpreter itself generates.
+- Python truthiness:
+  In pybind11 ports, `py::cast<bool>` is not a drop-in replacement for Python
+  truth-value testing on arbitrary objects. Preserve `if obj:` semantics with
+  Python truthiness evaluation.
 - Performance:
   Use the same inputs, same machine class, same environment, and repeated runs.
   Report medians and version details.
