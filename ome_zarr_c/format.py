@@ -176,7 +176,19 @@ class FormatV04(FormatV03):
     def generate_well_dict(
         self, well: str, rows: list[str], columns: list[str]
     ) -> dict:
-        return dict(_core.generate_well_dict_v04(well, rows, columns))
+        try:
+            return dict(_core.generate_well_dict_v04(well, rows, columns))
+        except ValueError as exc:
+            message = str(exc)
+            if message.startswith(
+                (
+                    "not enough values to unpack",
+                    "too many values to unpack",
+                )
+            ):
+                row, column = well.split("/")  # pragma: no cover
+                del row, column
+            raise
 
     def validate_well_dict(
         self, well: dict, rows: list[str], columns: list[str]
