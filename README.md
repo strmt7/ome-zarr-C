@@ -102,6 +102,20 @@ differential tests on this runtime:
 Each converted surface is validated against the frozen upstream release with
 parity tests under `tests/`.
 
+## Split-Native Coverage
+
+Use the committed coverage manifest and report script to measure the current
+architecture-first conversion floor:
+
+```bash
+.venv/bin/python scripts/report_split_native_coverage.py
+.venv/bin/python scripts/report_split_native_coverage.py --fail-under 25
+```
+
+This `split-native` metric counts only upstream surfaces that are routed
+through dedicated `cpp/bindings/` entrypoints with corresponding native files,
+and excludes mixed exports still left in `cpp/core.cpp`.
+
 ## Runtime-Blocked Surfaces
 
 Some native-backed or partially ported paths are intentionally not counted in

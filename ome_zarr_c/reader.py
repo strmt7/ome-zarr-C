@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import logging
-import math
 from collections.abc import Iterator
 from typing import Any, cast, overload
 
@@ -98,12 +97,19 @@ class Node:
         visibility: bool | None = None,
         plate_labels: bool = False,
     ) -> Node | None:
-        if zarr in self.seen and not plate_labels:
+        payload = dict(
+            _core.reader_node_add_payload(
+                zarr in self.seen,
+                plate_labels,
+                visibility,
+                self.visible,
+            )
+        )
+        if not payload["should_add"]:
             LOGGER.debug("already seen  %s; stopping recursion", zarr)
             return None
 
-        if visibility is None:
-            visibility = self.visible
+        visibility = bool(payload["visibility"])
 
         self.seen.append(zarr)
         node = Node(zarr, self, visibility=visibility, plate_labels=plate_labels)
@@ -144,7 +150,7 @@ class Spec:
 class Labels(Spec):
     @staticmethod
     def matches(zarr: ZarrLocation) -> bool:
-        return bool("labels" in zarr.root_attrs)
+        return bool(_core.reader_matches_labels(zarr))
 
     def __init__(self, node: Node) -> None:
         super().__init__(node)
@@ -157,7 +163,7 @@ class Labels(Spec):
 class Label(Spec):
     @staticmethod
     def matches(zarr: ZarrLocation) -> bool:
-        return bool("image-label" in zarr.root_attrs)
+        return bool(_core.reader_matches_label(zarr))
 
     def __init__(self, node: Node) -> None:
         super().__init__(node)
@@ -187,7 +193,7 @@ class Label(Spec):
 class Multiscales(Spec):
     @staticmethod
     def matches(zarr: ZarrLocation) -> bool:
-        return bool(zarr.zgroup) and "multiscales" in zarr.root_attrs
+        return bool(_core.reader_matches_multiscales(zarr))
 
     def __init__(self, node: Node) -> None:
         super().__init__(node)
@@ -235,7 +241,7 @@ class Multiscales(Spec):
 class OMERO(Spec):
     @staticmethod
     def matches(zarr: ZarrLocation) -> bool:
-        return bool("omero" in zarr.root_attrs)
+        return bool(_core.reader_matches_omero(zarr))
 
     def __init__(self, node: Node) -> None:
         super().__init__(node)
@@ -262,18 +268,17 @@ class OMERO(Spec):
 class Well(Spec):
     @staticmethod
     def matches(zarr: ZarrLocation) -> bool:
-        return bool("well" in zarr.root_attrs)
+        return bool(_core.reader_matches_well(zarr))
 
     def __init__(self, node: Node) -> None:
         super().__init__(node)
-        self.well_data = self.lookup("well", {})
+        payload = dict(_core.reader_well_payload(self.zarr.root_attrs))
+        self.well_data = payload["well_data"]
         LOGGER.info("well_data: %s", self.well_data)
 
-        image_paths = [image["path"] for image in self.well_data.get("images")]
-
-        field_count = len(image_paths)
-        column_count = math.ceil(math.sqrt(field_count))
-        row_count = math.ceil(field_count / column_count)
+        image_paths = list(payload["image_paths"])
+        column_count = int(payload["column_count"])
+        row_count = int(payload["row_count"])
 
         image_zarr = self.zarr.create(image_paths[0])
         image_node = Node(image_zarr, node)
@@ -330,7 +335,7 @@ class Well(Spec):
 class Plate(Spec):
     @staticmethod
     def matches(zarr: ZarrLocation) -> bool:
-        return bool("plate" in zarr.root_attrs)
+        return bool(_core.reader_matches_plate(zarr))
 
     def __init__(self, node: Node) -> None:
         super().__init__(node)
@@ -338,18 +343,16 @@ class Plate(Spec):
         self.get_pyramid_lazy(node)
 
     def get_pyramid_lazy(self, node: Node) -> None:
-        self.plate_data = self.lookup("plate", {})
+        payload = dict(_core.reader_plate_payload(self.zarr.root_attrs))
+        self.plate_data = payload["plate_data"]
         LOGGER.info("plate_data: %s", self.plate_data)
         self.rows = self.plate_data.get("rows")
         self.columns = self.plate_data.get("columns")
-        self.row_names = [row["name"] for row in self.rows]
-        self.col_names = [col["name"] for col in self.columns]
-
-        self.well_paths = [well["path"] for well in self.plate_data.get("wells")]
-        self.well_paths.sort()
-
-        self.row_count = len(self.rows)
-        self.column_count = len(self.columns)
+        self.row_names = list(payload["row_names"])
+        self.col_names = list(payload["col_names"])
+        self.well_paths = list(payload["well_paths"])
+        self.row_count = int(payload["row_count"])
+        self.column_count = int(payload["column_count"])
 
         well_zarr = self.zarr.create(self.well_paths[0])
         well_node = Node(well_zarr, node)
@@ -379,9 +382,13 @@ class Plate(Spec):
         return image_node.data[0].dtype
 
     def get_tile_path(self, level: int, row: int, col: int) -> str:
-        return (
-            f"{self.row_names[row]}/"
-            f"{self.col_names[col]}/{self.first_field_path}/{self.img_paths[level]}"
+        return str(
+            _core.reader_plate_tile_path(
+                self.row_names[row],
+                self.col_names[col],
+                self.first_field_path,
+                self.img_paths[level],
+            )
         )
 
     def get_stitched_grid(self, level: int, tile_shape: tuple) -> da.core.Array:

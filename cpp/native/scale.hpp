@@ -18,6 +18,10 @@ struct PyramidLevelPlan {
     std::vector<std::string> warning_dims;
 };
 
+std::vector<std::string> scaler_methods();
+
+bool scaler_has_method(const std::string& method);
+
 std::vector<std::int64_t> scaler_resize_image_shape(
     const std::vector<std::int64_t>& shape,
     std::int64_t downscale);

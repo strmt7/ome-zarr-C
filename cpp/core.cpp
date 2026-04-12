@@ -235,7 +235,10 @@ py::tuple output_slices_for_shape(const py::handle& shape) {
 
 }  // namespace
 
+void register_basic_bindings(py::module_& m);
 void register_format_bindings(py::module_& m);
+void register_reader_bindings(py::module_& m);
+void register_scale_bindings(py::module_& m);
 
 py::list axes_to_dicts(const py::sequence& axes) {
     py::list result;
@@ -1631,14 +1634,18 @@ py::object scaler_resize_image(
     }
 
     py::tuple image_shape = py::cast<py::tuple>(image.attr("shape"));
-    py::tuple out_shape(py::len(image_shape));
-    for (py::size_t index = 0; index < py::len(image_shape); ++index) {
-        out_shape[index] = image_shape[index];
+    std::vector<std::int64_t> native_shape;
+    native_shape.reserve(py::len(image_shape));
+    for (const py::handle& dim : image_shape) {
+        native_shape.push_back(py::cast<std::int64_t>(dim));
     }
-    out_shape[py::len(out_shape) - 1] =
-        floor_divide(image_shape[py::len(image_shape) - 1], downscale);
-    out_shape[py::len(out_shape) - 2] =
-        floor_divide(image_shape[py::len(image_shape) - 2], downscale);
+    const auto output_shape = ome_zarr_c::native_code::scaler_resize_image_shape(
+        native_shape,
+        py::cast<std::int64_t>(downscale));
+    py::tuple out_shape(output_shape.size());
+    for (py::size_t index = 0; index < output_shape.size(); ++index) {
+        out_shape[index] = py::int_(output_shape[index]);
+    }
 
     py::object dtype = image.attr("dtype");
     py::object resized = resize_func(
@@ -1729,9 +1736,14 @@ py::object scaler_nearest_plane(
         resize_func = py::module_::import("ome_zarr_c._core").attr("resize");
     }
 
-    py::tuple output_shape(2);
-    output_shape[0] = floor_divide(py::int_(size_y), downscale);
-    output_shape[1] = floor_divide(py::int_(size_x), downscale);
+    const auto native_shape = ome_zarr_c::native_code::scaler_nearest_plane_shape(
+        size_y,
+        size_x,
+        py::cast<std::int64_t>(downscale));
+    py::tuple output_shape(native_shape.size());
+    for (py::size_t index = 0; index < native_shape.size(); ++index) {
+        output_shape[index] = py::int_(native_shape[index]);
+    }
 
     return resize_func(
                plane,
@@ -1800,13 +1812,13 @@ py::list scaler_local_mean(
     py::list rv;
     rv.append(base);
 
-    const py::ssize_t stack_dims = py::cast<py::ssize_t>(base.attr("ndim")) - 2;
-    py::tuple factors(stack_dims + 2);
-    for (py::ssize_t index = 0; index < stack_dims; ++index) {
-        factors[index] = py::int_(1);
+    const auto factor_values = ome_zarr_c::native_code::scaler_local_mean_factors(
+        py::cast<std::size_t>(base.attr("ndim")),
+        py::cast<std::int64_t>(downscale));
+    py::tuple factors(factor_values.size());
+    for (py::size_t index = 0; index < factor_values.size(); ++index) {
+        factors[index] = py::int_(factor_values[index]);
     }
-    factors[stack_dims] = downscale;
-    factors[stack_dims + 1] = downscale;
 
     for (py::ssize_t level_index = 0; level_index < max_layer; ++level_index) {
         py::object next_level = downscale_local_mean(rv[py::len(rv) - 1], py::arg("factors") = factors)
@@ -1825,10 +1837,12 @@ py::list scaler_zoom(
     py::list rv;
     rv.append(base);
     py::print(base.attr("shape"));
-    for (py::ssize_t level_index = 0; level_index < max_layer; ++level_index) {
-        py::print(level_index, downscale);
-        const long zoom_factor = static_cast<long>(
-            std::pow(py::cast<long>(downscale), static_cast<long>(level_index)));
+    const auto zoom_factors = ome_zarr_c::native_code::scaler_zoom_factors(
+        py::cast<long>(downscale),
+        py::cast<long>(max_layer));
+    for (py::size_t level_index = 0; level_index < zoom_factors.size(); ++level_index) {
+        py::print(py::int_(level_index), downscale);
+        const long zoom_factor = zoom_factors[level_index];
         rv.append(scipy_zoom(base, py::int_(zoom_factor)));
         py::print(rv[py::len(rv) - 1].attr("shape"));
     }
@@ -1966,33 +1980,10 @@ py::tuple data_astronaut() {
 }
 
 PYBIND11_MODULE(_core, m) {
-    m.def("axes_to_dicts", &axes_to_dicts);
-    m.def("get_names", &get_names);
-    m.def("validate_03", &validate_03);
-    m.def("validate_axes_types", &validate_axes_types);
-    m.def("int_to_rgba", &int_to_rgba);
-    m.def("int_to_rgba_255", &int_to_rgba_255);
-    m.def("rgba_to_int", &rgba_to_int);
-    m.def("parse_csv_value", &parse_csv_value);
     m.def("dict_to_zarr", &dict_to_zarr);
     m.def("csv_to_zarr", &csv_to_zarr);
-    m.def("strip_common_prefix", &strip_common_prefix);
-    m.def("splitall", &splitall);
     m.def("find_multiscales", &find_multiscales);
     m.def("info_lines", &info_lines, py::arg("node"), py::arg("stats") = false);
-    m.def("reader_matching_specs", &reader_matching_specs, py::arg("zarr"));
-    m.def("reader_labels_names", &reader_labels_names, py::arg("root_attrs"));
-    m.def("reader_node_repr", &reader_node_repr, py::arg("zarr"), py::arg("visible"));
-    m.def("reader_label_payload", &reader_label_payload, py::arg("root_attrs"), py::arg("name"), py::arg("visible"));
-    m.def("reader_multiscales_payload", &reader_multiscales_payload, py::arg("root_attrs"));
-    m.def("reader_omero_payload", &reader_omero_payload, py::arg("image_data"), py::arg("node_visible"));
-    m.def("_get_valid_axes", &get_valid_axes, py::arg("ndim") = py::none(), py::arg("axes") = py::none(), py::arg("fmt"));
-    m.def("_extract_dims_from_axes", &extract_dims_from_axes, py::arg("axes") = py::none());
-    m.def("_retuple", &retuple, py::arg("chunks"), py::arg("shape"));
-    m.def("_validate_well_images", &validate_well_images, py::arg("images"), py::arg("fmt"));
-    m.def("_validate_plate_acquisitions", &validate_plate_acquisitions, py::arg("acquisitions"), py::arg("fmt"));
-    m.def("_validate_plate_rows_columns", &validate_plate_rows_columns, py::arg("rows_or_columns"), py::arg("fmt"));
-    m.def("_validate_datasets", &validate_datasets, py::arg("datasets"), py::arg("dims"), py::arg("fmt"));
     m.def("_validate_plate_wells", &validate_plate_wells, py::arg("wells"), py::arg("rows"), py::arg("columns"), py::arg("fmt"));
     m.def("_blosc_compressor", &blosc_compressor);
     m.def("_resolve_storage_options", &resolve_storage_options, py::arg("storage_options"), py::arg("path"));
@@ -2001,16 +1992,14 @@ PYBIND11_MODULE(_core, m) {
     m.def("local_mean", &dask_local_mean, py::arg("image"), py::arg("output_shape"));
     m.def("zoom", &dask_zoom, py::arg("image"), py::arg("output_shape"));
     m.def("downscale_nearest", &downscale_nearest_dask, py::arg("image"), py::arg("factors"));
-    m.def("_build_pyramid", &build_pyramid, py::arg("image"), py::arg("scale_factors"), py::arg("dims"), py::arg("method") = py::str("nearest"), py::arg("chunks") = py::none());
-    m.def("scaler_resize_image", &scaler_resize_image, py::arg("image"), py::arg("downscale") = 2, py::arg("order") = 1);
-    m.def("scaler_nearest", &scaler_nearest, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
     m.def("scaler_gaussian", &scaler_gaussian, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
     m.def("scaler_laplacian", &scaler_laplacian, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
-    m.def("scaler_local_mean", &scaler_local_mean, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
-    m.def("scaler_zoom", &scaler_zoom, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
     m.def("data_make_circle", &data_make_circle, py::arg("h"), py::arg("w"), py::arg("value"), py::arg("target"));
     m.def("data_rgb_to_5d", &data_rgb_to_5d, py::arg("pixels"));
     m.def("data_coins", &data_coins);
     m.def("data_astronaut", &data_astronaut);
+    register_basic_bindings(m);
     register_format_bindings(m);
+    register_reader_bindings(m);
+    register_scale_bindings(m);
 }
