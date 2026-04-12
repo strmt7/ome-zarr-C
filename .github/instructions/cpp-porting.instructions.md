@@ -12,6 +12,9 @@
   objects. Match Python `if obj:` semantics with Python truth-value evaluation.
 - For functions that mutate files or stores, compare the resulting serialized
   on-disk state against upstream instead of only checking return values.
+- For functions that cross external side-effect boundaries, patch the boundary
+  and compare the outbound call payloads against upstream instead of triggering
+  the real side effect.
 - After changing native code or extension build surfaces, rebuild the editable
   install before rerunning parity tests.
 - Add differential tests against the frozen snapshot before claiming parity.

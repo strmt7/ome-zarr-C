@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <sstream>
 #include <stdexcept>
@@ -681,6 +682,159 @@ py::list find_multiscales(py::object path_to_zattrs) {
     return py::list();
 }
 
+void finder(py::object input_path, int port = 8000, bool dry_run = false) {
+    py::object builtins = py::module_::import("builtins");
+    py::object csv_module = py::module_::import("csv");
+    py::object datetime_cls = py::module_::import("datetime").attr("datetime");
+    py::object http_server = py::module_::import("http.server");
+    py::object json = py::module_::import("json");
+    py::object os_path = py::module_::import("os").attr("path");
+    py::object path_cls = py::module_::import("pathlib").attr("Path");
+    py::object range_http_server = py::module_::import("RangeHTTPServer");
+    py::object urllib_parse = py::module_::import("urllib.parse");
+    py::object webbrowser = py::module_::import("webbrowser");
+
+    py::tuple split = py::cast<py::tuple>(os_path.attr("split")(input_path));
+    py::object parent_path = split[0];
+    py::object server_dir = split[1];
+    if (py::len(server_dir) == 0) {
+        split = py::cast<py::tuple>(os_path.attr("split")(parent_path));
+        parent_path = split[0];
+        server_dir = split[1];
+    }
+
+    std::function<py::list(py::object)> walk = [&](py::object path) -> py::list {
+        py::object dot_zattrs = true_divide(path, py::str(".zattrs"));
+        py::object zarr_json = true_divide(path, py::str("zarr.json"));
+        if (py::cast<bool>(dot_zattrs.attr("exists")()) ||
+            py::cast<bool>(zarr_json.attr("exists")())) {
+            return find_multiscales(path);
+        }
+
+        py::list results;
+        for (const py::handle& child_handle : path.attr("iterdir")()) {
+            py::object child = py::reinterpret_borrow<py::object>(child_handle);
+            py::object child_dot_zattrs = true_divide(child, py::str(".zattrs"));
+            py::object child_zarr_json = true_divide(child, py::str("zarr.json"));
+            if (py::cast<bool>(child_dot_zattrs.attr("exists")()) ||
+                py::cast<bool>(child_zarr_json.attr("exists")())) {
+                for (const py::handle& item_handle : find_multiscales(child)) {
+                    results.append(py::reinterpret_borrow<py::object>(item_handle));
+                }
+            } else if (py::cast<bool>(child.attr("is_dir")())) {
+                for (const py::handle& item_handle : walk(child)) {
+                    results.append(py::reinterpret_borrow<py::object>(item_handle));
+                }
+            }
+        }
+        return results;
+    };
+
+    py::object url = py::none();
+    py::list zarrs = walk(path_cls(input_path));
+    if (py::len(zarrs) == 0) {
+        builtins.attr("print")("No OME-Zarr files found in", input_path);
+        return;
+    }
+
+    py::list col_names;
+    for (const char* name : {"File Path", "File Name", "Folders", "Uploaded"}) {
+        col_names.append(py::str(name));
+    }
+
+    py::object bff_csv = os_path.attr("join")(input_path, py::str("biofile_finder.csv"));
+    py::object csvfile =
+        builtins.attr("open")(bff_csv, py::str("w"), py::arg("newline") = py::str(""));
+    try {
+        py::object writer = csv_module.attr("writer")(csvfile, py::arg("delimiter") = ",");
+        writer.attr("writerow")(col_names);
+
+        for (const py::handle& image_handle : zarrs) {
+            py::list zarr_img = py::cast<py::list>(image_handle);
+            py::object relpath = os_path.attr("relpath")(zarr_img[0], input_path);
+            py::str rel_url =
+                py::cast<py::str>(py::str("/").attr("join")(splitall(relpath)));
+            const std::string file_path =
+                "http://localhost:" + std::to_string(port) + "/" +
+                py::cast<std::string>(server_dir) + "/" +
+                py::cast<std::string>(rel_url);
+
+            py::object name = zarr_img[1];
+            if (!object_truthy(name)) {
+                name = os_path.attr("basename")(zarr_img[0]);
+            }
+
+            py::object folders_path = os_path.attr("relpath")(zarr_img[2], input_path);
+            py::str folders =
+                py::cast<py::str>(py::str(",").attr("join")(splitall(folders_path)));
+
+            py::object timestamp = py::str("");
+            try {
+                py::object mtime = os_path.attr("getmtime")(zarr_img[0]);
+                timestamp = datetime_cls.attr("fromtimestamp")(mtime).attr("strftime")(
+                    py::str("%Y-%m-%d %H:%M:%S.%Z"));
+            } catch (py::error_already_set& ex) {
+                if (!ex.matches(PyExc_OSError)) {
+                    throw;
+                }
+            }
+
+            py::list row;
+            row.append(py::str(file_path));
+            row.append(name);
+            row.append(folders);
+            row.append(timestamp);
+            writer.attr("writerow")(row);
+        }
+        csvfile.attr("close")();
+    } catch (...) {
+        try {
+            csvfile.attr("close")();
+        } catch (...) {
+        }
+        throw;
+    }
+
+    py::dict source;
+    source["uri"] = py::str(
+        "http://localhost:" + std::to_string(port) + "/" +
+        py::cast<std::string>(server_dir) + "/biofile_finder.csv");
+    source["type"] = py::str("csv");
+    source["name"] = py::str("biofile_finder.csv");
+    py::object quoted_source = urllib_parse.attr("quote")(json.attr("dumps")(source));
+    url = py::str(
+              "https://bff.allencell.org/app?source=" +
+              py::cast<std::string>(quoted_source)) +
+          py::str("&v=2");
+
+    py::dict locals;
+    locals["RangeRequestHandler"] = range_http_server.attr("RangeRequestHandler");
+    locals["SimpleHTTPRequestHandler"] = http_server.attr("SimpleHTTPRequestHandler");
+    locals["parent_path"] = parent_path;
+    py::exec(
+        R"PY(
+class CORSRequestHandler(RangeRequestHandler):
+    def end_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        SimpleHTTPRequestHandler.end_headers(self)
+
+    def translate_path(self, path):
+        self.directory = parent_path
+        super_path = super().translate_path(path)
+        return super_path
+)PY",
+        py::globals(),
+        locals);
+
+    if (dry_run) {
+        return;
+    }
+
+    webbrowser.attr("open")(url);
+    http_server.attr("test")(
+        locals["CORSRequestHandler"], http_server.attr("HTTPServer"), py::arg("port") = port);
+}
+
 py::object get_metadata_version(py::dict metadata) {
     py::list multiscales = py::cast<py::list>(metadata.attr("get")("multiscales", py::list()));
     if (py::len(multiscales) > 0) {
@@ -971,6 +1125,7 @@ PYBIND11_MODULE(_core, m) {
     m.def("strip_common_prefix", &strip_common_prefix);
     m.def("splitall", &splitall);
     m.def("find_multiscales", &find_multiscales);
+    m.def("finder", &finder, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false);
     m.def("get_metadata_version", &get_metadata_version);
     m.def("validate_well_dict_v01", &validate_well_dict_v01);
     m.def("generate_well_dict_v04", &generate_well_dict_v04);

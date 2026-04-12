@@ -9,8 +9,9 @@ import random
 import sys
 import xml.etree.ElementTree as ET
 from collections import deque
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
@@ -63,6 +64,106 @@ def _run_find_multiscales(func, path):
         logger.propagate = previous_propagate
 
 
+def _snapshot_tree(root: Path):
+    if not root.exists():
+        return None
+
+    snapshot = []
+    for path in sorted(root.rglob("*")):
+        rel_path = path.relative_to(root).as_posix()
+        if path.is_file():
+            snapshot.append(("file", rel_path, path.read_bytes()))
+        else:
+            snapshot.append(("dir", rel_path, None))
+    return snapshot
+
+
+def _build_simple_finder_tree(root: Path) -> None:
+    image = root / "image.zarr"
+    image.mkdir(parents=True)
+    (image / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
+    os.utime(image, (1_700_000_000, 1_700_000_000))
+
+
+def _build_nested_finder_tree(root: Path) -> None:
+    top_image = root / "top-image.zarr"
+    top_image.mkdir(parents=True)
+    (top_image / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
+
+    plate = root / "sub" / "plate.zarr"
+    field = plate / "A" / "1" / "0"
+    field.mkdir(parents=True)
+    (plate / ".zattrs").write_text(json.dumps({"plate": {"wells": [{"path": "A/1"}]}}))
+
+    (root / "sub" / "notes.txt").write_text("ignore me")
+    os.utime(top_image, (1_700_000_000, 1_700_000_000))
+    os.utime(field, (1_700_000_123, 1_700_000_123))
+
+
+def _run_finder(
+    func,
+    path,
+    *,
+    port: int = 8000,
+    dry_run: bool = False,
+    patch_runtime: bool = False,
+    patch_getmtime_error: bool = False,
+):
+    stream = io.StringIO()
+    browser_calls = []
+    test_calls = []
+
+    def fake_open(url):
+        browser_calls.append(url)
+        return None
+
+    def fake_test(handler_cls, server_cls, port=8000):
+        test_calls.append(
+            (
+                handler_cls.__name__,
+                handler_cls.__mro__[1].__name__,
+                server_cls.__name__,
+                port,
+            )
+        )
+        return None
+
+    with ExitStack() as stack:
+        if patch_runtime:
+            stack.enter_context(patch("webbrowser.open", side_effect=fake_open))
+            if func is _py_utils.finder:
+                stack.enter_context(
+                    patch.object(_py_utils, "test", side_effect=fake_test)
+                )
+            else:
+                stack.enter_context(patch("http.server.test", side_effect=fake_test))
+        if patch_getmtime_error:
+            stack.enter_context(
+                patch("os.path.getmtime", side_effect=OSError("mtime blocked"))
+            )
+
+        with redirect_stdout(stream):
+            try:
+                func(path, port=port, dry_run=dry_run)
+                return (
+                    "ok",
+                    stream.getvalue(),
+                    _snapshot_tree(Path(path)),
+                    browser_calls,
+                    test_calls,
+                )
+            except Exception as exc:  # noqa: BLE001
+                return (
+                    "err",
+                    type(exc),
+                    str(exc),
+                    stream.getvalue(),
+                    _snapshot_tree(Path(path)),
+                    browser_calls,
+                    test_calls,
+                )
+
+
 def _assert_strip_case(parts) -> None:
     expected = _run_strip_common_prefix(_py_utils.strip_common_prefix, parts)
     actual = _run_strip_common_prefix(_cpp_utils.strip_common_prefix, parts)
@@ -78,6 +179,12 @@ def _assert_splitall_case(path) -> None:
 def _assert_find_multiscales_case(path) -> None:
     expected = _run_find_multiscales(_py_utils.find_multiscales, path)
     actual = _run_find_multiscales(_cpp_utils.find_multiscales, path)
+    assert expected == actual
+
+
+def _assert_finder_case(path, **kwargs) -> None:
+    expected = _run_finder(_py_utils.finder, path, **kwargs)
+    actual = _run_finder(_cpp_utils.finder, path, **kwargs)
     assert expected == actual
 
 
@@ -270,3 +377,74 @@ def test_find_multiscales_matches_upstream_for_string_paths_with_existing_metada
     path.mkdir()
     (path / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
     _assert_find_multiscales_case(str(path))
+
+
+def test_finder_matches_upstream_for_missing_input_path(tmp_path) -> None:
+    missing = tmp_path / "missing-data"
+    _assert_finder_case(missing, dry_run=True)
+
+
+def test_finder_matches_upstream_when_no_zarr_is_found(tmp_path) -> None:
+    data = tmp_path / "data"
+    (data / "sub").mkdir(parents=True)
+    (data / "sub" / "notes.txt").write_text("plain file")
+    _assert_finder_case(data, dry_run=False, patch_runtime=True)
+
+
+def test_finder_matches_upstream_for_nested_tree_and_trailing_slash(tmp_path) -> None:
+    py_data = tmp_path / "py-case" / "data"
+    cpp_data = tmp_path / "cpp-case" / "data"
+    _build_nested_finder_tree(py_data)
+    _build_nested_finder_tree(cpp_data)
+
+    expected = _run_finder(
+        _py_utils.finder, f"{py_data}{os.sep}", port=8123, dry_run=True
+    )
+    actual = _run_finder(
+        _cpp_utils.finder, f"{cpp_data}{os.sep}", port=8123, dry_run=True
+    )
+    assert expected == actual
+
+
+def test_finder_matches_upstream_when_getmtime_raises(tmp_path) -> None:
+    py_data = tmp_path / "py-case" / "data"
+    cpp_data = tmp_path / "cpp-case" / "data"
+    _build_simple_finder_tree(py_data)
+    _build_simple_finder_tree(cpp_data)
+
+    expected = _run_finder(
+        _py_utils.finder,
+        py_data,
+        dry_run=True,
+        patch_getmtime_error=True,
+    )
+    actual = _run_finder(
+        _cpp_utils.finder,
+        cpp_data,
+        dry_run=True,
+        patch_getmtime_error=True,
+    )
+    assert expected == actual
+
+
+def test_finder_matches_upstream_for_non_dry_run_side_effects(tmp_path) -> None:
+    py_data = tmp_path / "py-case" / "data"
+    cpp_data = tmp_path / "cpp-case" / "data"
+    _build_simple_finder_tree(py_data)
+    _build_simple_finder_tree(cpp_data)
+
+    expected = _run_finder(
+        _py_utils.finder,
+        py_data,
+        port=8234,
+        dry_run=False,
+        patch_runtime=True,
+    )
+    actual = _run_finder(
+        _cpp_utils.finder,
+        cpp_data,
+        port=8234,
+        dry_run=False,
+        patch_runtime=True,
+    )
+    assert expected == actual

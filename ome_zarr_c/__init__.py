@@ -15,7 +15,7 @@ from .format import (
     format_from_version,
     format_implementations,
 )
-from .utils import find_multiscales, splitall, strip_common_prefix
+from .utils import find_multiscales, finder, splitall, strip_common_prefix
 
 __all__ = [
     "Axes",
@@ -31,6 +31,7 @@ __all__ = [
     "detect_format",
     "dict_to_zarr",
     "find_multiscales",
+    "finder",
     "format_from_version",
     "format_implementations",
     "int_to_rgba",
