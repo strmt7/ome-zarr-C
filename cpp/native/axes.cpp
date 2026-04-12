@@ -41,6 +41,15 @@ int last_index(const std::vector<std::string>& values, const std::string& target
     return -1;
 }
 
+std::string list_index_not_found_message(const std::string& target) {
+#ifdef OME_ZARR_C_PY_LIST_INDEX_GENERIC_NOT_FOUND
+    static_cast<void>(target);
+    return "list.index(x): x not in list";
+#else
+    return "'" + target + "' is not in list";
+#endif
+}
+
 }  // namespace
 
 std::vector<AxisRecord> axes_to_dicts(const std::vector<AxisRecord>& axes) {
@@ -177,7 +186,7 @@ void validate_axes_types(const std::vector<AxisRecord>& axes) {
     if (channel_index >= 0) {
         const auto first_space = std::find(axis_types.begin(), axis_types.end(), "space");
         if (first_space == axis_types.end()) {
-            throw std::invalid_argument("'space' is not in list");
+            throw std::invalid_argument(list_index_not_found_message("space"));
         }
         const int first_space_index =
             static_cast<int>(std::distance(axis_types.begin(), first_space));
