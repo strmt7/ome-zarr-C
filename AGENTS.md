@@ -75,22 +75,35 @@ snapshot to C++ without modifying the snapshot itself.
     `.venv/bin/python scripts/check_native_cpp.py --all` and treat any
     embedded-Python execution pattern in `cpp/` as native-debt rather than
     fully converted C++ coverage.
+30. The pure-native C++ policy applies to the whole repository, including
+    existing converted code. `cpp/native/` is for real C++ semantics only,
+    `cpp/bindings/` is for minimal boundary glue only, and mixed files
+    elsewhere under `cpp/` are remediation debt.
+31. Do not count any converted surface as pure-native unless its semantics live
+    in `cpp/native/`. "Native-backed" and "pure-native" are different claims.
+32. If a change touches `cpp/`, run
+    `.venv/bin/python scripts/check_pure_native_cpp.py --enforce-pure-native-subtree --report-existing-debt`
+    and treat any Python-integration tokens outside `cpp/bindings/` as a hard
+    architectural problem to be removed, not documented away.
 
 ## Fast load order
 
 1. `docs/reference/architecture-first-porting.md`
-2. `docs/reference/ai-agent-context-routing.md`
-3. `docs/reference/porting-contract.md`
-4. `docs/reference/ai-agent-dos-and-donts.md`
-5. `docs/reference/immutable-parity-proof.md`
-6. `docs/reference/ai-agent-skills.md`
-7. the touched upstream implementation file under `source_code_v.0.15.0/`
-8. the matching wrapper, C++ file, and nearest test module
+2. `docs/reference/pure-native-cpp-policy.md`
+3. `docs/reference/ai-agent-context-routing.md`
+4. `docs/reference/porting-contract.md`
+5. `docs/reference/ai-agent-dos-and-donts.md`
+6. `docs/reference/immutable-parity-proof.md`
+7. `docs/reference/ai-agent-skills.md`
+8. the touched upstream implementation file under `source_code_v.0.15.0/`
+9. the matching wrapper, C++ file, and nearest test module
 
 ## Repository map
 
 - `source_code_v.0.15.0/`: immutable upstream reference snapshot
 - `cpp/`: C++ implementations
+- `cpp/native/`: pure-native semantics only
+- `cpp/bindings/`: minimal Python boundary glue only
 - `ome_zarr_c/`: Python compatibility wrappers
 - `tests/`: parity and regression tests
 - `docs/`: repo rules, routing, and benchmarks
@@ -113,6 +126,7 @@ timeout 180s .venv/bin/python -m pytest -q \
   tests/test_utils_equivalence.py \
   tests/test_writer_equivalence.py
 .venv/bin/python scripts/check_native_cpp.py --all
+.venv/bin/python scripts/check_pure_native_cpp.py --enforce-pure-native-subtree --report-existing-debt
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```

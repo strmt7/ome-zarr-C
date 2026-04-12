@@ -19,12 +19,17 @@ porting work.
 - Keep README and reference docs synchronized with what is actually verified.
 - Prefer `--no-build-isolation` in offline or sandboxed rebuilds once local
   build dependencies are already installed.
+- Treat existing mixed C++ files as debt. New work should move semantics toward
+  `cpp/native/` and keep Python glue in `cpp/bindings/` only.
 
 ## Don't
 
 - Do not edit `source_code_v.0.15.0/`.
 - Do not normalize, simplify, or "improve" upstream behavior during a parity
   port.
+- Do not present mixed pybind-heavy code as pure-native C++.
+- Do not add new semantic logic to a binding-heavy file just because the file
+  already exists.
 - Do not count a surface as complete if the public path is still blocked by the
   runtime.
 - Do not treat mocked store interactions as proof of real store parity.

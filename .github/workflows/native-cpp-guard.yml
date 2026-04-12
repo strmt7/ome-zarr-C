@@ -49,3 +49,10 @@ jobs:
           fi
 
           python scripts/check_native_cpp.py --base "$FROM_SHA" --head "$TO_SHA"
+
+      - name: Enforce pure-native layout and fail on mixed C++ debt
+        run: |
+          python scripts/check_pure_native_cpp.py \
+            --enforce-pure-native-subtree \
+            --report-existing-debt \
+            --fail-on-existing-debt

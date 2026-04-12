@@ -176,16 +176,7 @@ class FormatV04(FormatV03):
     def generate_well_dict(
         self, well: str, rows: list[str], columns: list[str]
     ) -> dict:
-        row, column = well.split("/")
-        if row not in rows:
-            raise ValueError("%s is not defined in the list of rows", row)
-        if column not in columns:
-            raise ValueError("%s is not defined in the list of columns", column)
-        return {
-            "path": str(well),
-            "rowIndex": rows.index(row),
-            "columnIndex": columns.index(column),
-        }
+        return dict(_core.generate_well_dict_v04(well, rows, columns))
 
     def validate_well_dict(
         self, well: dict, rows: list[str], columns: list[str]
