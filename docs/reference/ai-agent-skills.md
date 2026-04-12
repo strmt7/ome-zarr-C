@@ -15,4 +15,6 @@ Repo-local reusable skills live under `.agents/skills/`.
 - `cpp-parity-porting`: port a single upstream surface to C++/pybind11
 - `benchmark-first`: benchmark before claiming speedups
 
-Use the nearest matching skill before inventing a workflow from scratch.
+Use the nearest matching skill before inventing a workflow from scratch. For
+pushes made by an AI agent, `verification-loop` includes waiting for the remote
+workflow set on the pushed commit.

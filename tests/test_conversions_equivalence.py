@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_conversions = importlib.import_module("ome_zarr.conversions")
-_cpp_conversions = importlib.import_module("omero_zarr_c.conversions")
+_cpp_conversions = importlib.import_module("ome_zarr_c.conversions")
 
 py_int_to_rgba = _py_conversions.int_to_rgba
 py_int_to_rgba_255 = _py_conversions.int_to_rgba_255

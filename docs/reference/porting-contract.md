@@ -6,7 +6,7 @@ incrementally while keeping the imported upstream snapshot intact.
 ## Hard boundaries
 
 - `source_code_v.0.15.0/` is immutable reference code.
-- All new implementation work happens in `cpp/`, `omero_zarr_c/`, `tests/`,
+- All new implementation work happens in `cpp/`, `ome_zarr_c/`, `tests/`,
   `docs/`, and related repo-local support files.
 - Do not silently "improve" upstream behavior during a parity port.
 - If upstream has a quirk or bug and parity is the goal, preserve it until a

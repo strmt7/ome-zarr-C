@@ -7,7 +7,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "omero-zarr-c"
+name = "ome-zarr-c"
 version = "0.0.1"
 description = "Release-anchored C++/pybind11 parity port workspace for ome/ome-zarr-py."
 readme = "README.md"
@@ -16,12 +16,19 @@ license = "BSD-2-Clause"
 
 [project.optional-dependencies]
 dev = [
+    "dask>=2026.3.0",
+    "numpy>=2.4.4",
+    "pybind11>=3.0.3",
     "pytest>=9.0.3",
+    "rangehttpserver>=1.4.0",
     "ruff>=0.15.10",
+    "setuptools>=82.0.1",
+    "wheel>=0.46.3",
+    "zarr>=3.1.6",
 ]
 
 [project.urls]
-Repository = "https://github.com/strmt7/omero-zarr-C"
+Repository = "https://github.com/strmt7/ome-zarr-C"
 Upstream = "https://github.com/ome/ome-zarr-py"
 OriginalRelease = "https://github.com/ome/ome-zarr-py/releases/tag/v0.15.0"
 

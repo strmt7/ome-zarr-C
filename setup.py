@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 ext_modules = [
     Pybind11Extension(
-        "omero_zarr_c._core",
+        "ome_zarr_c._core",
         ["cpp/core.cpp"],
         cxx_std=17,
     ),

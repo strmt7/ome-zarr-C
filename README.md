@@ -41,12 +41,17 @@ never be edited directly.
 
 ## Current Status
 
-The first parity slice is in place:
+The current native parity slices are:
 
-- `ome_zarr_c.conversions` mirrors upstream integer/RGBA conversions in C++
-- `ome_zarr_c.axes` uses a C++ core plus a thin Python compatibility wrapper
-- differential tests currently cover the converted `conversions` and `axes`
-  surfaces against the frozen upstream implementation
+- `ome_zarr_c.conversions` for integer/RGBA conversion helpers
+- `ome_zarr_c.axes` for axes normalization and validation
+- `ome_zarr_c.csv` for `parse_csv_value`
+- `ome_zarr_c.utils` for `strip_common_prefix`
+- `ome_zarr_c.format` for version dispatch, metadata version lookup, well
+  validation, and coordinate transformation generation/validation
+
+Each converted surface is checked with differential tests against the frozen
+upstream implementation.
 
 ## Local Development
 
@@ -54,8 +59,7 @@ The first parity slice is in place:
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e .[dev]
-.venv/bin/python -m pytest tests/test_conversions_equivalence.py -q
-.venv/bin/python -m pytest tests/test_axes_equivalence.py -q
+.venv/bin/python -m pytest -q
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```
