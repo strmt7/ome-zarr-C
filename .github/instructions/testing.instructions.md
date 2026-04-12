@@ -6,6 +6,8 @@
 - For unbounded inputs, use boundary cases, randomized differential tests, and
   representative real-data checks.
 - Never claim broader parity or coverage than the executed tests actually prove.
+- When the proof depends on the frozen upstream snapshot, verify the committed
+  SHA256 manifest instead of assuming the tree stayed pristine.
 - When workflow or security-scan scope changes are made, verify the actual
   scanner config and not just the workflow trigger stanza.
 - Treat test code as production-quality repo code. Fix lint, CodeQL, and
@@ -16,3 +18,5 @@
 - If a read-only surface emits absolute paths as observable output, run the
   upstream and converted implementations against the same fixture path so the
   parity check measures behavior instead of fixture-location drift.
+- If `cpp/` changes are part of the claim, distinguish truly native behavior
+  from embedded-Python debt inside `cpp/`.

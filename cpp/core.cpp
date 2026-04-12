@@ -1,4 +1,3 @@
-#include <pybind11/eval.h>
 #include <pybind11/pybind11.h>
 
 #include <algorithm>
@@ -825,236 +824,220 @@ py::list info_lines(py::object node, bool stats = false) {
     return lines;
 }
 
-void finder(py::object input_path, int port = 8000, bool dry_run = false) {
-    py::object builtins = py::module_::import("builtins");
-    py::object csv_module = py::module_::import("csv");
-    py::object datetime_cls = py::module_::import("datetime").attr("datetime");
-    py::object http_server = py::module_::import("http.server");
-    py::object json = py::module_::import("json");
-    py::object os_path = py::module_::import("os").attr("path");
-    py::object path_cls = py::module_::import("pathlib").attr("Path");
-    py::object range_http_server = py::module_::import("RangeHTTPServer");
-    py::object urllib_parse = py::module_::import("urllib.parse");
-    py::object webbrowser = py::module_::import("webbrowser");
+py::list reader_matching_specs(const py::object& zarr) {
+    py::dict root_attrs = py::cast<py::dict>(zarr.attr("root_attrs"));
+    py::list matches;
 
-    py::tuple split = py::cast<py::tuple>(os_path.attr("split")(input_path));
-    py::object parent_path = split[0];
-    py::object server_dir = split[1];
-    if (py::len(server_dir) == 0) {
-        split = py::cast<py::tuple>(os_path.attr("split")(parent_path));
-        parent_path = split[0];
-        server_dir = split[1];
+    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("labels")))) {
+        matches.append(py::str("Labels"));
+    }
+    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("image-label")))) {
+        matches.append(py::str("Label"));
+    }
+    if (object_truthy(zarr.attr("zgroup")) &&
+        py::cast<bool>(root_attrs.attr("__contains__")(py::str("multiscales")))) {
+        matches.append(py::str("Multiscales"));
+    }
+    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("omero")))) {
+        matches.append(py::str("OMERO"));
+    }
+    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("plate")))) {
+        matches.append(py::str("Plate"));
+    }
+    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("well")))) {
+        matches.append(py::str("Well"));
     }
 
-    // Mirror the upstream recursive walk exactly: a directory with local
-    // metadata is treated as a terminal OME-Zarr root, otherwise we recurse
-    // into child directories and accumulate any discovered multiscale images.
-    std::function<py::list(py::object)> walk = [&](py::object path) -> py::list {
-        py::object dot_zattrs = true_divide(path, py::str(".zattrs"));
-        py::object zarr_json = true_divide(path, py::str("zarr.json"));
-        if (py::cast<bool>(dot_zattrs.attr("exists")()) ||
-            py::cast<bool>(zarr_json.attr("exists")())) {
-            return find_multiscales(path);
-        }
-
-        py::list results;
-        for (const py::handle& child_handle : path.attr("iterdir")()) {
-            py::object child = py::reinterpret_borrow<py::object>(child_handle);
-            py::object child_dot_zattrs = true_divide(child, py::str(".zattrs"));
-            py::object child_zarr_json = true_divide(child, py::str("zarr.json"));
-            if (py::cast<bool>(child_dot_zattrs.attr("exists")()) ||
-                py::cast<bool>(child_zarr_json.attr("exists")())) {
-                for (const py::handle& item_handle : find_multiscales(child)) {
-                    results.append(py::reinterpret_borrow<py::object>(item_handle));
-                }
-            } else if (py::cast<bool>(child.attr("is_dir")())) {
-                for (const py::handle& item_handle : walk(child)) {
-                    results.append(py::reinterpret_borrow<py::object>(item_handle));
-                }
-            }
-        }
-        return results;
-    };
-
-    py::object url = py::none();
-    py::list zarrs = walk(path_cls(input_path));
-    if (py::len(zarrs) == 0) {
-        builtins.attr("print")("No OME-Zarr files found in", input_path);
-        return;
-    }
-
-    // Build the BioFile Finder CSV using the same relative-path and timestamp
-    // semantics as upstream, including empty-name fallback and silent OSError
-    // handling when modification times cannot be read.
-    py::list col_names;
-    for (const char* name : {"File Path", "File Name", "Folders", "Uploaded"}) {
-        col_names.append(py::str(name));
-    }
-
-    py::object bff_csv = os_path.attr("join")(input_path, py::str("biofile_finder.csv"));
-    py::object csvfile =
-        builtins.attr("open")(bff_csv, py::str("w"), py::arg("newline") = py::str(""));
-    try {
-        py::object writer = csv_module.attr("writer")(csvfile, py::arg("delimiter") = ",");
-        writer.attr("writerow")(col_names);
-
-        for (const py::handle& image_handle : zarrs) {
-            py::list zarr_img = py::cast<py::list>(image_handle);
-            py::object relpath = os_path.attr("relpath")(zarr_img[0], input_path);
-            py::str rel_url =
-                py::cast<py::str>(py::str("/").attr("join")(splitall(relpath)));
-            const std::string file_path =
-                "http://localhost:" + std::to_string(port) + "/" +
-                py::cast<std::string>(server_dir) + "/" +
-                py::cast<std::string>(rel_url);
-
-            py::object name = zarr_img[1];
-            if (!object_truthy(name)) {
-                name = os_path.attr("basename")(zarr_img[0]);
-            }
-
-            py::object folders_path = os_path.attr("relpath")(zarr_img[2], input_path);
-            py::str folders =
-                py::cast<py::str>(py::str(",").attr("join")(splitall(folders_path)));
-
-            py::object timestamp = py::str("");
-            try {
-                py::object mtime = os_path.attr("getmtime")(zarr_img[0]);
-                timestamp = datetime_cls.attr("fromtimestamp")(mtime).attr("strftime")(
-                    py::str("%Y-%m-%d %H:%M:%S.%Z"));
-            } catch (py::error_already_set& ex) {
-                if (!ex.matches(PyExc_OSError)) {
-                    throw;
-                }
-            }
-
-            py::list row;
-            row.append(py::str(file_path));
-            row.append(name);
-            row.append(folders);
-            row.append(timestamp);
-            writer.attr("writerow")(row);
-        }
-        csvfile.attr("close")();
-    } catch (...) {
-        try {
-            csvfile.attr("close")();
-        } catch (...) {
-        }
-        throw;
-    }
-
-    py::dict source;
-    source["uri"] = py::str(
-        "http://localhost:" + std::to_string(port) + "/" +
-        py::cast<std::string>(server_dir) + "/biofile_finder.csv");
-    source["type"] = py::str("csv");
-    source["name"] = py::str("biofile_finder.csv");
-    py::object quoted_source = urllib_parse.attr("quote")(json.attr("dumps")(source));
-    url = py::str(
-              "https://bff.allencell.org/app?source=" +
-              py::cast<std::string>(quoted_source)) +
-          py::str("&v=2");
-
-    // The generated handler intentionally defers directory assignment until
-    // request translation so dry-run tests can instantiate the class without
-    // going through the normal HTTP server constructor.
-    py::dict scope;
-    scope["RangeRequestHandler"] = range_http_server.attr("RangeRequestHandler");
-    scope["SimpleHTTPRequestHandler"] = http_server.attr("SimpleHTTPRequestHandler");
-    scope["parent_path"] = parent_path;
-    py::exec(
-        R"PY(
-class CORSRequestHandler(RangeRequestHandler):
-    def end_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        SimpleHTTPRequestHandler.end_headers(self)
-
-    def translate_path(self, path):
-        self.directory = parent_path
-        super_path = super().translate_path(path)
-        return super_path
-)PY",
-        scope,
-        scope);
-
-    if (dry_run) {
-        return;
-    }
-
-    webbrowser.attr("open")(url);
-    http_server.attr("test")(
-        scope["CORSRequestHandler"], http_server.attr("HTTPServer"), py::arg("port") = port);
+    return matches;
 }
 
-void view(py::object input_path,
-          int port = 8000,
-          bool dry_run = false,
-          bool force = false) {
-    py::object builtins = py::module_::import("builtins");
-    py::object http_server = py::module_::import("http.server");
-    py::object os_path = py::module_::import("os").attr("path");
-    py::object path_cls = py::module_::import("pathlib").attr("Path");
-    py::object range_http_server = py::module_::import("RangeHTTPServer");
-    py::object webbrowser = py::module_::import("webbrowser");
+py::object reader_labels_names(const py::dict& root_attrs) {
+    return root_attrs.attr("get")(py::str("labels"), py::list());
+}
 
-    if (!force) {
-        py::list zarrs;
-        py::object path_obj = path_cls(input_path);
-        if (py::cast<bool>(true_divide(path_obj, py::str(".zattrs")).attr("exists")()) ||
-            py::cast<bool>(true_divide(path_obj, py::str("zarr.json")).attr("exists")())) {
-            zarrs = find_multiscales(path_obj);
+py::str reader_node_repr(const py::object& zarr, bool visible) {
+    std::string suffix;
+    if (!visible) {
+        suffix = " (hidden)";
+    }
+    return py::str(py::cast<std::string>(py::str(zarr)) + suffix);
+}
+
+py::dict reader_label_payload(const py::dict& root_attrs,
+                              const py::object& name,
+                              bool visible) {
+    py::dict payload;
+    py::object image_label = root_attrs.attr("get")(py::str("image-label"), py::dict());
+    py::object source = image_label.attr("get")(py::str("source"), py::dict());
+    payload["parent_image"] = source.attr("get")(py::str("image"), py::none());
+
+    py::dict colors;
+    py::object color_list = image_label.attr("get")(py::str("colors"), py::list());
+    if (object_truthy(color_list)) {
+        for (const py::handle& color_handle : color_list) {
+            py::object color = py::reinterpret_borrow<py::object>(color_handle);
+            try {
+                py::object label_value = color.attr("__getitem__")(py::str("label-value"));
+                py::object rgba = color.attr("get")(py::str("rgba"), py::none());
+                if (!rgba.is_none() && object_truthy(rgba)) {
+                    py::list normalized;
+                    for (const py::handle& entry : rgba) {
+                        normalized.append(true_divide(entry, py::int_(255)));
+                    }
+                    rgba = normalized;
+                }
+
+                if (PyBool_Check(label_value.ptr()) || PyLong_Check(label_value.ptr())) {
+                    colors[label_value] = rgba;
+                }
+            } catch (...) {
+            }
         }
-        if (py::len(zarrs) == 0) {
-            builtins.attr("print")(
-                py::str("No OME-Zarr images found in ") + py::str(input_path) +
-                py::str(". Try $ ome_zarr finder ") + py::str(input_path) +
-                py::str(" or use -f to force open in browser."));
-            return;
+    }
+
+    py::dict properties;
+    py::object props_list = image_label.attr("get")(py::str("properties"), py::list());
+    if (object_truthy(props_list)) {
+        for (const py::handle& props_handle : props_list) {
+            py::object props = py::reinterpret_borrow<py::object>(props_handle);
+            py::object label_value = props.attr("__getitem__")(py::str("label-value"));
+            py::dict props_copy = py::dict(props);
+            props_copy.attr("pop")(py::str("label-value"));
+            properties[label_value] = props_copy;
         }
     }
 
-    py::tuple split = py::cast<py::tuple>(os_path.attr("split")(input_path));
-    py::object parent_dir = split[0];
-    py::object image_name = split[1];
-    if (py::len(image_name) == 0) {
-        split = py::cast<py::tuple>(os_path.attr("split")(parent_dir));
-        parent_dir = split[0];
-        image_name = split[1];
+    py::dict metadata;
+    metadata["visible"] = py::bool_(visible);
+    metadata["name"] = name;
+    metadata["color"] = colors;
+
+    py::dict nested_metadata;
+    nested_metadata["image"] = root_attrs.attr("get")(py::str("image"), py::dict());
+    nested_metadata["path"] = name;
+    metadata["metadata"] = nested_metadata;
+
+    payload["metadata"] = metadata;
+    payload["properties"] = properties;
+    return payload;
+}
+
+py::dict reader_multiscales_payload(const py::dict& root_attrs) {
+    py::dict payload;
+    py::list multiscales =
+        py::cast<py::list>(root_attrs.attr("get")(py::str("multiscales"), py::list()));
+    py::object first = multiscales[0];
+    py::object datasets = first.attr("__getitem__")(py::str("datasets"));
+    py::object axes = first.attr("get")(py::str("axes"), py::none());
+
+    payload["version"] = first.attr("get")(py::str("version"), py::str("0.1"));
+    payload["datasets"] = datasets;
+    payload["axes"] = axes;
+    payload["name"] = first.attr("get")(py::str("name"), py::none());
+
+    py::list paths;
+    py::list transformations;
+    bool any_transformations = false;
+    for (const py::handle& dataset_handle : datasets) {
+        py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
+        paths.append(dataset.attr("__getitem__")(py::str("path")));
+        py::object transform =
+            dataset.attr("get")(py::str("coordinateTransformations"), py::none());
+        transformations.append(transform);
+        any_transformations = any_transformations || !transform.is_none();
     }
-    parent_dir = py::str(parent_dir);
-
-    py::str url = py::str("https://ome.github.io/ome-ngff-validator/?source=http://localhost:") +
-                  py::str(std::to_string(port)) +
-                  py::str("/") +
-                  py::str(image_name);
-
-    py::dict scope;
-    scope["RangeRequestHandler"] = range_http_server.attr("RangeRequestHandler");
-    scope["SimpleHTTPRequestHandler"] = http_server.attr("SimpleHTTPRequestHandler");
-    scope["parent_dir"] = parent_dir;
-    py::exec(
-        R"PY(
-class CORSRequestHandler(RangeRequestHandler):
-    def end_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        SimpleHTTPRequestHandler.end_headers(self)
-
-    def translate_path(self, path):
-        self.directory = parent_dir
-        super_path = super().translate_path(path)
-        return super_path
-)PY",
-        scope,
-        scope);
-
-    if (dry_run) {
-        return;
+    payload["paths"] = paths;
+    if (any_transformations) {
+        payload["coordinateTransformations"] = transformations;
     }
 
-    webbrowser.attr("open")(url);
-    http_server.attr("test")(
-        scope["CORSRequestHandler"], http_server.attr("HTTPServer"), py::arg("port") = port);
+    return payload;
+}
+
+py::dict reader_omero_payload(const py::dict& image_data, bool node_visible) {
+    std::string model = "unknown";
+    py::object rdefs = image_data.attr("get")(py::str("rdefs"), py::dict());
+    if (object_truthy(rdefs)) {
+        model = py::cast<std::string>(rdefs.attr("get")(py::str("model"), py::str("unset")));
+    }
+
+    py::object channels = image_data.attr("get")(py::str("channels"), py::none());
+    const py::size_t channel_count = py::len(channels);
+
+    py::list colormaps;
+    py::list contrast_limits;
+    py::list names;
+    py::list visibles;
+    for (py::size_t idx = 0; idx < channel_count; ++idx) {
+        contrast_limits.append(py::none());
+        names.append(py::str("channel_" + std::to_string(idx)));
+        visibles.append(py::bool_(true));
+    }
+
+    py::object contrast_limits_value = contrast_limits;
+    for (py::size_t idx = 0; idx < channel_count; ++idx) {
+        py::object channel = channels.attr("__getitem__")(py::int_(idx));
+
+        py::object color = channel.attr("get")(py::str("color"), py::none());
+        if (!color.is_none()) {
+            const std::string color_hex = py::cast<std::string>(color);
+            py::list rgb;
+            for (int offset = 0; offset < 6; offset += 2) {
+                rgb.append(py::float_(static_cast<double>(
+                    std::stoi(color_hex.substr(offset, 2), nullptr, 16)) /
+                                      255.0));
+            }
+            if (model == "greyscale") {
+                rgb = py::list();
+                rgb.append(py::int_(1));
+                rgb.append(py::int_(1));
+                rgb.append(py::int_(1));
+            }
+            py::list colormap;
+            py::list zero_rgb;
+            zero_rgb.append(py::int_(0));
+            zero_rgb.append(py::int_(0));
+            zero_rgb.append(py::int_(0));
+            colormap.append(zero_rgb);
+            colormap.append(rgb);
+            colormaps.append(colormap);
+        }
+
+        py::object label = channel.attr("get")(py::str("label"), py::none());
+        if (!label.is_none()) {
+            names[idx] = label;
+        }
+
+        py::object active = channel.attr("get")(py::str("active"), py::none());
+        if (!active.is_none()) {
+            if (object_truthy(active)) {
+                visibles[idx] = py::bool_(node_visible);
+            } else {
+                visibles[idx] = active;
+            }
+        }
+
+        py::object window = channel.attr("get")(py::str("window"), py::none());
+        if (!window.is_none()) {
+            py::object start = window.attr("get")(py::str("start"), py::none());
+            py::object end = window.attr("get")(py::str("end"), py::none());
+            if (start.is_none() || end.is_none()) {
+                contrast_limits_value = py::none();
+            } else if (!contrast_limits_value.is_none()) {
+                py::list limits;
+                limits.append(start);
+                limits.append(end);
+                contrast_limits[idx] = limits;
+            }
+        }
+    }
+
+    py::dict metadata;
+    metadata["channel_names"] = names;
+    metadata["visible"] = visibles;
+    metadata["contrast_limits"] = contrast_limits_value;
+    metadata["colormap"] = colormaps;
+    return metadata;
 }
 
 py::object get_valid_axes(
@@ -2207,38 +2190,6 @@ void validate_well_dict_v01(py::dict well) {
     }
 }
 
-py::dict generate_well_dict_v04(const std::string& well,
-                                const py::sequence& rows,
-                                const py::sequence& columns) {
-    py::dict locals;
-    locals["well"] = py::str(well);
-    py::exec("row, column = well.split('/')", py::globals(), locals);
-    const std::string row = py::cast<std::string>(locals["row"]);
-    const std::string column = py::cast<std::string>(locals["column"]);
-
-    py::list rows_list = py::list(rows);
-    py::list columns_list = py::list(columns);
-
-    if (!rows_list.contains(py::str(row))) {
-        py::tuple args(2);
-        args[0] = py::str("%s is not defined in the list of rows");
-        args[1] = py::str(row);
-        raise_value_error_args(args);
-    }
-    if (!columns_list.contains(py::str(column))) {
-        py::tuple args(2);
-        args[0] = py::str("%s is not defined in the list of columns");
-        args[1] = py::str(column);
-        raise_value_error_args(args);
-    }
-
-    py::dict result;
-    result["path"] = py::str(well);
-    result["rowIndex"] = rows_list.attr("index")(py::str(row));
-    result["columnIndex"] = columns_list.attr("index")(py::str(column));
-    return result;
-}
-
 void validate_well_dict_v04(py::dict well,
                             const py::sequence& rows,
                             const py::sequence& columns) {
@@ -2460,8 +2411,12 @@ PYBIND11_MODULE(_core, m) {
     m.def("splitall", &splitall);
     m.def("find_multiscales", &find_multiscales);
     m.def("info_lines", &info_lines, py::arg("node"), py::arg("stats") = false);
-    m.def("finder", &finder, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false);
-    m.def("view", &view, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false, py::arg("force") = false);
+    m.def("reader_matching_specs", &reader_matching_specs, py::arg("zarr"));
+    m.def("reader_labels_names", &reader_labels_names, py::arg("root_attrs"));
+    m.def("reader_node_repr", &reader_node_repr, py::arg("zarr"), py::arg("visible"));
+    m.def("reader_label_payload", &reader_label_payload, py::arg("root_attrs"), py::arg("name"), py::arg("visible"));
+    m.def("reader_multiscales_payload", &reader_multiscales_payload, py::arg("root_attrs"));
+    m.def("reader_omero_payload", &reader_omero_payload, py::arg("image_data"), py::arg("node_visible"));
     m.def("_get_valid_axes", &get_valid_axes, py::arg("ndim") = py::none(), py::arg("axes") = py::none(), py::arg("fmt"));
     m.def("_extract_dims_from_axes", &extract_dims_from_axes, py::arg("axes") = py::none());
     m.def("_retuple", &retuple, py::arg("chunks"), py::arg("shape"));
@@ -2496,7 +2451,6 @@ PYBIND11_MODULE(_core, m) {
     m.def("format_zarr_format", &format_zarr_format, py::arg("version"));
     m.def("format_chunk_key_encoding", &format_chunk_key_encoding, py::arg("version"));
     m.def("validate_well_dict_v01", &validate_well_dict_v01);
-    m.def("generate_well_dict_v04", &generate_well_dict_v04);
     m.def("validate_well_dict_v04", &validate_well_dict_v04);
     m.def("generate_coordinate_transformations", &generate_coordinate_transformations);
     m.def("validate_coordinate_transformations", &validate_coordinate_transformations);

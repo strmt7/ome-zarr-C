@@ -15,6 +15,17 @@ from .format import (
     format_from_version,
     format_implementations,
 )
+from .reader import (
+    OMERO,
+    Label,
+    Labels,
+    Multiscales,
+    Node,
+    Plate,
+    Reader,
+    Spec,
+    Well,
+)
 from .utils import find_multiscales, finder, info, splitall, strip_common_prefix, view
 
 __all__ = [
@@ -28,6 +39,15 @@ __all__ = [
     "FormatV04",
     "FormatV05",
     "KNOWN_AXES",
+    "Label",
+    "Labels",
+    "Multiscales",
+    "Node",
+    "OMERO",
+    "Plate",
+    "Reader",
+    "Spec",
+    "Well",
     "detect_format",
     "dict_to_zarr",
     "find_multiscales",

@@ -3,6 +3,7 @@
 - Do not modify the frozen upstream snapshot under `source_code_v.0.15.0/`.
 - Port one small upstream surface at a time.
 - Keep Python wrappers as thin compatibility layers.
+- Verify the frozen snapshot manifest before claiming upstream immutability.
 - Preserve upstream exceptions and edge-case behavior unless an intentional
   divergence is explicitly documented.
 - If upstream behavior depends on interpreter-generated exception text, use the
@@ -17,6 +18,9 @@
   the real side effect.
 - Do not normalize or "improve" upstream behavior for convenience. Parity means
   preserving the same behavior unless a divergence is explicitly documented.
+- Do not introduce embedded-Python execution patterns such as `py::exec`,
+  `py::eval`, or raw Python source blocks into `cpp/`. If such debt already
+  exists, do not count the affected surface as fully native-converted coverage.
 - If `py::exec` defines Python classes whose methods reference runtime names,
   use a shared scope for globals and locals so those names remain available
   when the methods execute later.

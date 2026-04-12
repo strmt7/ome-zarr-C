@@ -11,16 +11,20 @@ Use this skill after any non-trivial change.
 ## Verification order
 
 1. Relevant parity suites under `tests/`
-2. `ruff check .`
-3. `ruff format --check .`
-4. any module-specific build or benchmark check required by the touched files
+2. `scripts/frozen_source_manifest.py --verify` when the claim depends on the
+   frozen snapshot remaining exact
+3. `scripts/check_native_cpp.py --all` when `cpp/` changed or a native-C++
+   claim is being made
+4. `ruff check .`
+5. `ruff format --check .`
+6. any module-specific build or benchmark check required by the touched files
    and, after native-code changes, rebuild the editable install first
-5. after an AI-agent push, wait for the GitHub workflows on that pushed commit
+7. after an AI-agent push, wait for the GitHub workflows on that pushed commit
    and fix failures before considering the change finished
-6. if workflows, CodeQL scope, or pinned tool versions changed, load
+8. if workflows, CodeQL scope, or pinned tool versions changed, load
    `workflow-supply-chain-maintenance` and verify the exact scanner config or
    version source that justified the edit
-7. when tests add shared helpers, ensure they import cleanly in both focused
+9. when tests add shared helpers, ensure they import cleanly in both focused
    runs and whole-suite collection before treating the lane as green
 
 ## Reporting rule

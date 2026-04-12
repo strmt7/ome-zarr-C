@@ -49,3 +49,7 @@ jobs:
           fi
 
           echo "Frozen snapshot unchanged."
+
+      - name: Verify frozen snapshot manifest
+        run: |
+          python scripts/frozen_source_manifest.py --verify
