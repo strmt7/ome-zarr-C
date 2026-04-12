@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -13,8 +14,14 @@
 
 #include "native/conversions.hpp"
 #include "native/csv.hpp"
+#include "native/data.hpp"
 #include "native/dask_utils.hpp"
+#include "native/axes.hpp"
 #include "native/format.hpp"
+#include "native/reader.hpp"
+#include "native/scale.hpp"
+#include "native/utils.hpp"
+#include "native/writer.hpp"
 
 namespace py = pybind11;
 
@@ -48,6 +55,40 @@ std::vector<std::string> axis_names(const py::sequence& axes) {
     }
 
     return names;
+}
+
+std::vector<ome_zarr_c::native_code::AxisRecord> axis_records_from_sequence(
+    const py::sequence& axes) {
+    std::vector<ome_zarr_c::native_code::AxisRecord> records;
+    records.reserve(py::len(axes));
+
+    for (const py::handle& axis_handle : axes) {
+        ome_zarr_c::native_code::AxisRecord record{};
+        if (py::isinstance<py::str>(axis_handle)) {
+            record.has_name = true;
+            record.name = py::cast<std::string>(axis_handle);
+            record.has_type = false;
+            record.type = "";
+            record.axis_repr = "";
+            record.type_repr = "None";
+        } else {
+            py::dict axis = py::cast<py::dict>(axis_handle);
+            record.has_name = axis.contains("name");
+            if (record.has_name) {
+                record.name = py::cast<std::string>(axis["name"]);
+            }
+            py::object axis_type = axis.attr("get")("type");
+            record.has_type = !axis_type.is_none();
+            if (record.has_type) {
+                record.type = py::cast<std::string>(axis_type);
+            }
+            record.axis_repr = repr_object(axis);
+            record.type_repr = repr_object(axis_type);
+        }
+        records.push_back(std::move(record));
+    }
+
+    return records;
 }
 
 [[noreturn]] void raise_plain_exception(const std::string& message) {
@@ -219,149 +260,28 @@ py::list axes_to_dicts(const py::sequence& axes) {
 
 py::list get_names(const py::sequence& axes) {
     py::list result;
-    for (const auto& name : axis_names(axes)) {
+    const auto names = ome_zarr_c::native_code::get_names(axis_records_from_sequence(axes));
+    for (const auto& name : names) {
         result.append(py::str(name));
     }
     return result;
 }
 
 void validate_03(const py::sequence& axes) {
-    const auto names = axis_names(axes);
-    const auto len = names.size();
-
-    auto tuple_repr = [&names]() {
-        std::ostringstream os;
-        os << "(";
-        for (std::size_t i = 0; i < names.size(); ++i) {
-            if (i > 0) {
-                os << ", ";
-            }
-            os << "'" << names[i] << "'";
-        }
-        if (names.size() == 1) {
-            os << ",";
-        }
-        os << ")";
-        return os.str();
-    };
-
-    if (len == 2) {
-        if (!(names[0] == "y" && names[1] == "x")) {
-            throw py::value_error(
-                "2D data must have axes ('y', 'x') " + tuple_repr());
-        }
-        return;
-    }
-
-    if (len == 3) {
-        const bool valid =
-            (names[0] == "z" && names[1] == "y" && names[2] == "x") ||
-            (names[0] == "c" && names[1] == "y" && names[2] == "x") ||
-            (names[0] == "t" && names[1] == "y" && names[2] == "x");
-        if (!valid) {
-            throw py::value_error(
-                "3D data must have axes ('z', 'y', 'x') or ('c', 'y', 'x')"
-                " or ('t', 'y', 'x'), not " +
-                tuple_repr());
-        }
-        return;
-    }
-
-    if (len == 4) {
-        const bool valid =
-            (names[0] == "t" && names[1] == "z" && names[2] == "y" &&
-             names[3] == "x") ||
-            (names[0] == "c" && names[1] == "z" && names[2] == "y" &&
-             names[3] == "x") ||
-            (names[0] == "t" && names[1] == "c" && names[2] == "y" &&
-             names[3] == "x");
-        if (!valid) {
-            throw py::value_error(
-                "4D data must have axes tzyx or czyx or tcyx");
-        }
-        return;
-    }
-
-    const bool valid_5d = names == std::vector<std::string>{"t", "c", "z", "y", "x"};
-    if (!valid_5d) {
-        throw py::value_error(
-            "5D data must have axes ('t', 'c', 'z', 'y', 'x')");
+    try {
+        const auto names =
+            ome_zarr_c::native_code::get_names(axis_records_from_sequence(axes));
+        ome_zarr_c::native_code::validate_03(names);
+    } catch (const std::invalid_argument& exc) {
+        throw py::value_error(exc.what());
     }
 }
 
 void validate_axes_types(const py::sequence& axes) {
-    std::vector<py::object> axes_types_objects;
-    axes_types_objects.reserve(py::len(axes));
-
-    std::vector<std::string> axes_types;
-    axes_types.reserve(py::len(axes));
-
-    for (const py::handle& axis_handle : axes) {
-        py::dict axis = py::cast<py::dict>(axis_handle);
-        py::object axis_type = axis.attr("get")("type");
-        axes_types_objects.push_back(axis_type);
-        if (axis_type.is_none()) {
-            axes_types.emplace_back("__NONE__");
-        } else {
-            axes_types.push_back(py::cast<std::string>(axis_type));
-        }
-    }
-
-    const std::vector<std::string> known_types = {"space", "channel", "time"};
-    std::vector<std::string> unknown_types;
-    for (std::size_t i = 0; i < axes_types.size(); ++i) {
-        const auto& axis_type = axes_types[i];
-        if (std::find(known_types.begin(), known_types.end(), axis_type) ==
-            known_types.end()) {
-            unknown_types.push_back(
-                py::cast<std::string>(py::repr(axes_types_objects[i])));
-        }
-    }
-
-    if (unknown_types.size() > 1) {
-        std::ostringstream os;
-        os << "[";
-        for (std::size_t i = 0; i < unknown_types.size(); ++i) {
-            if (i > 0) {
-                os << ", ";
-            }
-            os << unknown_types[i];
-        }
-        os << "]";
-        throw py::value_error(
-            "Too many unknown axes types. 1 allowed, found: " + os.str());
-    }
-
-    auto last_index = [&axes_types](const std::string& needle) {
-        for (std::size_t i = axes_types.size(); i-- > 0;) {
-            if (axes_types[i] == needle) {
-                return static_cast<int>(i);
-            }
-        }
-        return -1;
-    };
-
-    if (last_index("time") > 0) {
-        throw py::value_error("'time' axis must be first dimension only");
-    }
-
-    const auto channel_count =
-        static_cast<int>(std::count(axes_types.begin(), axes_types.end(), "channel"));
-    if (channel_count > 1) {
-        throw py::value_error("Only 1 axis can be type 'channel'");
-    }
-
-    const int channel_last_index = last_index("channel");
-    if (channel_last_index >= 0) {
-        py::list axes_types_list;
-        for (const auto& axis_type : axes_types) {
-            axes_types_list.append(py::str(axis_type));
-        }
-        const int first_space_index =
-            py::cast<int>(axes_types_list.attr("index")(py::str("space")));
-        if (channel_last_index > first_space_index) {
-            throw py::value_error("'space' axes must come after 'channel'");
-        }
+    try {
+        ome_zarr_c::native_code::validate_axes_types(axis_records_from_sequence(axes));
+    } catch (const std::invalid_argument& exc) {
+        throw py::value_error(exc.what());
     }
 }
 
@@ -550,78 +470,70 @@ void csv_to_zarr(const std::string& csv_path,
 }
 
 py::str strip_common_prefix(py::list parts) {
-    if (py::len(parts) == 0) {
-        raise_plain_exception("No common prefix:\n");
-    }
-
-    std::size_t min_length = static_cast<std::size_t>(-1);
+    std::vector<std::vector<std::string>> native_parts;
+    native_parts.reserve(py::len(parts));
     for (const py::handle& part_handle : parts) {
         py::list part = py::cast<py::list>(part_handle);
-        min_length = std::min(min_length, static_cast<std::size_t>(py::len(part)));
+        std::vector<std::string> native_part;
+        native_part.reserve(py::len(part));
+        for (const py::handle& token : part) {
+            native_part.push_back(py::cast<std::string>(token));
+        }
+        native_parts.push_back(std::move(native_part));
     }
 
-    std::size_t first_mismatch = 0;
-    for (std::size_t idx = 0; idx < min_length; ++idx) {
-        std::string candidate;
-        bool all_equal = true;
-        for (std::size_t path_index = 0; path_index < static_cast<std::size_t>(py::len(parts));
-             ++path_index) {
-            py::list part = py::cast<py::list>(parts[path_index]);
-            const std::string current = py::cast<std::string>(part[idx]);
-            if (path_index == 0) {
-                candidate = current;
-            } else if (current != candidate) {
-                all_equal = false;
-                break;
+    try {
+        const auto common = ome_zarr_c::native_code::strip_common_prefix(native_parts);
+        for (std::size_t path_index = 0; path_index < native_parts.size(); ++path_index) {
+            py::list trimmed;
+            for (const auto& token : native_parts[path_index]) {
+                trimmed.append(py::str(token));
             }
+            parts[path_index] = trimmed;
         }
-        if (!all_equal) {
-            break;
+        return py::str(common);
+    } catch (const std::runtime_error& exc) {
+        const std::string message = exc.what();
+        if (message.empty()) {
+            raise_plain_exception(repr_joined_lines(parts));
         }
-        first_mismatch += 1;
+        raise_plain_exception(message);
     }
-
-    if (first_mismatch == 0) {
-        raise_plain_exception(repr_joined_lines(parts));
-    }
-
-    py::list first_path = py::cast<py::list>(parts[0]);
-    py::str common = py::cast<py::str>(first_path[first_mismatch - 1]);
-
-    for (std::size_t idx = 0; idx < static_cast<std::size_t>(py::len(parts)); ++idx) {
-        py::list path = py::cast<py::list>(parts[idx]);
-        py::list trimmed;
-        for (std::size_t offset = first_mismatch - 1;
-             offset < static_cast<std::size_t>(py::len(path));
-             ++offset) {
-            trimmed.append(path[offset]);
-        }
-        parts[idx] = trimmed;
-    }
-
-    return common;
 }
 
 py::list splitall(py::object path) {
-    py::list allparts;
     py::object current = path;
-    py::object os_path = py::module_::import("os").attr("path");
+    if (!py::isinstance<py::str>(path)) {
+        py::object os_path = py::module_::import("os").attr("path");
+        py::tuple parts = py::cast<py::tuple>(os_path.attr("split")(path));
+        if (objects_equal(parts[0], path)) {
+            py::list direct;
+            direct.append(parts[0]);
+            return direct;
+        }
+        if (objects_equal(parts[1], path)) {
+            py::list direct;
+            direct.append(parts[1]);
+            return direct;
+        }
 
-    while (true) {
-        py::tuple parts = py::cast<py::tuple>(os_path.attr("split")(current));
-        if (objects_equal(parts[0], current)) {
-            allparts.attr("insert")(0, parts[0]);
-            break;
+        py::list result;
+        const auto native_parts = ome_zarr_c::native_code::splitall(
+            py::cast<std::string>(py::str(parts[0])));
+        for (const auto& part : native_parts) {
+            result.append(py::str(part));
         }
-        if (objects_equal(parts[1], current)) {
-            allparts.attr("insert")(0, parts[1]);
-            break;
-        }
-        current = parts[0];
-        allparts.attr("insert")(0, parts[1]);
+        result.append(py::str(parts[1]));
+        return result;
     }
 
-    return allparts;
+    py::list result;
+    const auto native_parts =
+        ome_zarr_c::native_code::splitall(py::cast<std::string>(py::str(current)));
+    for (const auto& part : native_parts) {
+        result.append(py::str(part));
+    }
+    return result;
 }
 
 py::list find_multiscales(py::object path_to_zattrs) {
@@ -770,28 +682,26 @@ py::list info_lines(py::object node, bool stats = false) {
 
 py::list reader_matching_specs(const py::object& zarr) {
     py::dict root_attrs = py::cast<py::dict>(zarr.attr("root_attrs"));
+    ome_zarr_c::native_code::ReaderSpecFlags flags{};
+    flags.has_labels =
+        py::cast<bool>(root_attrs.attr("__contains__")(py::str("labels")));
+    flags.has_image_label =
+        py::cast<bool>(root_attrs.attr("__contains__")(py::str("image-label")));
+    flags.has_zgroup = object_truthy(zarr.attr("zgroup"));
+    flags.has_multiscales =
+        py::cast<bool>(root_attrs.attr("__contains__")(py::str("multiscales")));
+    flags.has_omero =
+        py::cast<bool>(root_attrs.attr("__contains__")(py::str("omero")));
+    flags.has_plate =
+        py::cast<bool>(root_attrs.attr("__contains__")(py::str("plate")));
+    flags.has_well =
+        py::cast<bool>(root_attrs.attr("__contains__")(py::str("well")));
+    const auto native_matches = ome_zarr_c::native_code::reader_matching_specs(flags);
+
     py::list matches;
-
-    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("labels")))) {
-        matches.append(py::str("Labels"));
+    for (const auto& match : native_matches) {
+        matches.append(py::str(match));
     }
-    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("image-label")))) {
-        matches.append(py::str("Label"));
-    }
-    if (object_truthy(zarr.attr("zgroup")) &&
-        py::cast<bool>(root_attrs.attr("__contains__")(py::str("multiscales")))) {
-        matches.append(py::str("Multiscales"));
-    }
-    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("omero")))) {
-        matches.append(py::str("OMERO"));
-    }
-    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("plate")))) {
-        matches.append(py::str("Plate"));
-    }
-    if (py::cast<bool>(root_attrs.attr("__contains__")(py::str("well")))) {
-        matches.append(py::str("Well"));
-    }
-
     return matches;
 }
 
@@ -800,11 +710,9 @@ py::object reader_labels_names(const py::dict& root_attrs) {
 }
 
 py::str reader_node_repr(const py::object& zarr, bool visible) {
-    std::string suffix;
-    if (!visible) {
-        suffix = " (hidden)";
-    }
-    return py::str(py::cast<std::string>(py::str(zarr)) + suffix);
+    return py::str(ome_zarr_c::native_code::reader_node_repr(
+        py::cast<std::string>(py::str(zarr)),
+        visible));
 }
 
 py::dict reader_label_payload(const py::dict& root_attrs,
@@ -879,19 +787,31 @@ py::dict reader_multiscales_payload(const py::dict& root_attrs) {
     payload["axes"] = axes;
     payload["name"] = first.attr("get")(py::str("name"), py::none());
 
-    py::list paths;
-    py::list transformations;
-    bool any_transformations = false;
+    std::vector<ome_zarr_c::native_code::ReaderMultiscalesDatasetInput> native_datasets;
+    native_datasets.reserve(py::len(datasets));
     for (const py::handle& dataset_handle : datasets) {
         py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
-        paths.append(dataset.attr("__getitem__")(py::str("path")));
         py::object transform =
             dataset.attr("get")(py::str("coordinateTransformations"), py::none());
-        transformations.append(transform);
-        any_transformations = any_transformations || !transform.is_none();
+        ome_zarr_c::native_code::ReaderMultiscalesDatasetInput input{};
+        input.path = py::cast<std::string>(dataset.attr("__getitem__")(py::str("path")));
+        input.has_coordinate_transformations = !transform.is_none();
+        native_datasets.push_back(std::move(input));
+    }
+
+    const auto plan = ome_zarr_c::native_code::reader_multiscales_plan(native_datasets);
+    py::list paths;
+    py::list transformations;
+    for (const auto& dataset_handle : datasets) {
+        py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
+        transformations.append(
+            dataset.attr("get")(py::str("coordinateTransformations"), py::none()));
+    }
+    for (const auto& path : plan.paths) {
+        paths.append(py::str(path));
     }
     payload["paths"] = paths;
-    if (any_transformations) {
+    if (plan.any_coordinate_transformations) {
         payload["coordinateTransformations"] = transformations;
     }
 
@@ -923,19 +843,38 @@ py::dict reader_omero_payload(const py::dict& image_data, bool node_visible) {
         py::object channel = channels.attr("__getitem__")(py::int_(idx));
 
         py::object color = channel.attr("get")(py::str("color"), py::none());
-        if (!color.is_none()) {
-            const std::string color_hex = py::cast<std::string>(color);
+        py::object label = channel.attr("get")(py::str("label"), py::none());
+        py::object active = channel.attr("get")(py::str("active"), py::none());
+        py::object window = channel.attr("get")(py::str("window"), py::none());
+        py::object start = py::none();
+        py::object end = py::none();
+        if (!window.is_none()) {
+            start = window.attr("get")(py::str("start"), py::none());
+            end = window.attr("get")(py::str("end"), py::none());
+        }
+
+        const auto plan = ome_zarr_c::native_code::reader_omero_channel_plan(
+            model,
+            !color.is_none(),
+            color.is_none() ? "" : py::cast<std::string>(color),
+            !label.is_none(),
+            label.is_none() ? "" : py::cast<std::string>(label),
+            !active.is_none(),
+            !active.is_none() && object_truthy(active),
+            !window.is_none(),
+            !start.is_none(),
+            !end.is_none());
+
+        if (plan.has_color) {
             py::list rgb;
-            for (int offset = 0; offset < 6; offset += 2) {
-                rgb.append(py::float_(static_cast<double>(
-                    std::stoi(color_hex.substr(offset, 2), nullptr, 16)) /
-                                      255.0));
-            }
-            if (model == "greyscale") {
-                rgb = py::list();
+            if (plan.force_greyscale_rgb) {
                 rgb.append(py::int_(1));
                 rgb.append(py::int_(1));
                 rgb.append(py::int_(1));
+            } else {
+                for (const double component : plan.rgb) {
+                    rgb.append(py::float_(component));
+                }
             }
             py::list colormap;
             py::list zero_rgb;
@@ -947,25 +886,23 @@ py::dict reader_omero_payload(const py::dict& image_data, bool node_visible) {
             colormaps.append(colormap);
         }
 
-        py::object label = channel.attr("get")(py::str("label"), py::none());
-        if (!label.is_none()) {
+        if (plan.has_label) {
             names[idx] = label;
         }
 
-        py::object active = channel.attr("get")(py::str("active"), py::none());
         if (!active.is_none()) {
-            if (object_truthy(active)) {
+            if (plan.visible_mode ==
+                ome_zarr_c::native_code::ReaderVisibleMode::node_visible_if_active) {
                 visibles[idx] = py::bool_(node_visible);
-            } else {
+            } else if (
+                plan.visible_mode ==
+                ome_zarr_c::native_code::ReaderVisibleMode::keep_raw_active) {
                 visibles[idx] = active;
             }
         }
 
-        py::object window = channel.attr("get")(py::str("window"), py::none());
         if (!window.is_none()) {
-            py::object start = window.attr("get")(py::str("start"), py::none());
-            py::object end = window.attr("get")(py::str("end"), py::none());
-            if (start.is_none() || end.is_none()) {
+            if (!plan.has_complete_window) {
                 contrast_limits_value = py::none();
             } else if (!contrast_limits_value.is_none()) {
                 py::list limits;
@@ -993,46 +930,49 @@ py::object get_valid_axes(
         py::str("ome_zarr.writer"));
 
     const std::string version = py::cast<std::string>(fmt.attr("version"));
-    if (version == "0.1" || version == "0.2") {
-        if (!axes.is_none()) {
-            logger.attr("info")("axes ignored for version 0.1 or 0.2");
-        }
-        return py::none();
+    std::optional<std::int64_t> native_ndim;
+    if (!ndim.is_none()) {
+        native_ndim = py::cast<std::int64_t>(ndim);
     }
 
-    if (axes.is_none()) {
-        if (!ndim.is_none() && objects_equal(ndim, py::int_(2))) {
-            py::list guessed_axes;
-            guessed_axes.append(py::str("y"));
-            guessed_axes.append(py::str("x"));
-            axes = guessed_axes;
-            logger.attr("info")("Auto using axes %s for 2D data", axes);
-        } else if (!ndim.is_none() && objects_equal(ndim, py::int_(5))) {
-            py::list guessed_axes;
-            guessed_axes.append(py::str("t"));
-            guessed_axes.append(py::str("c"));
-            guessed_axes.append(py::str("z"));
-            guessed_axes.append(py::str("y"));
-            guessed_axes.append(py::str("x"));
-            axes = guessed_axes;
-            logger.attr("info")("Auto using axes %s for 5D data", axes);
-        } else {
-            throw py::value_error(
-                "axes must be provided. Can't be guessed for 3D or 4D data");
+    try {
+        const auto plan = ome_zarr_c::native_code::get_valid_axes_plan(
+            version,
+            !axes.is_none(),
+            native_ndim);
+        if (plan.log_ignored_axes) {
+            logger.attr("info")("axes ignored for version 0.1 or 0.2");
         }
+        if (plan.return_none) {
+            return py::none();
+        }
+        if (axes.is_none()) {
+            py::list guessed_axes;
+            for (const auto& axis_name : plan.axes) {
+                guessed_axes.append(py::str(axis_name));
+            }
+            axes = guessed_axes;
+        }
+        if (plan.log_auto_axes) {
+            logger.attr("info")(
+                "Auto using axes %s for " + plan.auto_label + " data",
+                axes);
+        }
+    } catch (const std::invalid_argument& exc) {
+        throw py::value_error(exc.what());
     }
 
     if (py::isinstance<py::str>(axes)) {
         axes = builtins.attr("list")(axes);
     }
 
-    if (!ndim.is_none()) {
-        const py::int_ axes_len(py::len(axes));
-        if (!objects_equal(axes_len, ndim)) {
-            throw py::value_error(
-                "axes length (" + py::cast<std::string>(py::str(axes_len)) +
-                ") must match number of dimensions (" +
-                py::cast<std::string>(py::str(ndim)) + ")");
+    if (native_ndim.has_value()) {
+        try {
+            ome_zarr_c::native_code::validate_axes_length(
+                static_cast<std::size_t>(py::len(axes)),
+                native_ndim.value());
+        } catch (const std::invalid_argument& exc) {
+            throw py::value_error(exc.what());
         }
     }
 
@@ -1075,14 +1015,10 @@ py::tuple extract_dims_from_axes(py::object axes = py::none()) {
     }
     if (all_named_dicts) {
         py::list names;
-        for (const py::handle& axis_handle : py::iterable(axes)) {
-            py::object axis = py::reinterpret_borrow<py::object>(axis_handle);
-            if (!py::isinstance<py::dict>(axis) ||
-                !py::cast<py::dict>(axis).contains("name")) {
-                throw py::type_error(
-                    "`axes` must be a list of dicts containing 'name'");
-            }
-            names.append(py::str(py::cast<py::dict>(axis)["name"]));
+        const auto native_names = ome_zarr_c::native_code::extract_dims_from_axes(
+            axis_records_from_sequence(py::cast<py::sequence>(axes)));
+        for (const auto& name : native_names) {
+            names.append(py::str(name));
         }
         return py::tuple(names);
     }
@@ -1132,47 +1068,49 @@ py::list validate_well_images(py::object images, py::object fmt = py::none()) {
 
     for (const py::handle& image_handle : py::iterable(images)) {
         py::object image = py::reinterpret_borrow<py::object>(image_handle);
-        if (py::isinstance<py::str>(image)) {
-            py::dict validated_image;
-            validated_image["path"] = py::str(image);
-            validated_images.append(validated_image);
-        } else if (py::isinstance<py::dict>(image)) {
+        ome_zarr_c::native_code::WellImageInput input{};
+        input.is_string = py::isinstance<py::str>(image);
+        input.is_dict = py::isinstance<py::dict>(image);
+        input.repr = py::cast<std::string>(py::str(image));
+        if (input.is_string) {
+            input.path = input.repr;
+        } else if (input.is_dict) {
             py::dict image_dict = py::cast<py::dict>(image);
-
-            bool has_unexpected_key = false;
+            input.has_path = image_dict.contains("path");
+            if (input.has_path) {
+                input.path_is_string = py::isinstance<py::str>(image_dict["path"]);
+                if (input.path_is_string) {
+                    input.path = py::cast<std::string>(image_dict["path"]);
+                }
+            }
+            input.has_acquisition = image_dict.contains("acquisition");
+            if (input.has_acquisition) {
+                input.acquisition_is_int = PyLong_Check(image_dict["acquisition"].ptr());
+            }
             for (const auto& key_value : image_dict) {
                 const py::handle key_handle = key_value.first;
                 if (!objects_equal(key_handle, py::str("acquisition")) &&
                     !objects_equal(key_handle, py::str("path"))) {
-                    has_unexpected_key = true;
+                    input.has_unexpected_key = true;
                     break;
                 }
             }
-            if (has_unexpected_key) {
+        }
+
+        try {
+            const auto validated = ome_zarr_c::native_code::validate_well_image(input);
+            if (validated.has_unexpected_key) {
                 logger.attr("debug")("%s contains unspecified keys", image);
             }
-
-            if (!image_dict.contains("path")) {
-                throw py::value_error(
-                    py::cast<std::string>(py::str(image)) +
-                    " must contain a path key");
+            if (validated.materialize) {
+                py::dict validated_image;
+                validated_image["path"] = py::str(validated.path);
+                validated_images.append(validated_image);
+            } else {
+                validated_images.append(image);
             }
-            if (!py::isinstance<py::str>(image_dict["path"])) {
-                throw py::value_error(
-                    py::cast<std::string>(py::str(image)) +
-                    " path must be of string type");
-            }
-            if (image_dict.contains("acquisition") &&
-                !PyLong_Check(image_dict["acquisition"].ptr())) {
-                throw py::value_error(
-                    py::cast<std::string>(py::str(image)) +
-                    " acquisition must be of int type");
-            }
-            validated_images.append(image);
-        } else {
-            throw py::value_error(
-                "Unrecognized type for " +
-                py::cast<std::string>(py::str(image)));
+        } catch (const std::invalid_argument& exc) {
+            throw py::value_error(exc.what());
         }
     }
 
@@ -1188,39 +1126,36 @@ py::object validate_plate_acquisitions(
 
     for (const py::handle& acquisition_handle : py::iterable(acquisitions)) {
         py::object acquisition = py::reinterpret_borrow<py::object>(acquisition_handle);
-        if (!py::isinstance<py::dict>(acquisition)) {
-            throw py::value_error(
-                py::cast<std::string>(py::str(acquisition)) +
-                " must be a dictionary");
-        }
-
-        py::dict acquisition_dict = py::cast<py::dict>(acquisition);
-        bool has_unexpected_key = false;
-        for (const auto& key_value : acquisition_dict) {
-            const py::handle key_handle = key_value.first;
-            if (!objects_equal(key_handle, py::str("id")) &&
-                !objects_equal(key_handle, py::str("name")) &&
-                !objects_equal(key_handle, py::str("maximumfieldcount")) &&
-                !objects_equal(key_handle, py::str("description")) &&
-                !objects_equal(key_handle, py::str("starttime")) &&
-                !objects_equal(key_handle, py::str("endtime"))) {
-                has_unexpected_key = true;
-                break;
+        ome_zarr_c::native_code::PlateAcquisitionInput input{};
+        input.is_dict = py::isinstance<py::dict>(acquisition);
+        input.repr = py::cast<std::string>(py::str(acquisition));
+        if (input.is_dict) {
+            py::dict acquisition_dict = py::cast<py::dict>(acquisition);
+            input.has_id = acquisition_dict.contains("id");
+            if (input.has_id) {
+                input.id_is_int = PyLong_Check(acquisition_dict["id"].ptr());
+            }
+            for (const auto& key_value : acquisition_dict) {
+                const py::handle key_handle = key_value.first;
+                if (!objects_equal(key_handle, py::str("id")) &&
+                    !objects_equal(key_handle, py::str("name")) &&
+                    !objects_equal(key_handle, py::str("maximumfieldcount")) &&
+                    !objects_equal(key_handle, py::str("description")) &&
+                    !objects_equal(key_handle, py::str("starttime")) &&
+                    !objects_equal(key_handle, py::str("endtime"))) {
+                    input.has_unexpected_key = true;
+                    break;
+                }
             }
         }
-        if (has_unexpected_key) {
-            logger.attr("debug")("%s contains unspecified keys", acquisition);
-        }
 
-        if (!acquisition_dict.contains("id")) {
-            throw py::value_error(
-                py::cast<std::string>(py::str(acquisition)) +
-                " must contain an id key");
-        }
-        if (!PyLong_Check(acquisition_dict["id"].ptr())) {
-            throw py::value_error(
-                py::cast<std::string>(py::str(acquisition)) +
-                " id must be of int type");
+        try {
+            ome_zarr_c::native_code::validate_plate_acquisition(input);
+            if (input.has_unexpected_key) {
+                logger.attr("debug")("%s contains unspecified keys", acquisition);
+            }
+        } catch (const std::invalid_argument& exc) {
+            throw py::value_error(exc.what());
         }
     }
 
@@ -1231,63 +1166,71 @@ py::list validate_plate_rows_columns(
     py::object rows_or_columns,
     py::object fmt = py::none()) {
     static_cast<void>(fmt);
-    py::object builtins = py::module_::import("builtins");
-
-    if (py::len(builtins.attr("set")(rows_or_columns)) != py::len(rows_or_columns)) {
-        throw py::value_error(
-            py::cast<std::string>(py::str(rows_or_columns)) +
-            " must contain unique elements");
-    }
-
-    py::list validated_list;
+    std::vector<std::string> native_values;
+    native_values.reserve(py::len(rows_or_columns));
     for (const py::handle& element_handle : py::iterable(rows_or_columns)) {
         py::object element = py::reinterpret_borrow<py::object>(element_handle);
-        if (!object_truthy(element.attr("isalnum")())) {
-            throw py::value_error(
-                py::cast<std::string>(py::str(element)) +
-                " must contain alphanumeric characters");
+        if (!py::isinstance<py::str>(element)) {
+            static_cast<void>(element.attr("isalnum")());
         }
-        py::dict validated_element;
-        validated_element["name"] = py::str(element);
-        validated_list.append(validated_element);
+        native_values.push_back(py::cast<std::string>(element));
     }
 
-    return validated_list;
+    try {
+        const auto validated = ome_zarr_c::native_code::validate_plate_rows_columns(
+            native_values,
+            py::cast<std::string>(py::str(rows_or_columns)));
+        py::list validated_list;
+        for (const auto& element : validated) {
+            py::dict validated_element;
+            validated_element["name"] = py::str(element);
+            validated_list.append(validated_element);
+        }
+        return validated_list;
+    } catch (const std::invalid_argument& exc) {
+        throw py::value_error(exc.what());
+    }
 }
 
 py::object validate_datasets(
     py::object datasets,
     py::object dims,
     py::object fmt = py::none()) {
-    if (datasets.is_none() || py::len(datasets) == 0) {
-        throw py::value_error("Empty datasets list");
-    }
-
-    py::list transformations;
-    for (const py::handle& dataset_handle : py::iterable(datasets)) {
-        py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
-        if (!py::isinstance<py::dict>(dataset)) {
-            throw py::value_error(
-                "Unrecognized type for " +
-                py::cast<std::string>(py::str(dataset)));
-        }
-
-        py::dict dataset_dict = py::cast<py::dict>(dataset);
-        py::object path = dataset_dict.attr("get")("path");
-        if (!object_truthy(path)) {
-            throw py::value_error("no 'path' in dataset");
-        }
-
-        py::object transformation =
-            dataset_dict.attr("get")("coordinateTransformations");
-        if (!transformation.is_none()) {
-            transformations.append(transformation);
+    std::vector<ome_zarr_c::native_code::DatasetInput> native_datasets;
+    if (!datasets.is_none()) {
+        native_datasets.reserve(py::len(datasets));
+        for (const py::handle& dataset_handle : py::iterable(datasets)) {
+            py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
+            ome_zarr_c::native_code::DatasetInput input{};
+            input.is_dict = py::isinstance<py::dict>(dataset);
+            input.repr = py::cast<std::string>(py::str(dataset));
+            if (input.is_dict) {
+                py::dict dataset_dict = py::cast<py::dict>(dataset);
+                py::object path = dataset_dict.attr("get")("path");
+                input.path_truthy = object_truthy(path);
+                input.has_transformation =
+                    !dataset_dict.attr("get")("coordinateTransformations").is_none();
+            }
+            native_datasets.push_back(std::move(input));
         }
     }
 
-    fmt.attr("validate_coordinate_transformations")(
-        dims, py::len(datasets), transformations);
-    return datasets;
+    try {
+        const auto transformation_indices =
+            ome_zarr_c::native_code::validate_datasets(native_datasets);
+        py::list transformations;
+        for (const auto index : transformation_indices) {
+            py::object dataset = datasets.attr("__getitem__")(py::int_(index));
+            transformations.append(
+                dataset.attr("get")(py::str("coordinateTransformations")));
+        }
+
+        fmt.attr("validate_coordinate_transformations")(
+            dims, py::len(datasets), transformations);
+        return datasets;
+    } catch (const std::invalid_argument& exc) {
+        throw py::value_error(exc.what());
+    }
 }
 
 py::list validate_plate_wells(
@@ -1555,6 +1498,11 @@ py::list build_pyramid(
     py::object warnings = py::module_::import("warnings");
     py::object core = py::module_::import("ome_zarr_c._core");
     py::tuple dims_tuple = py::tuple(dims);
+    std::vector<std::string> native_dims;
+    native_dims.reserve(py::len(dims_tuple));
+    for (const py::handle& dim_handle : dims_tuple) {
+        native_dims.push_back(py::cast<std::string>(dim_handle));
+    }
 
     if (py::isinstance(image, numpy.attr("ndarray"))) {
         if (!chunks.is_none()) {
@@ -1583,76 +1531,56 @@ py::list build_pyramid(
         }
     }
 
-    py::object normalized_scale_factors = scale_factors;
+    std::vector<ome_zarr_c::native_code::ScaleLevel> native_scale_levels;
     if (all_int_scale_factors) {
-        py::list scales;
-        const bool contains_z = dims_tuple.attr("__contains__")("z").cast<bool>();
-        for (py::ssize_t level_index = 1; level_index <= py::len(scale_factors); ++level_index) {
-            py::dict scale;
-            for (const py::handle& dim_handle : dims_tuple) {
-                const std::string dim_name = py::cast<std::string>(dim_handle);
-                const bool is_spatial =
-                    dim_name == "z" || dim_name == "y" || dim_name == "x";
-                scale[dim_handle] = is_spatial ? py::int_(1 << level_index) : py::int_(1);
-            }
-            if (contains_z) {
-                scale["z"] = py::int_(1);
-            }
-            scales.append(scale);
-        }
-        normalized_scale_factors = scales;
+        native_scale_levels = ome_zarr_c::native_code::scale_levels_from_ints(
+            native_dims,
+            static_cast<std::size_t>(py::len(scale_factors)));
     } else {
+        std::vector<std::map<std::string, double>> input_levels;
+        input_levels.reserve(py::len(scale_factors));
         for (py::ssize_t index = 0; index < py::len(scale_factors); ++index) {
             py::object level = scale_factors.attr("__getitem__")(index);
             py::dict reordered_level;
+            std::map<std::string, double> native_level;
             for (const py::handle& dim_handle : dims_tuple) {
-                reordered_level[dim_handle] = level.attr("get")(dim_handle, py::int_(1));
+                py::object value = level.attr("get")(dim_handle, py::int_(1));
+                reordered_level[dim_handle] = value;
+                native_level[py::cast<std::string>(dim_handle)] = py::cast<double>(value);
             }
             set_item(scale_factors, py::int_(index), reordered_level);
+            input_levels.push_back(std::move(native_level));
         }
+        native_scale_levels = ome_zarr_c::native_code::reorder_scale_levels(
+            native_dims,
+            input_levels);
     }
+
+    std::vector<std::int64_t> base_shape;
+    py::tuple image_shape = py::cast<py::tuple>(image.attr("shape"));
+    base_shape.reserve(py::len(image_shape));
+    for (const py::handle& dim : image_shape) {
+        base_shape.push_back(py::cast<std::int64_t>(dim));
+    }
+    const auto pyramid_plan = ome_zarr_c::native_code::build_pyramid_plan(
+        base_shape,
+        native_dims,
+        native_scale_levels);
 
     py::list images;
     images.append(image);
 
-    for (py::ssize_t index = 0; index < py::len(normalized_scale_factors); ++index) {
-        py::object factor = normalized_scale_factors.attr("__getitem__")(index);
-        py::object relative_factors;
-        if (index == 0) {
-            relative_factors = numpy.attr("asarray")(
-                builtins.attr("list")(factor.attr("values")()));
-        } else {
-            py::object previous = normalized_scale_factors.attr("__getitem__")(index - 1);
-            relative_factors = numpy.attr("divide")(
-                numpy.attr("asarray")(builtins.attr("list")(factor.attr("values")())),
-                numpy.attr("asarray")(builtins.attr("list")(previous.attr("values")())));
+    for (const auto& plan : pyramid_plan) {
+        for (const auto& warning_dim : plan.warning_dims) {
+            warnings.attr("warn")(
+                "Dimension " + warning_dim + " is too small to downsample further.",
+                builtins.attr("UserWarning"),
+                py::arg("stacklevel") = 3);
         }
 
-        py::tuple previous_shape = py::cast<py::tuple>(images[py::len(images) - 1].attr("shape"));
-        py::tuple relative_factor_tuple = py::tuple(relative_factors);
-        py::list target_shape;
-
-        for (py::size_t dim_index = 0; dim_index < py::len(previous_shape); ++dim_index) {
-            const std::string dim_name = py::cast<std::string>(dims_tuple[dim_index]);
-            py::object shape_value = previous_shape[dim_index];
-            py::object factor_value = relative_factor_tuple[dim_index];
-            const bool is_spatial =
-                dim_name == "z" || dim_name == "y" || dim_name == "x";
-
-            if (is_spatial) {
-                py::object scaled = floor_divide(shape_value, factor_value);
-                if (objects_equal(scaled, py::int_(0))) {
-                    target_shape.append(py::int_(1));
-                    warnings.attr("warn")(
-                        "Dimension " + dim_name + " is too small to downsample further.",
-                        builtins.attr("UserWarning"),
-                        py::arg("stacklevel") = 3);
-                } else {
-                    target_shape.append(builtins.attr("int")(scaled));
-                }
-            } else {
-                target_shape.append(builtins.attr("int")(shape_value));
-            }
+        py::tuple target_shape(plan.target_shape.size());
+        for (py::size_t dim_index = 0; dim_index < plan.target_shape.size(); ++dim_index) {
+            target_shape[dim_index] = py::int_(plan.target_shape[dim_index]);
         }
 
         py::object current_image = images[py::len(images) - 1];
@@ -1660,7 +1588,7 @@ py::list build_pyramid(
         if (method_key == "resize") {
             new_image = core.attr("resize")(
                 current_image,
-                py::tuple(target_shape),
+                target_shape,
                 py::arg("order") = 1,
                 py::arg("mode") = "reflect",
                 py::arg("anti_aliasing") = true,
@@ -1668,15 +1596,15 @@ py::list build_pyramid(
         } else if (method_key == "nearest") {
             new_image = core.attr("resize")(
                 current_image,
-                py::tuple(target_shape),
+                target_shape,
                 py::arg("order") = 0,
                 py::arg("mode") = "reflect",
                 py::arg("anti_aliasing") = false,
                 py::arg("preserve_range") = true);
         } else if (method_key == "local_mean") {
-            new_image = core.attr("local_mean")(current_image, py::tuple(target_shape));
+            new_image = core.attr("local_mean")(current_image, target_shape);
         } else if (method_key == "zoom") {
-            new_image = core.attr("zoom")(current_image, py::tuple(target_shape));
+            new_image = core.attr("zoom")(current_image, target_shape);
         } else {
             throw py::value_error(
                 "Unknown downsampling method: " +
@@ -1920,37 +1848,33 @@ void data_make_circle(
     py::int_ width,
     py::object value,
     py::object target) {
-    const py::ssize_t h = py::cast<py::ssize_t>(height);
-    const py::ssize_t w = py::cast<py::ssize_t>(width);
-    const py::ssize_t cx = w / 2;
-    const py::ssize_t cy = h / 2;
-    const py::ssize_t radius = std::min(w, h) / 2;
-    const py::ssize_t radius_squared = radius * radius;
-
-    for (py::ssize_t y = 0; y < h; ++y) {
-        for (py::ssize_t x = 0; x < w; ++x) {
-            const py::ssize_t dx = x - cx;
-            const py::ssize_t dy = y - cy;
-            if (dx * dx + dy * dy < radius_squared) {
-                set_item(target, py::make_tuple(y, x), value);
-            }
-        }
+    const auto points = ome_zarr_c::native_code::circle_points(
+        py::cast<std::size_t>(height),
+        py::cast<std::size_t>(width));
+    for (const auto& point : points) {
+        set_item(target, py::make_tuple(point.y, point.x), value);
     }
 }
 
 py::object data_rgb_to_5d(py::object pixels) {
     py::object numpy = py::module_::import("numpy");
-    const py::ssize_t ndim = py::cast<py::ssize_t>(pixels.attr("ndim"));
-    if (ndim == 2) {
-        py::object stack = numpy.attr("array")(py::make_tuple(pixels));
-        py::object channels = numpy.attr("array")(py::make_tuple(stack));
-        return numpy.attr("array")(py::make_tuple(channels));
+    py::tuple pixel_shape = py::cast<py::tuple>(pixels.attr("shape"));
+    std::vector<std::size_t> native_shape;
+    native_shape.reserve(py::len(pixel_shape));
+    for (const py::handle& dim : pixel_shape) {
+        native_shape.push_back(py::cast<std::size_t>(dim));
     }
-    if (ndim == 3) {
-        py::tuple pixel_shape = py::cast<py::tuple>(pixels.attr("shape"));
-        const py::ssize_t size_c = py::cast<py::ssize_t>(pixel_shape[2]);
+
+    try {
+        const auto channel_order = ome_zarr_c::native_code::rgb_channel_order(native_shape);
+        if (native_shape.size() == 2) {
+            py::object stack = numpy.attr("array")(py::make_tuple(pixels));
+            py::object channels = numpy.attr("array")(py::make_tuple(stack));
+            return numpy.attr("array")(py::make_tuple(channels));
+        }
+
         py::list channels;
-        for (py::ssize_t channel_index = 0; channel_index < size_c; ++channel_index) {
+        for (const auto channel_index : channel_order) {
             py::object channel = pixels.attr("__getitem__")(
                 py::make_tuple(py::slice(py::none(), py::none(), py::none()),
                                py::slice(py::none(), py::none(), py::none()),
@@ -1958,12 +1882,14 @@ py::object data_rgb_to_5d(py::object pixels) {
             channels.append(numpy.attr("array")(py::make_tuple(channel)));
         }
         return numpy.attr("array")(py::make_tuple(channels));
+    } catch (const std::invalid_argument&) {
+        PyErr_SetString(
+            PyExc_AssertionError,
+            ("expecting 2 or 3d: (" + py::cast<std::string>(py::str(pixels.attr("shape"))) +
+             ")")
+                .c_str());
+        throw py::error_already_set();
     }
-    PyErr_SetString(
-        PyExc_AssertionError,
-        ("expecting 2 or 3d: (" + py::cast<std::string>(py::str(pixels.attr("shape"))) + ")")
-            .c_str());
-    throw py::error_already_set();
 }
 
 py::tuple data_coins() {

@@ -30,7 +30,54 @@ std::string metadata_version_from_key(const py::dict& metadata, const char* key)
     if (version.is_none()) {
         return "";
     }
-    return py::cast<std::string>(version);
+    return py::cast<std::string>(py::str(version));
+}
+
+ome_zarr_c::native_code::MetadataSummary metadata_summary_from_dict(
+    const py::dict& metadata) {
+    ome_zarr_c::native_code::MetadataSummary summary{};
+    summary.is_empty = py::len(metadata) == 0;
+
+    py::list multiscales =
+        py::cast<py::list>(metadata.attr("get")("multiscales", py::list()));
+    if (py::len(multiscales) > 0) {
+        py::dict dataset = py::cast<py::dict>(multiscales[0]);
+        py::object version = dataset.attr("get")("version", py::none());
+        if (!version.is_none()) {
+            summary.has_multiscales_version = true;
+            summary.multiscales_version_is_string = py::isinstance<py::str>(version);
+            summary.multiscales_version = py::cast<std::string>(py::str(version));
+        }
+    }
+
+    const std::string plate_version = metadata_version_from_key(metadata, "plate");
+    if (!plate_version.empty()) {
+        summary.has_plate_version = true;
+        summary.plate_version_is_string =
+            py::isinstance<py::str>(
+                py::cast<py::dict>(metadata.attr("get")("plate")).attr("get")("version"));
+        summary.plate_version = plate_version;
+    }
+    const std::string well_version = metadata_version_from_key(metadata, "well");
+    if (!well_version.empty()) {
+        summary.has_well_version = true;
+        summary.well_version_is_string =
+            py::isinstance<py::str>(
+                py::cast<py::dict>(metadata.attr("get")("well")).attr("get")("version"));
+        summary.well_version = well_version;
+    }
+    const std::string image_label_version =
+        metadata_version_from_key(metadata, "image-label");
+    if (!image_label_version.empty()) {
+        summary.has_image_label_version = true;
+        summary.image_label_version_is_string =
+            py::isinstance<py::str>(
+                py::cast<py::dict>(metadata.attr("get")("image-label"))
+                    .attr("get")("version"));
+        summary.image_label_version = image_label_version;
+    }
+
+    return summary;
 }
 
 bool is_number_like(const py::handle& value) {
@@ -68,44 +115,27 @@ py::str resolve_format_version(const py::handle& version) {
 }
 
 py::object get_metadata_version(py::dict metadata) {
-    py::list multiscales = py::cast<py::list>(metadata.attr("get")("multiscales", py::list()));
-    if (py::len(multiscales) > 0) {
-        py::dict dataset = py::cast<py::dict>(multiscales[0]);
-        py::object version = dataset.attr("get")("version", py::none());
-        if (!version.is_none()) {
-            return version;
-        }
+    const auto version =
+        ome_zarr_c::native_code::get_metadata_version(metadata_summary_from_dict(metadata));
+    if (version.has_value()) {
+        return py::str(version.value());
     }
-
-    for (const char* key : {"plate", "well", "image-label"}) {
-        const std::string version = metadata_version_from_key(metadata, key);
-        if (!version.empty()) {
-            return py::str(version);
-        }
-    }
-
     return py::none();
 }
 
 py::object detect_format_version(py::dict metadata) {
-    if (py::len(metadata) == 0) {
+    const auto detected =
+        ome_zarr_c::native_code::detect_format_version(metadata_summary_from_dict(metadata));
+    if (!detected.has_value()) {
         return py::none();
     }
-
-    py::object version = get_metadata_version(metadata);
-    if (version.is_none() || !is_known_format_version(version)) {
-        return py::none();
-    }
-
-    return version;
+    return py::str(detected.value());
 }
 
 bool format_matches(const std::string& version, py::dict metadata) {
-    py::object metadata_version = get_metadata_version(metadata);
-    if (metadata_version.is_none()) {
-        return false;
-    }
-    return py::str(normalize_known_format_version(py::str(version))).equal(metadata_version);
+    return ome_zarr_c::native_code::format_matches(
+        version,
+        metadata_summary_from_dict(metadata));
 }
 
 int format_zarr_format(const std::string& version) {
@@ -165,8 +195,18 @@ py::dict generate_well_dict_v04(
     } catch (const ome_zarr_c::native_code::WellGenerationError& error) {
         switch (error.code()) {
             case ome_zarr_c::native_code::WellGenerationErrorCode::path_not_enough_groups:
-            case ome_zarr_c::native_code::WellGenerationErrorCode::path_too_many_groups:
-                throw py::value_error(error.detail());
+                throw py::value_error("not enough values to unpack (expected 2, got 1)");
+            case ome_zarr_c::native_code::WellGenerationErrorCode::path_too_many_groups: {
+                const auto group_count = static_cast<int>(
+                    std::count(well.begin(), well.end(), '/')) + 1;
+#if PY_VERSION_HEX >= 0x030e0000
+                throw py::value_error(
+                    "too many values to unpack (expected 2, got " +
+                    std::to_string(group_count) + ")");
+#else
+                throw py::value_error("too many values to unpack (expected 2)");
+#endif
+            }
             case ome_zarr_c::native_code::WellGenerationErrorCode::row_missing: {
                 py::tuple args(2);
                 args[0] = py::str("%s is not defined in the list of rows");
