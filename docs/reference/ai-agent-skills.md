@@ -6,6 +6,11 @@ Repo-local reusable skills live under `.agents/skills/`.
 
 - `context-budget`: keep context narrow and high-signal
 - `search-first`: search repo and upstream sources before adding code or tools
+- `web-discovery`: run bounded current public-web discovery before relying on memory
+- `site-extract`: extract structured facts from a known public page with minimal noise
+- `browser-fallback`: use a deterministic browser workflow only when direct fetch is not enough
+- `source-audit`: separate confirmed evidence from inference before answering
+- `compliance-and-rate-limit`: keep web collection bounded, cache-aware, and non-evasive
 - `verification-loop`: choose the smallest correct verification lane and report
   it accurately
 - `ai-regression-testing`: add narrow differential or contract tests that catch
