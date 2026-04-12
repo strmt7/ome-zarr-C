@@ -1,0 +1,17 @@
+# Gemini CLI instructions
+
+Use `AGENTS.md` as the universal project contract and
+`docs/reference/ai-agent-context-routing.md` to keep context narrow.
+
+## Core rules
+
+- Never modify `source_code_v.0.15.0/`.
+- Prefer small, file-by-file ports with differential parity tests.
+- Keep Python wrappers compatibility-focused and C++ cores behavior-focused.
+- Use `.agents/skills/` when they fit the task.
+- Do not claim speed or parity beyond what tests and benchmarks prove.
+
+## Verification
+
+Use the verification flow in `AGENTS.md` and
+`docs/reference/ai-agent-skills.md`.
