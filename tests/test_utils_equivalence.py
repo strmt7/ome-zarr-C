@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import importlib
+import io
+import json
+import logging
 import os
 import random
 import sys
+import xml.etree.ElementTree as ET
 from collections import deque
+from contextlib import redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +35,34 @@ def _run_splitall(func, path):
         return ("err", type(exc), str(exc))
 
 
+def _run_find_multiscales(func, path):
+    stream = io.StringIO()
+    records = []
+    logger = logging.getLogger("ome_zarr.utils")
+    previous_level = logger.level
+    previous_propagate = logger.propagate
+
+    class _Capture(logging.Handler):
+        def emit(self, record) -> None:
+            records.append((record.levelno, record.getMessage()))
+
+    handler = _Capture()
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    try:
+        with redirect_stdout(stream):
+            try:
+                return ("ok", func(path), stream.getvalue(), records)
+            except Exception as exc:  # noqa: BLE001
+                return ("err", type(exc), str(exc), stream.getvalue(), records)
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous_level)
+        logger.propagate = previous_propagate
+
+
 def _assert_strip_case(parts) -> None:
     expected = _run_strip_common_prefix(_py_utils.strip_common_prefix, parts)
     actual = _run_strip_common_prefix(_cpp_utils.strip_common_prefix, parts)
@@ -39,6 +72,12 @@ def _assert_strip_case(parts) -> None:
 def _assert_splitall_case(path) -> None:
     expected = _run_splitall(_py_utils.splitall, path)
     actual = _run_splitall(_cpp_utils.splitall, path)
+    assert expected == actual
+
+
+def _assert_find_multiscales_case(path) -> None:
+    expected = _run_find_multiscales(_py_utils.find_multiscales, path)
+    actual = _run_find_multiscales(_cpp_utils.find_multiscales, path)
     assert expected == actual
 
 
@@ -146,3 +185,88 @@ def test_splitall_random_joined_paths_match_upstream() -> None:
         _assert_splitall_case(absolute)
         if absolute != os.sep:
             _assert_splitall_case(absolute + os.sep)
+
+
+def test_find_multiscales_matches_upstream_when_metadata_is_missing(tmp_path) -> None:
+    _assert_find_multiscales_case(tmp_path / "missing.zarr")
+
+
+def test_find_multiscales_matches_upstream_for_multiscales_zattrs(tmp_path) -> None:
+    path = tmp_path / "image.zarr"
+    path.mkdir()
+    (path / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
+    _assert_find_multiscales_case(path)
+
+
+def test_find_multiscales_matches_upstream_for_multiscales_nested_in_zarr_json(
+    tmp_path,
+) -> None:
+    path = tmp_path / "image.zarr"
+    path.mkdir()
+    (path / "zarr.json").write_text(
+        json.dumps({"attributes": {"ome": {"multiscales": [{"version": "0.4"}]}}})
+    )
+    _assert_find_multiscales_case(path)
+
+
+def test_find_multiscales_prefers_dot_zattrs_over_zarr_json(tmp_path) -> None:
+    path = tmp_path / "image.zarr"
+    path.mkdir()
+    (path / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
+    (path / "zarr.json").write_text(
+        json.dumps({"attributes": {"ome": {"plate": {"wells": [{"path": "A/1"}]}}}})
+    )
+    _assert_find_multiscales_case(path)
+
+
+def test_find_multiscales_matches_upstream_for_plate_wells(tmp_path) -> None:
+    path = tmp_path / "plate.zarr"
+    path.mkdir()
+    (path / ".zattrs").write_text(
+        json.dumps({"plate": {"wells": [{"path": "A/1"}, {"path": "B/2"}]}})
+    )
+    _assert_find_multiscales_case(path)
+
+
+def test_find_multiscales_matches_upstream_for_empty_plate_wells(tmp_path) -> None:
+    path = tmp_path / "plate.zarr"
+    path.mkdir()
+    (path / ".zattrs").write_text(json.dumps({"plate": {"wells": []}}))
+    _assert_find_multiscales_case(path)
+
+
+def test_find_multiscales_matches_upstream_for_bioformats_layout(tmp_path) -> None:
+    path = tmp_path / "series.zarr"
+    ome_dir = path / "OME"
+    ome_dir.mkdir(parents=True)
+    (path / ".zattrs").write_text(json.dumps({"bioformats2raw.layout": 3}))
+
+    root = ET.Element("{http://www.openmicroscopy.org/Schemas/OME/2016-06}OME")
+    ET.SubElement(
+        root,
+        "{http://www.openmicroscopy.org/Schemas/OME/2016-06}Image",
+        Name="Named Image",
+    )
+    ET.SubElement(root, "{http://www.openmicroscopy.org/Schemas/OME/2016-06}Image")
+    ET.SubElement(root, "{http://www.openmicroscopy.org/Schemas/OME/2016-06}Other")
+    ET.ElementTree(root).write(ome_dir / "METADATA.ome.xml", encoding="unicode")
+
+    _assert_find_multiscales_case(path)
+
+
+def test_find_multiscales_matches_upstream_when_bioformats_xml_is_missing(
+    tmp_path,
+) -> None:
+    path = tmp_path / "series.zarr"
+    path.mkdir()
+    (path / ".zattrs").write_text(json.dumps({"bioformats2raw.layout": 3}))
+    _assert_find_multiscales_case(path)
+
+
+def test_find_multiscales_matches_upstream_for_string_paths_with_existing_metadata(
+    tmp_path,
+) -> None:
+    path = tmp_path / "string-image.zarr"
+    path.mkdir()
+    (path / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
+    _assert_find_multiscales_case(str(path))

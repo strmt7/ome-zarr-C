@@ -46,7 +46,7 @@ The current native parity slices are:
 - `ome_zarr_c.conversions` for integer/RGBA conversion helpers
 - `ome_zarr_c.axes` for axes normalization and validation
 - `ome_zarr_c.csv` for `parse_csv_value`
-- `ome_zarr_c.utils` for `strip_common_prefix` and `splitall`
+- `ome_zarr_c.utils` for `strip_common_prefix`, `splitall`, and `find_multiscales`
 - `ome_zarr_c.format` for version dispatch, metadata version lookup, well
   validation, and coordinate transformation generation/validation
 

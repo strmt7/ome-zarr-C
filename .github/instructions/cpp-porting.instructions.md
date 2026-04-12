@@ -8,6 +8,8 @@
 - If upstream behavior depends on interpreter-generated exception text, use the
   live Python runtime to produce that behavior instead of freezing a message
   literal in C++.
+- Do not use `py::cast<bool>` for generic Python truthiness on arbitrary
+  objects. Match Python `if obj:` semantics with Python truth-value evaluation.
 - After changing native code or extension build surfaces, rebuild the editable
   install before rerunning parity tests.
 - Add differential tests against the frozen snapshot before claiming parity.
