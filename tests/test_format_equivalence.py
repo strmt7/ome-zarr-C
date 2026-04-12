@@ -4,6 +4,8 @@ import importlib
 import sys
 from pathlib import Path
 
+from tests._outcomes import err, ok
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
@@ -28,9 +30,9 @@ CPP_FORMAT_TYPES = [
 
 def _call(func, *args, **kwargs):
     try:
-        return ("ok", func(*args, **kwargs))
+        return ok(value=func(*args, **kwargs))
     except Exception as exc:  # noqa: BLE001
-        return ("err", type(exc), str(exc))
+        return err(exc)
 
 
 def _format_signature(fmt) -> tuple[str, int, dict[str, str], str]:
@@ -41,10 +43,10 @@ def _assert_result_match(py_func, cpp_func, *args, **kwargs) -> None:
     expected = _call(py_func, *args, **kwargs)
     actual = _call(cpp_func, *args, **kwargs)
 
-    if expected[0] == "err" or actual[0] == "err":
-        assert expected[0] == actual[0]
-        assert expected[1] is actual[1]
-        assert expected[2] == actual[2]
+    if expected.status == "err" or actual.status == "err":
+        assert expected.status == actual.status
+        assert expected.error_type is actual.error_type
+        assert expected.error_message == actual.error_message
         return
 
     assert expected == actual
@@ -55,8 +57,8 @@ def test_format_from_version_matches_upstream() -> None:
         py_result = _call(_py_format.format_from_version, version)
         cpp_result = _call(_cpp_format.format_from_version, version)
 
-        assert py_result[0] == cpp_result[0] == "ok"
-        assert _format_signature(py_result[1]) == _format_signature(cpp_result[1])
+        assert py_result.status == cpp_result.status == "ok"
+        assert _format_signature(py_result.value) == _format_signature(cpp_result.value)
 
     _assert_result_match(
         _py_format.format_from_version,

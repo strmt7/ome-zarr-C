@@ -20,6 +20,8 @@ Use this skill after any non-trivial change.
 6. if workflows, CodeQL scope, or pinned tool versions changed, load
    `workflow-supply-chain-maintenance` and verify the exact scanner config or
    version source that justified the edit
+7. when tests add shared helpers, ensure they import cleanly in both focused
+   runs and whole-suite collection before treating the lane as green
 
 ## Reporting rule
 

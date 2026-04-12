@@ -19,4 +19,7 @@ Use this skill when converting an upstream Python module or helper.
    Python callbacks, or Python exception state, load
    `pybind11-runtime-parity` before finalizing the binding.
 5. Add differential tests against the upstream snapshot.
-6. Benchmark only after parity holds.
+6. If the observable output includes absolute paths and the surface is
+   read-only, run the upstream and converted implementations against the same
+   fixture path to avoid false stdout mismatches.
+7. Benchmark only after parity holds.

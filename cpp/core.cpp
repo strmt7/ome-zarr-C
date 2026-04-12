@@ -127,6 +127,24 @@ std::string repr_joined_lines(const py::list& parts) {
     return message;
 }
 
+template <typename Func>
+void run_with_context_manager(const py::object& manager, Func&& func) {
+    py::object exit = manager.attr("__exit__");
+    manager.attr("__enter__")();
+    try {
+        func();
+        exit(py::none(), py::none(), py::none());
+    } catch (py::error_already_set& ex) {
+        py::object suppress = exit(ex.type(), ex.value(), ex.trace());
+        if (!object_truthy(suppress)) {
+            throw;
+        }
+    } catch (...) {
+        exit(py::none(), py::none(), py::none());
+        throw;
+    }
+}
+
 }  // namespace
 
 py::list axes_to_dicts(const py::sequence& axes) {
@@ -682,6 +700,49 @@ py::list find_multiscales(py::object path_to_zattrs) {
     return py::list();
 }
 
+py::list info_lines(py::object node, bool stats = false) {
+    py::object dask = py::module_::import("dask");
+    py::object logger =
+        py::module_::import("logging").attr("getLogger")(py::str("ome_zarr.utils"));
+
+    py::list lines;
+    lines.append(py::str(node));
+
+    py::object loc = node.attr("zarr");
+    py::object zgroup = loc.attr("zgroup");
+    py::object version = zgroup.attr("get")(py::str("version"));
+    if (version.is_none()) {
+        py::list fallback;
+        fallback.append(py::dict());
+        py::object multiscales = zgroup.attr("get")(py::str("multiscales"), fallback);
+        py::object first = multiscales.attr("__getitem__")(0);
+        version = first.attr("get")(py::str("version"), py::str(""));
+    }
+    lines.append(py::str(" - version: ") + py::str(version));
+    lines.append(py::str(" - metadata"));
+
+    for (const py::handle& spec_handle : node.attr("specs")) {
+        py::object spec = py::reinterpret_borrow<py::object>(spec_handle);
+        lines.append(py::str("   - ") +
+                     py::str(spec.attr("__class__").attr("__name__")));
+    }
+
+    lines.append(py::str(" - data"));
+    for (const py::handle& array_handle : node.attr("data")) {
+        py::object array = py::reinterpret_borrow<py::object>(array_handle);
+        py::str line = py::str("   - ") + py::str(array.attr("shape"));
+        if (stats) {
+            line = line + py::str(" minmax=") +
+                   py::str(
+                       dask.attr("compute")(array.attr("min")(), array.attr("max")()));
+        }
+        lines.append(line);
+    }
+
+    logger.attr("debug")(node.attr("data"));
+    return lines;
+}
+
 void finder(py::object input_path, int port = 8000, bool dry_run = false) {
     py::object builtins = py::module_::import("builtins");
     py::object csv_module = py::module_::import("csv");
@@ -1195,6 +1256,7 @@ PYBIND11_MODULE(_core, m) {
     m.def("strip_common_prefix", &strip_common_prefix);
     m.def("splitall", &splitall);
     m.def("find_multiscales", &find_multiscales);
+    m.def("info_lines", &info_lines, py::arg("node"), py::arg("stats") = false);
     m.def("finder", &finder, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false);
     m.def("view", &view, py::arg("input_path"), py::arg("port") = 8000, py::arg("dry_run") = false, py::arg("force") = false);
     m.def("get_metadata_version", &get_metadata_version);

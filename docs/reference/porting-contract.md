@@ -49,6 +49,10 @@ incrementally while keeping the imported upstream snapshot intact.
   For functions that launch browsers, start servers, or cross similar external
   boundaries, patch the side-effecting call sites and compare the resulting
   outbound call payloads between upstream and the port.
+- Path-sensitive output:
+  If a read-only surface prints or serializes absolute paths, run the upstream
+  and converted implementations against the same fixture path so parity checks
+  compare behavior rather than differing temporary-directory roots.
 - `py::exec`-generated classes:
   If a port defines Python classes through `py::exec` and their methods depend
   on runtime names, execute them in a shared scope so those names remain
@@ -60,6 +64,10 @@ incrementally while keeping the imported upstream snapshot intact.
   Frozen upstream snapshots under `source_code_v*/` are reference material and
   must stay excluded from CodeQL and future repo security scanners. If the
   snapshot path changes, update the exclusions in the same change.
+- Test-code findings:
+  Test modules and shared test helpers are repo-maintained code. Fix CodeQL,
+  lint, and security findings in `tests/` by changing the underlying code or
+  structure rather than suppressing them because they are "only tests".
 
 ## Allowed local deviations
 

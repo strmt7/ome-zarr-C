@@ -1,78 +1,118 @@
 # ome-zarr-C
 
-`ome-zarr-C` is a release-anchored C++/pybind11 conversion workspace for
+`ome-zarr-C` is a release-anchored C++/pybind11 porting workspace for
 [`ome/ome-zarr-py`](https://github.com/ome/ome-zarr-py).
 
-The exact upstream `v0.15.0` release snapshot is preserved under
-`source_code_v.0.15.0/`. That directory is immutable reference code and must
-never be edited directly.
+The project preserves the exact upstream `v0.15.0` release snapshot under
+`source_code_v.0.15.0/` and implements converted functionality outside that
+snapshot in native-backed modules. The working rule for converted code is
+behavioral parity first, performance claims second.
 
-## Scope
+## Goals
 
-- port selected upstream Python modules to C++ incrementally
-- preserve upstream behavior first, including documented quirks
-- prove parity with differential tests against the frozen upstream snapshot
-- benchmark converted components before claiming any performance win
-- keep all new code outside `source_code_v.0.15.0/`
+- port upstream Python surfaces incrementally to C++ with `pybind11`
+- preserve upstream public behavior, including edge cases and observable quirks
+- prove parity with differential tests against the frozen release snapshot
+- benchmark converted surfaces with representative data before claiming gains
 
 ## Upstream Provenance
 
 - Original repository: `ome/ome-zarr-py`
 - Imported release: `v0.15.0`
 - Imported release commit: `cade24e`
-- Upstream license: BSD 2-Clause, preserved under `source_code_v.0.15.0/LICENSE`
+- Upstream license: BSD 2-Clause
+
+The upstream snapshot is kept as immutable reference material in
+`source_code_v.0.15.0/`. All new implementation work happens outside that
+directory.
 
 ## Repository Layout
 
 - `source_code_v.0.15.0/`: frozen upstream release snapshot
-- `cpp/`: C++ implementation files exposed via `pybind11`
-- `ome_zarr_c/`: thin Python wrappers around native code
-- `tests/`: differential and regression tests against the frozen snapshot
-- `docs/`: project rules, routing, and porting contract
-- `.agents/skills/`: reusable repo-local agent workflows
+- `cpp/`: C++ implementations exposed through `pybind11`
+- `ome_zarr_c/`: Python compatibility layer for converted surfaces
+- `tests/`: differential and regression tests
+- `docs/`: project references, design notes, and benchmark material
 
-## Frozen Snapshot Policy
+## Converted Surfaces
 
-- Never edit files inside `source_code_v.0.15.0/`
-- All new work must happen outside the frozen snapshot
-- CI rejects direct modifications to the frozen snapshot on the protected branch
-- If upstream behavior needs to change, change the wrapper/port and document the
-  intentional divergence
+The current native-backed parity slices are:
 
-## Current Status
+- `ome_zarr_c.conversions`
+  - `int_to_rgba`
+  - `int_to_rgba_255`
+  - `rgba_to_int`
+- `ome_zarr_c.axes`
+  - axes normalization
+  - axis-name extraction
+  - OME-Zarr axis validation logic
+- `ome_zarr_c.format`
+  - format dispatch
+  - metadata version lookup
+  - well-dict generation and validation
+  - coordinate-transformation generation and validation
+- `ome_zarr_c.csv`
+  - `parse_csv_value`
+  - `dict_to_zarr`
+  - `csv_to_zarr`
+- `ome_zarr_c.utils`
+  - `strip_common_prefix`
+  - `splitall`
+  - `find_multiscales`
+  - `finder`
+  - `view`
+  - `info`
 
-The current native parity slices are:
-
-- `ome_zarr_c.conversions` for integer/RGBA conversion helpers
-- `ome_zarr_c.axes` for axes normalization and validation
-- `ome_zarr_c.csv` for `parse_csv_value`, `dict_to_zarr`, and `csv_to_zarr`
-- `ome_zarr_c.utils` for `strip_common_prefix`, `splitall`, `find_multiscales`,
-  `finder`, and `view`
-- `ome_zarr_c.format` for version dispatch, metadata version lookup, well
-  validation, and coordinate transformation generation/validation
-
-Each converted surface is checked with differential tests against the frozen
-upstream implementation.
+Each converted surface is validated against the frozen upstream release with
+parity tests under `tests/`.
 
 ## Local Development
+
+Create a local environment and install the editable package:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e .[dev]
+```
+
+Run the full local verification lane:
+
+```bash
 .venv/bin/python -m pytest -q
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```
 
-## Rules For New Ports
+After editing native code under `cpp/`, rebuild the editable install before
+re-running tests so the suite exercises the current extension binary:
 
-1. Read the upstream implementation from `source_code_v.0.15.0/`.
-2. Port the smallest self-contained unit first.
-3. Keep the Python wrapper thin unless Python-level compatibility requires
-   otherwise.
-4. Add differential tests before claiming parity.
-5. Benchmark with representative data before claiming speedups.
+```bash
+.venv/bin/python -m pip install -e .[dev]
+```
 
-See `AGENTS.md` and `docs/reference/porting-contract.md` for the full working
-contract.
+## Porting Approach
+
+Converted code is added in small, reviewable slices:
+
+1. Read the exact upstream implementation from the frozen snapshot.
+2. Port the smallest self-contained surface.
+3. Add differential tests against the upstream implementation.
+4. Verify local parity before widening the converted area.
+5. Benchmark only after parity is established.
+
+For read-only surfaces that print absolute paths, parity tests should run the
+upstream and converted implementations against the same fixture path so the
+comparison measures behavior rather than path differences.
+
+## Security and Scan Scope
+
+Repository-maintained code is scanned and tested. The frozen upstream snapshot
+under `source_code_v.0.15.0/` is excluded from security scanning so alerts stay
+focused on converted and maintained code in this repository.
+
+## License
+
+This repository contains upstream BSD 2-Clause licensed code preserved from
+`ome/ome-zarr-py` together with new conversion work. See
+`source_code_v.0.15.0/LICENSE` for the upstream license text.
