@@ -2,7 +2,7 @@
 
 from .axes import KNOWN_AXES, Axes
 from .conversions import int_to_rgba, int_to_rgba_255, rgba_to_int
-from .csv import COLUMN_TYPES, parse_csv_value
+from .csv import COLUMN_TYPES, csv_to_zarr, dict_to_zarr, parse_csv_value
 from .format import (
     CurrentFormat,
     Format,
@@ -29,6 +29,7 @@ __all__ = [
     "FormatV05",
     "KNOWN_AXES",
     "detect_format",
+    "dict_to_zarr",
     "find_multiscales",
     "format_from_version",
     "format_implementations",
@@ -36,6 +37,7 @@ __all__ = [
     "int_to_rgba_255",
     "parse_csv_value",
     "rgba_to_int",
+    "csv_to_zarr",
     "splitall",
     "strip_common_prefix",
 ]

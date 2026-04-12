@@ -33,6 +33,9 @@ snapshot to C++ without modifying the snapshot itself.
 15. In pybind11 ports, do not use `py::cast<bool>` as a generic replacement for
     Python truthiness on arbitrary objects such as lists or `None`. Use Python
     truth-value evaluation so `if obj:` behavior matches upstream.
+16. For ports that mutate persistent stores or files, parity tests must compare
+    serialized on-disk effects between upstream and the port, not just return
+    values.
 
 ## Fast load order
 
