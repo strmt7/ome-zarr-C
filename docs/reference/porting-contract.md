@@ -39,6 +39,10 @@ incrementally while keeping the imported upstream snapshot intact.
   In pybind11 ports, `py::cast<bool>` is not a drop-in replacement for Python
   truth-value testing on arbitrary objects. Preserve `if obj:` semantics with
   Python truthiness evaluation.
+- Persistent side effects:
+  For functions that mutate files, directories, or stores, compare the
+  serialized on-disk results between upstream and the port. Return-value parity
+  alone is not sufficient.
 - Performance:
   Use the same inputs, same machine class, same environment, and repeated runs.
   Report medians and version details.
