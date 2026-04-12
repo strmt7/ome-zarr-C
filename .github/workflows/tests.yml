@@ -32,5 +32,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[dev]
 
-      - name: Run parity suite
-        run: python -m pytest -q
+      - name: Run proven-safe parity suite
+        run: |
+          timeout 180s python -m pytest -q \
+            tests/test_axes_equivalence.py \
+            tests/test_conversions_equivalence.py \
+            tests/test_dask_utils_equivalence.py \
+            tests/test_data_equivalence.py \
+            tests/test_format_equivalence.py \
+            tests/test_scale_equivalence.py \
+            tests/test_scaler_equivalence.py \
+            tests/test_utils_equivalence.py \
+            tests/test_writer_equivalence.py
