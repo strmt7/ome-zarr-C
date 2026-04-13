@@ -172,6 +172,48 @@ std::vector<UtilsDiscoveredImage> utils_single_multiscales_image(
     return {UtilsDiscoveredImage{path_to_zattrs, basename, dirname}};
 }
 
+std::string utils_info_not_ome_zarr_line(const std::string& node_repr) {
+    return "not an ome-zarr node: " + node_repr;
+}
+
+std::vector<std::string> utils_info_header_lines(
+    const std::string& node_repr,
+    const std::string& version,
+    const std::vector<std::string>& spec_names) {
+    std::vector<std::string> lines;
+    lines.reserve(spec_names.size() + 4);
+    lines.push_back(node_repr);
+    lines.push_back(" - version: " + version);
+    lines.push_back(" - metadata");
+    for (const auto& spec_name : spec_names) {
+        lines.push_back("   - " + spec_name);
+    }
+    lines.push_back(" - data");
+    return lines;
+}
+
+std::string utils_info_data_line(
+    const std::string& shape_repr,
+    const std::optional<std::string>& minmax_repr) {
+    std::string line = "   - " + shape_repr;
+    if (minmax_repr.has_value()) {
+        line += " minmax=" + minmax_repr.value();
+    }
+    return line;
+}
+
+UtilsDownloadPlan utils_download_plan(std::vector<std::vector<std::string>> parts) {
+    return UtilsDownloadPlan{strip_common_prefix(parts), std::move(parts)};
+}
+
+UtilsDownloadNodePlan utils_download_node_plan(int zarr_format, bool has_axes) {
+    UtilsDownloadNodePlan plan{};
+    plan.wrap_ome_metadata = zarr_format == 3;
+    plan.use_v2_chunk_key_encoding = zarr_format == 2;
+    plan.use_dimension_names = zarr_format != 2 && has_axes;
+    return plan;
+}
+
 UtilsViewPlan utils_view_plan(
     const std::string& input_path,
     int port,

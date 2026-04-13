@@ -94,14 +94,6 @@ std::string normalize_known_format_version(const py::handle& version) {
     }
 }
 
-bool is_known_format_version(const py::handle& version) {
-    if (!py::isinstance<py::str>(version)) {
-        return false;
-    }
-    return ome_zarr_c::native_code::is_known_format_version_string(
-        py::cast<std::string>(version));
-}
-
 py::list format_versions() {
     py::list versions;
     for (const auto& version : ome_zarr_c::native_code::format_versions()) {
@@ -151,6 +143,21 @@ py::dict format_chunk_key_encoding(const std::string& version) {
     return encoding;
 }
 
+py::object format_init_store(const std::string& path, const std::string& mode = "r") {
+    const auto plan = ome_zarr_c::native_code::format_init_store_plan(path, mode);
+    if (plan.use_fsspec) {
+        py::object fsspec_store =
+            py::module_::import("zarr.storage").attr("FsspecStore");
+        return fsspec_store.attr("from_url")(
+            py::str(path),
+            py::arg("storage_options") = py::none(),
+            py::arg("read_only") = py::bool_(plan.read_only));
+    }
+    py::object local_store =
+        py::module_::import("zarr.storage").attr("LocalStore");
+    return local_store(py::str(path), py::arg("read_only") = py::bool_(plan.read_only));
+}
+
 void validate_well_dict_v01(py::dict well) {
     if (!well.contains("path")) {
         py::tuple args(4);
@@ -197,9 +204,9 @@ py::dict generate_well_dict_v04(
             case ome_zarr_c::native_code::WellGenerationErrorCode::path_not_enough_groups:
                 throw py::value_error("not enough values to unpack (expected 2, got 1)");
             case ome_zarr_c::native_code::WellGenerationErrorCode::path_too_many_groups: {
+#if PY_VERSION_HEX >= 0x030e0000
                 const auto group_count = static_cast<int>(
                     std::count(well.begin(), well.end(), '/')) + 1;
-#if PY_VERSION_HEX >= 0x030e0000
                 throw py::value_error(
                     "too many values to unpack (expected 2, got " +
                     std::to_string(group_count) + ")");
@@ -221,6 +228,7 @@ py::dict generate_well_dict_v04(
             }
         }
     }
+    throw py::value_error("unhandled well generation error");
 }
 
 void validate_well_dict_v04(py::dict well,
@@ -431,6 +439,7 @@ void register_format_bindings(py::module_& m) {
     m.def("format_matches", &format_matches, py::arg("version"), py::arg("metadata"));
     m.def("format_zarr_format", &format_zarr_format, py::arg("version"));
     m.def("format_chunk_key_encoding", &format_chunk_key_encoding, py::arg("version"));
+    m.def("format_init_store", &format_init_store, py::arg("path"), py::arg("mode") = "r");
     m.def("generate_well_dict_v04", &generate_well_dict_v04);
     m.def("validate_well_dict_v01", &validate_well_dict_v01);
     m.def("validate_well_dict_v04", &validate_well_dict_v04);

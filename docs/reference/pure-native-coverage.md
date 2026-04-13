@@ -17,6 +17,11 @@ This metric is stricter than `split-native`. It should stay conservative.
 If there is doubt about whether a surface is still partially owned by Python
 logic, leave it out of the pure-native manifest.
 
+At the current checkpoint, the manifest still intentionally excludes abstract
+base `Format.*` stubs and a few tiny Python-only reader helpers. Those lines do
+not move the runtime behavior, and leaving them out keeps the metric tied to
+real native-owned semantics rather than class-interface boilerplate.
+
 ## Report command
 
 ```bash

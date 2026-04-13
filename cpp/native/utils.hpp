@@ -37,6 +37,32 @@ std::vector<UtilsDiscoveredImage> utils_single_multiscales_image(
     const std::string& basename,
     const std::string& dirname);
 
+std::string utils_info_not_ome_zarr_line(const std::string& node_repr);
+
+std::vector<std::string> utils_info_header_lines(
+    const std::string& node_repr,
+    const std::string& version,
+    const std::vector<std::string>& spec_names);
+
+std::string utils_info_data_line(
+    const std::string& shape_repr,
+    const std::optional<std::string>& minmax_repr);
+
+struct UtilsDownloadPlan {
+    std::string common;
+    std::vector<std::vector<std::string>> stripped_parts;
+};
+
+UtilsDownloadPlan utils_download_plan(std::vector<std::vector<std::string>> parts);
+
+struct UtilsDownloadNodePlan {
+    bool wrap_ome_metadata;
+    bool use_v2_chunk_key_encoding;
+    bool use_dimension_names;
+};
+
+UtilsDownloadNodePlan utils_download_node_plan(int zarr_format, bool has_axes);
+
 struct UtilsViewPlan {
     bool should_warn;
     std::string warning_message;

@@ -46,6 +46,50 @@ py::list discovered_images_to_pylist(
     return result;
 }
 
+py::str utils_info_not_ome_zarr_line(const py::object& node) {
+    return py::str(ome_zarr_c::native_code::utils_info_not_ome_zarr_line(
+        py::cast<std::string>(py::str(node))));
+}
+
+py::dict utils_download_plan(const py::list& parts) {
+    std::vector<std::vector<std::string>> native_parts;
+    native_parts.reserve(py::len(parts));
+    for (const py::handle& part_handle : parts) {
+        std::vector<std::string> native_part;
+        py::list part = py::cast<py::list>(part_handle);
+        native_part.reserve(py::len(part));
+        for (const py::handle& item : part) {
+            native_part.push_back(py::cast<std::string>(item));
+        }
+        native_parts.push_back(std::move(native_part));
+    }
+    const auto plan = ome_zarr_c::native_code::utils_download_plan(
+        std::move(native_parts));
+    py::dict payload;
+    payload["common"] = py::str(plan.common);
+    py::list stripped_parts;
+    for (const auto& part : plan.stripped_parts) {
+        py::list py_part;
+        for (const auto& item : part) {
+            py_part.append(py::str(item));
+        }
+        stripped_parts.append(py_part);
+    }
+    payload["stripped_parts"] = stripped_parts;
+    return payload;
+}
+
+py::dict utils_download_node_plan(int zarr_format, bool has_axes) {
+    const auto plan =
+        ome_zarr_c::native_code::utils_download_node_plan(zarr_format, has_axes);
+    py::dict payload;
+    payload["wrap_ome_metadata"] = py::bool_(plan.wrap_ome_metadata);
+    payload["use_v2_chunk_key_encoding"] =
+        py::bool_(plan.use_v2_chunk_key_encoding);
+    payload["use_dimension_names"] = py::bool_(plan.use_dimension_names);
+    return payload;
+}
+
 py::list find_multiscales_impl(py::object path_to_zattrs) {
     py::object builtins = py::module_::import("builtins");
     py::object json = py::module_::import("json");
@@ -313,9 +357,6 @@ py::list info_lines(py::object node, bool stats = false) {
     py::object logger =
         py::module_::import("logging").attr("getLogger")(py::str("ome_zarr.utils"));
 
-    py::list lines;
-    lines.append(py::str(node));
-
     py::object loc = node.attr("zarr");
     py::object zgroup = loc.attr("zgroup");
     py::object version = zgroup.attr("get")(py::str("version"));
@@ -326,25 +367,33 @@ py::list info_lines(py::object node, bool stats = false) {
         py::object first = multiscales.attr("__getitem__")(0);
         version = first.attr("get")(py::str("version"), py::str(""));
     }
-    lines.append(py::str(" - version: ") + py::str(version));
-    lines.append(py::str(" - metadata"));
 
+    std::vector<std::string> spec_names;
+    spec_names.reserve(py::len(node.attr("specs")));
     for (const py::handle& spec_handle : node.attr("specs")) {
         py::object spec = py::reinterpret_borrow<py::object>(spec_handle);
-        lines.append(py::str("   - ") +
-                     py::str(spec.attr("__class__").attr("__name__")));
+        spec_names.push_back(
+            py::cast<std::string>(spec.attr("__class__").attr("__name__")));
     }
 
-    lines.append(py::str(" - data"));
+    py::list lines;
+    const auto header_lines = ome_zarr_c::native_code::utils_info_header_lines(
+        py::cast<std::string>(py::str(node)),
+        py::cast<std::string>(py::str(version)),
+        spec_names);
+    for (const auto& line : header_lines) {
+        lines.append(py::str(line));
+    }
     for (const py::handle& array_handle : node.attr("data")) {
         py::object array = py::reinterpret_borrow<py::object>(array_handle);
-        py::str line = py::str("   - ") + py::str(array.attr("shape"));
+        std::optional<std::string> minmax;
         if (stats) {
-            line = line + py::str(" minmax=") +
-                   py::str(
-                       dask.attr("compute")(array.attr("min")(), array.attr("max")()));
+            minmax = py::cast<std::string>(py::str(
+                dask.attr("compute")(array.attr("min")(), array.attr("max")())));
         }
-        lines.append(line);
+        lines.append(py::str(ome_zarr_c::native_code::utils_info_data_line(
+            py::cast<std::string>(py::str(array.attr("shape"))),
+            minmax)));
     }
 
     logger.attr("debug")(node.attr("data"));
@@ -355,6 +404,13 @@ py::list info_lines(py::object node, bool stats = false) {
 
 void register_utils_bindings(py::module_& m) {
     m.def("find_multiscales", &find_multiscales);
+    m.def("utils_download_plan", &utils_download_plan, py::arg("parts"));
+    m.def(
+        "utils_download_node_plan",
+        &utils_download_node_plan,
+        py::arg("zarr_format"),
+        py::arg("has_axes"));
+    m.def("utils_info_not_ome_zarr_line", &utils_info_not_ome_zarr_line, py::arg("node"));
     m.def("utils_view_plan", &utils_view_plan, py::arg("input_path"), py::arg("port") = 8000, py::arg("force") = false);
     m.def("utils_finder_discover_images", &utils_finder_discover_images, py::arg("input_path"));
     m.def("utils_finder_plan", &utils_finder_plan, py::arg("input_path"), py::arg("port") = 8000);

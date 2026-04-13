@@ -13,6 +13,11 @@ struct ChunkKeyEncoding {
     std::string separator;
 };
 
+struct FormatInitStorePlan {
+    bool use_fsspec;
+    bool read_only;
+};
+
 struct MetadataSummary {
     bool is_empty;
     bool has_multiscales_version;
@@ -126,6 +131,10 @@ bool format_matches(const std::string& version, const MetadataSummary& metadata)
 int format_zarr_format(const std::string& version);
 
 ChunkKeyEncoding format_chunk_key_encoding(const std::string& version);
+
+FormatInitStorePlan format_init_store_plan(
+    const std::string& path,
+    const std::string& mode);
 
 std::vector<CoordinateTransformations> generate_coordinate_transformations(
     const std::vector<std::vector<double>>& shapes);

@@ -343,20 +343,24 @@ py::list validate_plate_wells(
 
 py::object blosc_compressor() {
     py::object blosc = py::module_::import("numcodecs").attr("Blosc");
+    const auto plan = ome_zarr_c::native_code::writer_blosc_plan();
     return blosc(
-        py::arg("cname") = "zstd",
-        py::arg("clevel") = 5,
-        py::arg("shuffle") = blosc.attr("SHUFFLE"));
+        py::arg("cname") = py::str(plan.cname),
+        py::arg("clevel") = py::int_(plan.clevel),
+        py::arg("shuffle") = blosc.attr(plan.shuffle_attr.c_str()));
 }
 
 py::object resolve_storage_options(py::object storage_options, py::object path) {
+    const auto plan = ome_zarr_c::native_code::writer_storage_options_plan(
+        ome_zarr_c::bindings::object_truthy(storage_options),
+        py::isinstance<py::list>(storage_options));
     py::dict options;
-    if (ome_zarr_c::bindings::object_truthy(storage_options)) {
-        if (!py::isinstance<py::list>(storage_options)) {
-            options = py::cast<py::dict>(storage_options.attr("copy")());
-        } else {
-            return storage_options.attr("__getitem__")(path);
-        }
+    if (plan.return_copy) {
+        options = py::cast<py::dict>(storage_options.attr("copy")());
+        return options;
+    }
+    if (plan.return_item) {
+        return storage_options.attr("__getitem__")(path);
     }
     return options;
 }
@@ -391,10 +395,11 @@ py::dict writer_pyramid_plan(
 
     std::vector<std::vector<std::size_t>> explicit_chunks;
     explicit_chunks.reserve(shapes.size());
-    for (py::ssize_t index = 0; index < py::len(pyramid); ++index) {
+    const py::ssize_t pyramid_len = py::len(pyramid);
+    for (py::ssize_t index = 0; index < pyramid_len; ++index) {
         py::object chunks = py::none();
         if (py::isinstance<py::list>(storage_options) &&
-            py::len(storage_options) > index &&
+            py::len(storage_options) > static_cast<py::size_t>(index) &&
             py::isinstance<py::dict>(storage_options.attr("__getitem__")(index)) &&
             py::cast<py::dict>(storage_options.attr("__getitem__")(index)).contains("chunks")) {
             chunks =
@@ -493,6 +498,41 @@ py::dict writer_labels_plan(
     return payload;
 }
 
+py::dict writer_image_plan(
+    py::object dims,
+    bool scaler_present,
+    int scaler_max_layer,
+    const std::string& scaler_method,
+    py::object method = py::none()) {
+    std::vector<std::string> native_dims;
+    native_dims.reserve(py::len(dims));
+    for (const py::handle& dim_handle : py::iterable(dims)) {
+        native_dims.push_back(py::cast<std::string>(dim_handle));
+    }
+
+    const auto plan = ome_zarr_c::native_code::writer_image_plan(
+        native_dims,
+        scaler_present,
+        scaler_max_layer,
+        scaler_method,
+        optional_method_name(method));
+
+    py::dict payload;
+    payload["resolved_method"] = py::str(plan.resolved_method);
+    payload["warn_scaler_deprecated"] = py::bool_(plan.warn_scaler_deprecated);
+    payload["warn_laplacian_fallback"] = py::bool_(plan.warn_laplacian_fallback);
+    py::list scale_factors;
+    for (const auto& level : plan.scale_factors) {
+        py::dict scale_factor;
+        for (const auto& [dim, factor] : level) {
+            scale_factor[py::str(dim)] = py::int_(factor);
+        }
+        scale_factors.append(scale_factor);
+    }
+    payload["scale_factors"] = scale_factors;
+    return payload;
+}
+
 }  // namespace
 
 void register_writer_bindings(py::module_& m) {
@@ -572,5 +612,13 @@ void register_writer_bindings(py::module_& m) {
         py::arg("use_default_scaler"),
         py::arg("scaler_is_none"),
         py::arg("scaler_max_layer"),
+        py::arg("method") = py::none());
+    m.def(
+        "writer_image_plan",
+        &writer_image_plan,
+        py::arg("dims"),
+        py::arg("scaler_present"),
+        py::arg("scaler_max_layer"),
+        py::arg("scaler_method"),
         py::arg("method") = py::none());
 }

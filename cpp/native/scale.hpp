@@ -44,6 +44,8 @@ std::vector<std::int64_t> scaler_local_mean_factors(
 
 std::vector<long> scaler_zoom_factors(long downscale, long max_layer);
 
+std::vector<std::string> scaler_group_dataset_paths(std::size_t pyramid_size);
+
 std::vector<ScaleLevel> scale_levels_from_ints(
     const std::vector<std::string>& dims,
     std::size_t level_count);

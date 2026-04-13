@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <string>
 
 #include "../native/scale.hpp"
 #include "common.hpp"
@@ -28,6 +29,57 @@ py::list scaler_methods() {
         methods.append(py::str(method));
     }
     return methods;
+}
+
+void scaler_assert_values(py::object pyramid) {
+    py::object numpy = py::module_::import("numpy");
+    py::object builtins = py::module_::import("builtins");
+    const py::ssize_t pyramid_len = py::len(pyramid);
+    py::object expected = builtins.attr("set")(numpy.attr("unique")(pyramid.attr("__getitem__")(0)));
+    py::object level_zero = pyramid.attr("__getitem__")(0);
+    py::print(
+        py::str(
+            "level 0 " +
+            py::cast<std::string>(py::str(level_zero.attr("shape"))) +
+            " = " +
+            std::to_string(static_cast<long long>(py::len(expected))) +
+            " labels"));
+    for (py::ssize_t index = 1; index < pyramid_len; ++index) {
+        py::object level = pyramid.attr("__getitem__")(index);
+        py::print(
+            py::str(
+                "level " +
+                std::to_string(static_cast<long long>(index)) +
+                " " +
+                py::cast<std::string>(py::str(level.attr("shape"))) +
+                " " +
+                std::to_string(static_cast<long long>(py::len(expected)))));
+        py::object found = builtins.attr("set")(numpy.attr("unique")(level));
+        if (!expected.attr("issuperset")(found).cast<bool>()) {
+            throw py::value_error(
+                std::to_string(static_cast<long long>(py::len(found))) +
+                " found values are not a subset of " +
+                std::to_string(static_cast<long long>(py::len(expected))) +
+                " values");
+        }
+    }
+}
+
+py::object scaler_create_group(
+    const std::string& dir_path,
+    py::object base,
+    py::object pyramid) {
+    py::object zarr = py::module_::import("zarr");
+    py::object grp = zarr.attr("open_group")(py::str(dir_path), py::arg("mode") = "w");
+    grp.attr("create_array")(py::arg("name") = py::str("base"), py::arg("data") = base);
+    const auto paths = ome_zarr_c::native_code::scaler_group_dataset_paths(
+        static_cast<std::size_t>(py::len(pyramid)));
+    for (std::size_t index = 1; index < paths.size(); ++index) {
+        grp.attr("create_array")(
+            py::arg("name") = py::str(paths[index]),
+            py::arg("data") = pyramid.attr("__getitem__")(py::int_(index)));
+    }
+    return grp;
 }
 
 py::list build_pyramid(
@@ -81,9 +133,10 @@ py::list build_pyramid(
             native_dims,
             static_cast<std::size_t>(py::len(scale_factors)));
     } else {
+        const py::ssize_t scale_factor_count = py::len(scale_factors);
         std::vector<std::map<std::string, double>> input_levels;
-        input_levels.reserve(py::len(scale_factors));
-        for (py::ssize_t index = 0; index < py::len(scale_factors); ++index) {
+        input_levels.reserve(static_cast<std::size_t>(scale_factor_count));
+        for (py::ssize_t index = 0; index < scale_factor_count; ++index) {
             py::object level = scale_factors.attr("__getitem__")(index);
             py::dict reordered_level;
             std::map<std::string, double> native_level;
@@ -409,6 +462,13 @@ py::list scaler_zoom(
 
 void register_scale_bindings(py::module_& m) {
     m.def("scaler_methods", &scaler_methods);
+    m.def("scaler_assert_values", &scaler_assert_values, py::arg("pyramid"));
+    m.def(
+        "scaler_create_group",
+        &scaler_create_group,
+        py::arg("dir_path"),
+        py::arg("base"),
+        py::arg("pyramid"));
     m.def("_build_pyramid",
           &build_pyramid,
           py::arg("image"),

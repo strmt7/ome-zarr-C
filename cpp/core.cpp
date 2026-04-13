@@ -236,6 +236,7 @@ py::tuple output_slices_for_shape(const py::handle& shape) {
 }  // namespace
 
 void register_basic_bindings(py::module_& m);
+void register_cli_bindings(py::module_& m);
 void register_csv_bindings(py::module_& m);
 void register_data_bindings(py::module_& m);
 void register_dask_utils_bindings(py::module_& m);
@@ -1783,6 +1784,7 @@ py::tuple data_astronaut() {
 
 PYBIND11_MODULE(_core, m) {
     register_basic_bindings(m);
+    register_cli_bindings(m);
     register_csv_bindings(m);
     register_data_bindings(m);
     register_dask_utils_bindings(m);
