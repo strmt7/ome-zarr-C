@@ -68,6 +68,24 @@ def _run_scaler_method(cls, method_name: str, data, **scaler_kwargs):
             return err(exc, stdout=stream.getvalue(), records=_warning_snapshot(caught))
 
 
+def _run_scaler_internal(cls, method_name: str, args, **scaler_kwargs):
+    stream = io.StringIO()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            with redirect_stdout(stream):
+                scaler = cls(**scaler_kwargs)
+                method = getattr(scaler, method_name)
+                result = method(*args)
+            return ok(
+                value=_result_signature(result),
+                stdout=stream.getvalue(),
+                records=_warning_snapshot(caught),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return err(exc, stdout=stream.getvalue(), records=_warning_snapshot(caught))
+
+
 def _run_scaler_func(cls, method_name: str):
     stream = io.StringIO()
     with warnings.catch_warnings(record=True) as caught:
@@ -172,3 +190,37 @@ def test_scaler_local_mean_matches_upstream() -> None:
 def test_scaler_zoom_matches_upstream() -> None:
     data = np.arange(64, dtype=np.uint16).reshape(8, 8)
     _assert_method_match("zoom", data)
+
+
+def test_scaler_private_nearest_matches_upstream() -> None:
+    plane = np.arange(64, dtype=np.uint16).reshape(8, 8)
+    expected = _run_scaler_internal(
+        _py_scale.Scaler,
+        "_Scaler__nearest",
+        (plane, 8, 8),
+    )
+    actual = _run_scaler_internal(
+        _cpp_scale.Scaler,
+        "_Scaler__nearest",
+        (plane, 8, 8),
+    )
+    assert expected == actual
+
+
+def test_scaler_by_plane_matches_upstream_for_nearest() -> None:
+    base = np.arange(1 * 2 * 1 * 16 * 16, dtype=np.uint8).reshape(1, 2, 1, 16, 16)
+
+    py_scaler = _py_scale.Scaler()
+    cpp_scaler = _cpp_scale.Scaler()
+
+    expected = _run_scaler_internal(
+        _py_scale.Scaler,
+        "_by_plane",
+        (base, py_scaler._Scaler__nearest),
+    )
+    actual = _run_scaler_internal(
+        _cpp_scale.Scaler,
+        "_by_plane",
+        (base, cpp_scaler._Scaler__nearest),
+    )
+    assert expected == actual

@@ -49,4 +49,27 @@ std::vector<std::size_t> rgb_channel_order(const std::vector<std::size_t>& shape
     throw std::invalid_argument("rgb_to_5d expects 2D or 3D input");
 }
 
+CoinsPlan coins_plan() {
+    CoinsPlan plan{};
+    plan.crop_margin = 50;
+    plan.footprint_rows = 4;
+    plan.footprint_cols = 4;
+    plan.clear_border_max_size = 20;
+    plan.scales = {8, 4, 2, 1};
+    plan.image_order = 3;
+    plan.label_order = 0;
+    return plan;
+}
+
+AstronautPlan astronaut_plan() {
+    AstronautPlan plan{};
+    plan.channel_indices = {0, 1, 2};
+    plan.tile_repetitions = {1, 2, 2};
+    plan.circles = {
+        CircleSpec{100, 100, 200, 200, 1},
+        CircleSpec{150, 150, 250, 250, 2},
+    };
+    return plan;
+}
+
 }  // namespace ome_zarr_c::native_code

@@ -14,10 +14,10 @@ from . import _core
 from ._frozen_upstream import ensure_frozen_upstream_importable
 from .axes import Axes
 from .format import format_from_version
+from .io import ZarrLocation
 
 ensure_frozen_upstream_importable()
 
-ZarrLocation = importlib.import_module("ome_zarr.io").ZarrLocation
 JSONDict = importlib.import_module("ome_zarr.types").JSONDict
 
 LOGGER = logging.getLogger("ome_zarr.reader")

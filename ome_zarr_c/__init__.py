@@ -15,6 +15,7 @@ from .format import (
     format_from_version,
     format_implementations,
 )
+from .io import ZarrLocation, parse_url
 from .reader import (
     OMERO,
     Label,
@@ -58,9 +59,11 @@ __all__ = [
     "int_to_rgba",
     "int_to_rgba_255",
     "parse_csv_value",
+    "parse_url",
     "rgba_to_int",
     "csv_to_zarr",
     "splitall",
     "strip_common_prefix",
     "view",
+    "ZarrLocation",
 ]

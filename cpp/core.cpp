@@ -236,9 +236,15 @@ py::tuple output_slices_for_shape(const py::handle& shape) {
 }  // namespace
 
 void register_basic_bindings(py::module_& m);
+void register_csv_bindings(py::module_& m);
+void register_data_bindings(py::module_& m);
+void register_dask_utils_bindings(py::module_& m);
 void register_format_bindings(py::module_& m);
+void register_io_bindings(py::module_& m);
 void register_reader_bindings(py::module_& m);
 void register_scale_bindings(py::module_& m);
+void register_utils_bindings(py::module_& m);
+void register_writer_bindings(py::module_& m);
 
 py::list axes_to_dicts(const py::sequence& axes) {
     py::list result;
@@ -1285,210 +1291,6 @@ py::object resolve_storage_options(py::object storage_options, py::object path) 
     return options;
 }
 
-py::tuple better_chunksize(py::object image, py::object factors) {
-    py::object numpy = py::module_::import("numpy");
-    py::object numpy_int64 = numpy.attr("int64");
-    std::vector<std::int64_t> native_chunksize;
-    std::vector<double> native_factors;
-
-    for (const py::handle& chunk : image.attr("chunksize")) {
-        native_chunksize.push_back(py::cast<std::int64_t>(chunk));
-    }
-    for (const py::handle& factor : factors) {
-        native_factors.push_back(py::cast<double>(factor));
-    }
-
-    const auto [better_chunks_native, block_output_native] =
-        ome_zarr_c::native_code::better_chunksize(native_chunksize, native_factors);
-
-    py::tuple better_chunks(better_chunks_native.size());
-    py::tuple block_output(block_output_native.size());
-    for (py::size_t index = 0; index < better_chunks_native.size(); ++index) {
-        better_chunks[index] = numpy_int64(better_chunks_native[index]);
-        block_output[index] = numpy_int64(block_output_native[index]);
-    }
-    return py::make_tuple(better_chunks, block_output);
-}
-
-py::object dask_resize(
-    py::object image,
-    py::object output_shape,
-    py::args args,
-    py::kwargs kwargs) {
-    py::object numpy = py::module_::import("numpy");
-    py::object dask_array = py::module_::import("dask.array");
-    py::object skimage_transform = py::module_::import("skimage.transform");
-    py::object float_type = py::module_::import("builtins").attr("float");
-
-    py::object factors = numpy.attr("divide")(
-        numpy.attr("array")(output_shape),
-        numpy.attr("array")(image.attr("shape")).attr("astype")(float_type));
-    py::tuple chunk_info = better_chunksize(image, factors);
-    py::object image_prepared = image.attr("rechunk")(chunk_info[0]);
-    py::tuple extra_args = py::reinterpret_borrow<py::tuple>(args);
-    py::dict call_kwargs = py::reinterpret_borrow<py::dict>(kwargs);
-
-    py::object resize_block = py::cpp_function(
-        [factors, skimage_transform, extra_args, call_kwargs](
-            py::object image_block,
-            py::object block_info = py::none()) {
-            static_cast<void>(block_info);
-            py::object numpy_inner = py::module_::import("numpy");
-            py::object int_type_inner = py::module_::import("builtins").attr("int");
-            py::object chunk_output_shape = py::tuple(
-                numpy_inner
-                    .attr("ceil")(
-                        numpy_inner.attr("multiply")(
-                            numpy_inner.attr("array")(image_block.attr("shape")),
-                            factors))
-                    .attr("astype")(int_type_inner));
-            py::object resized = call_callable(
-                skimage_transform.attr("resize"),
-                {image_block, chunk_output_shape},
-                extra_args,
-                call_kwargs);
-            return resized.attr("astype")(image_block.attr("dtype"));
-        },
-        py::arg("image_block"),
-        py::arg("block_info") = py::none());
-
-    py::object output = dask_array
-                            .attr("map_blocks")(
-                                resize_block,
-                                image_prepared,
-                                py::arg("dtype") = image.attr("dtype"),
-                                py::arg("chunks") = chunk_info[1])
-                            .attr("__getitem__")(output_slices_for_shape(output_shape));
-    return output.attr("rechunk")(image.attr("chunksize"))
-        .attr("astype")(image.attr("dtype"));
-}
-
-py::object dask_local_mean(
-    py::object image,
-    py::object output_shape,
-    py::args args,
-    py::kwargs kwargs) {
-    py::object numpy = py::module_::import("numpy");
-    py::object dask_array = py::module_::import("dask.array");
-    py::object float_type = py::module_::import("builtins").attr("float");
-    py::object int_type = py::module_::import("builtins").attr("int");
-    py::object downscale_local_mean =
-        py::module_::import("skimage.transform").attr("downscale_local_mean");
-
-    py::object factors = numpy.attr("divide")(
-        numpy.attr("array")(image.attr("shape")).attr("astype")(float_type),
-        numpy.attr("array")(output_shape));
-    py::tuple chunk_info = better_chunksize(
-        image, numpy.attr("divide")(1, factors));
-    py::object image_prepared = image.attr("rechunk")(chunk_info[0]);
-    py::tuple extra_args = py::reinterpret_borrow<py::tuple>(args);
-    py::dict call_kwargs = py::reinterpret_borrow<py::dict>(kwargs);
-    py::object factor_tuple = py::tuple(factors.attr("astype")(int_type));
-
-    py::object local_mean_block = py::cpp_function(
-        [downscale_local_mean, factor_tuple, extra_args, call_kwargs](
-            py::object image_block) {
-            py::object reduced = call_callable(
-                downscale_local_mean,
-                {image_block, factor_tuple},
-                extra_args,
-                call_kwargs);
-            return reduced.attr("astype")(image_block.attr("dtype"));
-        },
-        py::arg("image_block"));
-
-    py::object output = dask_array
-                            .attr("map_blocks")(
-                                local_mean_block,
-                                image_prepared,
-                                py::arg("dtype") = image.attr("dtype"),
-                                py::arg("chunks") = chunk_info[1])
-                            .attr("__getitem__")(output_slices_for_shape(output_shape));
-    return output.attr("rechunk")(image.attr("chunksize"))
-        .attr("astype")(image.attr("dtype"));
-}
-
-py::object dask_zoom(
-    py::object image,
-    py::object output_shape,
-    py::args args,
-    py::kwargs kwargs) {
-    static_cast<void>(args);
-    static_cast<void>(kwargs);
-    py::object numpy = py::module_::import("numpy");
-    py::object dask_array = py::module_::import("dask.array");
-    py::object float_type = py::module_::import("builtins").attr("float");
-    py::object scipy_zoom = py::module_::import("scipy.ndimage").attr("zoom");
-
-    py::object factors = numpy.attr("divide")(
-        numpy.attr("array")(image.attr("shape")).attr("astype")(float_type),
-        numpy.attr("array")(output_shape));
-    py::object inverse_factors = numpy.attr("divide")(1, factors);
-    py::tuple chunk_info = better_chunksize(image, inverse_factors);
-    py::object image_prepared = image.attr("rechunk")(chunk_info[0]);
-
-    py::object zoom_block = py::cpp_function(
-        [scipy_zoom, inverse_factors](py::object image_block) {
-            py::object zoomed = scipy_zoom(
-                image_block, inverse_factors, py::arg("order") = 1);
-            return zoomed.attr("astype")(image_block.attr("dtype"));
-        },
-        py::arg("image_block"));
-
-    py::tuple image_shape = py::cast<py::tuple>(image.attr("shape"));
-    py::tuple factors_tuple = py::cast<py::tuple>(factors);
-    py::tuple resized_output_shape(py::len(image_shape));
-    for (py::size_t index = 0; index < py::len(image_shape); ++index) {
-        resized_output_shape[index] =
-            floor_divide(image_shape[index], factors_tuple[index]);
-    }
-
-    py::object output = dask_array
-                            .attr("map_blocks")(
-                                zoom_block,
-                                image_prepared,
-                                py::arg("dtype") = image.attr("dtype"),
-                                py::arg("chunks") = chunk_info[1])
-                            .attr("__getitem__")(
-                                output_slices_for_shape(resized_output_shape));
-    return output.attr("rechunk")(image.attr("chunksize"))
-        .attr("astype")(image.attr("dtype"));
-}
-
-py::object downscale_nearest_dask(py::object image, py::object factors) {
-    py::tuple factor_tuple = py::tuple(factors);
-    py::tuple shape = py::cast<py::tuple>(image.attr("shape"));
-    const py::ssize_t factor_count = py::len(factor_tuple);
-    const py::ssize_t ndim = py::cast<py::ssize_t>(image.attr("ndim"));
-
-    if (factor_count != ndim) {
-        throw py::value_error(
-            "Dimension mismatch: " + py::cast<std::string>(py::str(image.attr("ndim"))) +
-            " image dimensions, " + std::to_string(factor_count) +
-            " scale factors");
-    }
-
-    for (py::size_t index = 0; index < static_cast<py::size_t>(factor_count); ++index) {
-        const py::handle factor = factor_tuple[index];
-        const py::handle dim = shape[index];
-        const bool valid = PyLong_Check(factor.ptr()) &&
-                           rich_compare_bool(factor, py::int_(0), Py_GT) &&
-                           rich_compare_bool(factor, dim, Py_LE);
-        if (!valid) {
-            throw py::value_error(
-                "All scale factors must not be greater than the dimension length: ("
-                + py::cast<std::string>(py::str(factor_tuple)) + ") <= (" +
-                py::cast<std::string>(py::str(shape)) + ")");
-        }
-    }
-
-    py::tuple slices(static_cast<py::size_t>(factor_count));
-    for (py::size_t index = 0; index < static_cast<py::size_t>(factor_count); ++index) {
-        slices[index] = py::slice(py::none(), py::none(), factor_tuple[index]);
-    }
-    return image.attr("__getitem__")(slices);
-}
-
 py::list build_pyramid(
     py::object image,
     py::object scale_factors,
@@ -1980,26 +1782,14 @@ py::tuple data_astronaut() {
 }
 
 PYBIND11_MODULE(_core, m) {
-    m.def("dict_to_zarr", &dict_to_zarr);
-    m.def("csv_to_zarr", &csv_to_zarr);
-    m.def("find_multiscales", &find_multiscales);
-    m.def("info_lines", &info_lines, py::arg("node"), py::arg("stats") = false);
-    m.def("_validate_plate_wells", &validate_plate_wells, py::arg("wells"), py::arg("rows"), py::arg("columns"), py::arg("fmt"));
-    m.def("_blosc_compressor", &blosc_compressor);
-    m.def("_resolve_storage_options", &resolve_storage_options, py::arg("storage_options"), py::arg("path"));
-    m.def("_better_chunksize", &better_chunksize, py::arg("image"), py::arg("factors"));
-    m.def("resize", &dask_resize, py::arg("image"), py::arg("output_shape"));
-    m.def("local_mean", &dask_local_mean, py::arg("image"), py::arg("output_shape"));
-    m.def("zoom", &dask_zoom, py::arg("image"), py::arg("output_shape"));
-    m.def("downscale_nearest", &downscale_nearest_dask, py::arg("image"), py::arg("factors"));
-    m.def("scaler_gaussian", &scaler_gaussian, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
-    m.def("scaler_laplacian", &scaler_laplacian, py::arg("base"), py::arg("downscale") = 2, py::arg("max_layer") = 4);
-    m.def("data_make_circle", &data_make_circle, py::arg("h"), py::arg("w"), py::arg("value"), py::arg("target"));
-    m.def("data_rgb_to_5d", &data_rgb_to_5d, py::arg("pixels"));
-    m.def("data_coins", &data_coins);
-    m.def("data_astronaut", &data_astronaut);
     register_basic_bindings(m);
+    register_csv_bindings(m);
+    register_data_bindings(m);
+    register_dask_utils_bindings(m);
     register_format_bindings(m);
+    register_io_bindings(m);
     register_reader_bindings(m);
     register_scale_bindings(m);
+    register_utils_bindings(m);
+    register_writer_bindings(m);
 }
