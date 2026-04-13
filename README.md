@@ -116,6 +116,18 @@ This `split-native` metric counts only upstream surfaces that are routed
 through dedicated `cpp/bindings/` entrypoints with corresponding native files,
 and excludes mixed exports still left in `cpp/core.cpp`.
 
+## Pure-Native Coverage
+
+Use the stricter report when you need the percentage of upstream behavior whose
+semantics already live in `cpp/native/`:
+
+```bash
+.venv/bin/python scripts/report_pure_native_coverage.py
+```
+
+This metric is intentionally stricter than `split-native` and should be used
+for claims about real native semantic ownership.
+
 ## Runtime-Blocked Surfaces
 
 Some native-backed or partially ported paths are intentionally not counted in

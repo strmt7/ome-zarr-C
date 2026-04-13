@@ -6,14 +6,18 @@ upstream Python snapshot.
 ## What it means
 
 - Count only upstream surfaces that are routed through dedicated
-  `cpp/bindings/` entrypoints instead of mixed exports left in `cpp/core.cpp`.
-- Require a corresponding native implementation file under `cpp/native/`.
+  `cpp/bindings/` entrypoints, or thin Python orchestration that depends only
+  on split binding/native surfaces, instead of mixed exports left in
+  `cpp/core.cpp`.
+- Require corresponding implementation files under `cpp/bindings/` and
+  `cpp/native/`.
 - Use the frozen upstream source in `source_code_v.0.15.0/ome_zarr/` as the
   immutable line-count basis.
 
 This metric is stricter than the old `native-backed` percentage, but still not
 the final `pure-native` end state the repository is targeting. It is the
-current architecture-first floor for "real" conversion progress.
+current architecture-first floor for measurable progress after a surface has
+been split away from mixed-core debt.
 
 ## Report command
 

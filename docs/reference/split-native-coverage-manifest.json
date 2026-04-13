@@ -1,6 +1,6 @@
 {
   "metric_name": "split_native_coverage",
-  "description": "Count only upstream surfaces that are routed through cpp/bindings entrypoints instead of mixed cpp/core.cpp exports.",
+  "description": "Count only upstream surfaces that are either routed through dedicated cpp/bindings entrypoints or implemented as thin Python orchestration over split binding/native surfaces, instead of mixed cpp/core.cpp exports.",
   "upstream_root": "source_code_v.0.15.0/ome_zarr",
   "entries": [
     {"upstream_file": "axes.py", "qualname": "Axes.__init__", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/axes.cpp"]},
@@ -16,6 +16,13 @@
     {"upstream_file": "conversions.py", "qualname": "rgba_to_int", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/conversions.cpp"]},
 
     {"upstream_file": "csv.py", "qualname": "parse_csv_value", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "csv_to_zarr", "binding_files": ["cpp/bindings/csv_bindings.cpp"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "dict_to_zarr", "binding_files": ["cpp/bindings/csv_bindings.cpp"], "native_files": ["cpp/native/csv.cpp"]},
+
+    {"upstream_file": "data.py", "qualname": "coins", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp"]},
+    {"upstream_file": "data.py", "qualname": "astronaut", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp", "cpp/native/scale.cpp"]},
+    {"upstream_file": "data.py", "qualname": "make_circle", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp"]},
+    {"upstream_file": "data.py", "qualname": "rgb_to_5d", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp"]},
 
     {"upstream_file": "format.py", "qualname": "format_from_version", "binding_files": ["cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/format.cpp"]},
     {"upstream_file": "format.py", "qualname": "format_implementations", "binding_files": ["cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/format.cpp"]},
@@ -52,10 +59,15 @@
     {"upstream_file": "scale.py", "qualname": "Scaler.func", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
     {"upstream_file": "scale.py", "qualname": "Scaler.resize_image", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
     {"upstream_file": "scale.py", "qualname": "Scaler.nearest", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
+    {"upstream_file": "scale.py", "qualname": "Scaler.__nearest", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
+    {"upstream_file": "scale.py", "qualname": "Scaler.gaussian", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
+    {"upstream_file": "scale.py", "qualname": "Scaler.laplacian", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
     {"upstream_file": "scale.py", "qualname": "Scaler.local_mean", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
+    {"upstream_file": "scale.py", "qualname": "Scaler._by_plane", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
     {"upstream_file": "scale.py", "qualname": "Scaler.zoom", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
     {"upstream_file": "scale.py", "qualname": "_build_pyramid", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
 
+    {"upstream_file": "utils.py", "qualname": "find_multiscales", "binding_files": ["cpp/bindings/utils_bindings.cpp"], "native_files": ["cpp/native/utils.cpp"]},
     {"upstream_file": "utils.py", "qualname": "splitall", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/utils.cpp"]},
     {"upstream_file": "utils.py", "qualname": "strip_common_prefix", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/utils.cpp"]},
 
@@ -65,6 +77,20 @@
     {"upstream_file": "writer.py", "qualname": "_validate_well_images", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "_validate_plate_acquisitions", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "_validate_plate_rows_columns", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
-    {"upstream_file": "writer.py", "qualname": "_validate_datasets", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]}
+    {"upstream_file": "writer.py", "qualname": "_validate_datasets", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "_validate_plate_wells", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "_blosc_compressor", "binding_files": ["cpp/bindings/writer_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "check_group_fmt", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "check_format", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_multiscale", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp", "cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp", "cpp/native/scale.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_multiscales_metadata", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_plate_metadata", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_well_metadata", "binding_files": ["cpp/bindings/writer_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "_write_pyramid_to_zarr", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_label_metadata", "binding_files": ["cpp/bindings/writer_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "get_metadata", "binding_files": ["cpp/bindings/writer_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "add_metadata", "binding_files": ["cpp/bindings/writer_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_multiscale_labels", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp", "cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp", "cpp/native/scale.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_labels", "binding_files": ["cpp/bindings/writer_bindings.cpp", "cpp/bindings/format_bindings.cpp", "cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp", "cpp/native/scale.cpp"]}
   ]
 }

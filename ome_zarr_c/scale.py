@@ -144,8 +144,12 @@ class Scaler:
         return _core.scaler_resize_image(image, self.downscale, self.order)
 
     def nearest(self, base: np.ndarray) -> list[np.ndarray]:
+        return cast(list[np.ndarray], self._by_plane(base, self.__nearest))
+
+    def __nearest(self, plane: ArrayLike, sizeY: int, sizeX: int) -> np.ndarray:
         return cast(
-            list[np.ndarray], _core.scaler_nearest(base, self.downscale, self.max_layer)
+            np.ndarray,
+            _core.scaler_nearest_plane(plane, sizeY, sizeX, self.downscale),
         )
 
     def gaussian(self, base: np.ndarray) -> list[np.ndarray]:
@@ -170,6 +174,18 @@ class Scaler:
         return cast(
             list[np.ndarray],
             _core.scaler_zoom(base, self.downscale, self.max_layer),
+        )
+
+    def _by_plane(
+        self,
+        base: np.ndarray,
+        func,
+    ) -> list[np.ndarray]:
+        if getattr(func, "__name__", "") != "__nearest":
+            raise NotImplementedError("Only nearest is supported in the native path")
+        return cast(
+            list[np.ndarray],
+            _core.scaler_by_plane_nearest(base, self.downscale, self.max_layer),
         )
 
 

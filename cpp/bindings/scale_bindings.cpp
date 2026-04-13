@@ -12,6 +12,16 @@ namespace py = pybind11;
 
 namespace {
 
+std::vector<std::int64_t> int64_vector_from_shape(const py::handle& shape) {
+    std::vector<std::int64_t> native_shape;
+    const py::sequence sequence = py::cast<py::sequence>(shape);
+    native_shape.reserve(py::len(sequence));
+    for (const py::handle& dim : sequence) {
+        native_shape.push_back(py::cast<std::int64_t>(dim));
+    }
+    return native_shape;
+}
+
 py::list scaler_methods() {
     py::list methods;
     for (const auto& method : ome_zarr_c::native_code::scaler_methods()) {
@@ -188,7 +198,7 @@ py::object scaler_resize_image(
     return resized.attr("astype")(dtype);
 }
 
-py::list scaler_by_plane(
+py::list run_scaler_by_plane(
     py::object base,
     const std::function<py::object(py::object, py::ssize_t, py::ssize_t)>& transform,
     py::int_ max_layer = py::int_(4)) {
@@ -198,19 +208,11 @@ py::list scaler_by_plane(
 
     for (py::ssize_t level_index = 0; level_index < max_layer; ++level_index) {
         py::object stack_to_scale = rv[py::len(rv) - 1];
-        const py::ssize_t stack_ndim = py::cast<py::ssize_t>(stack_to_scale.attr("ndim"));
-        py::tuple stack_shape = py::cast<py::tuple>(stack_to_scale.attr("shape"));
-
-        std::array<py::ssize_t, 5> shape_5d = {1, 1, 1, 1, 1};
-        for (py::ssize_t dim_index = 0; dim_index < stack_ndim; ++dim_index) {
-            shape_5d[5 - stack_ndim + dim_index] = py::cast<py::ssize_t>(stack_shape[dim_index]);
-        }
-
-        const py::ssize_t T = shape_5d[0];
-        const py::ssize_t C = shape_5d[1];
-        const py::ssize_t Z = shape_5d[2];
-        const py::ssize_t Y = shape_5d[3];
-        const py::ssize_t X = shape_5d[4];
+        const auto stack_shape =
+            int64_vector_from_shape(py::cast<py::tuple>(stack_to_scale.attr("shape")));
+        const py::ssize_t stack_ndim = static_cast<py::ssize_t>(stack_shape.size());
+        const py::ssize_t Y = static_cast<py::ssize_t>(stack_shape[stack_shape.size() - 2]);
+        const py::ssize_t X = static_cast<py::ssize_t>(stack_shape[stack_shape.size() - 1]);
 
         if (stack_ndim == 2) {
             rv.append(transform(stack_to_scale, Y, X));
@@ -218,37 +220,38 @@ py::list scaler_by_plane(
         }
 
         const py::ssize_t stack_dims = stack_ndim - 2;
+        const auto plane_indices =
+            ome_zarr_c::native_code::scaler_plane_indices(stack_shape);
         py::object new_stack = py::none();
 
-        for (py::ssize_t t = 0; t < T; ++t) {
-            for (py::ssize_t c = 0; c < C; ++c) {
-                for (py::ssize_t z = 0; z < Z; ++z) {
-                    const std::array<py::ssize_t, 3> indices = {t, c, z};
-                    py::tuple dims_to_slice(stack_dims);
-                    for (py::ssize_t dim_index = 0; dim_index < stack_dims; ++dim_index) {
-                        dims_to_slice[dim_index] =
-                            py::int_(indices[3 - stack_dims + dim_index]);
-                    }
-
-                    py::object plane = stack_to_scale.attr("__getitem__")(dims_to_slice);
-                    py::object out = transform(plane, Y, X);
-
-                    if (new_stack.is_none()) {
-                        py::tuple out_shape = py::cast<py::tuple>(out.attr("shape"));
-                        py::tuple new_shape(stack_dims + 2);
-                        for (py::ssize_t dim_index = 0; dim_index < stack_dims; ++dim_index) {
-                            new_shape[dim_index] =
-                                py::int_(shape_5d[3 - stack_dims + dim_index]);
-                        }
-                        new_shape[stack_dims] = out_shape[0];
-                        new_shape[stack_dims + 1] = out_shape[1];
-                        new_stack = numpy.attr("zeros")(
-                            new_shape, py::arg("dtype") = base.attr("dtype"));
-                    }
-
-                    ome_zarr_c::bindings::set_item(new_stack, dims_to_slice, out);
-                }
+        for (const auto& native_indices : plane_indices) {
+            py::tuple dims_to_slice(stack_dims);
+            for (py::ssize_t dim_index = 0; dim_index < stack_dims; ++dim_index) {
+                dims_to_slice[dim_index] =
+                    py::int_(native_indices[static_cast<std::size_t>(dim_index)]);
             }
+
+            py::object plane = stack_to_scale.attr("__getitem__")(dims_to_slice);
+            py::object out = transform(plane, Y, X);
+
+            if (new_stack.is_none()) {
+                const auto out_shape =
+                    int64_vector_from_shape(py::cast<py::tuple>(out.attr("shape")));
+                const auto native_new_shape =
+                    ome_zarr_c::native_code::scaler_stack_shape(
+                        stack_shape,
+                        out_shape);
+                py::tuple new_shape(native_new_shape.size());
+                for (py::size_t shape_index = 0; shape_index < native_new_shape.size();
+                     ++shape_index) {
+                    new_shape[shape_index] = py::int_(native_new_shape[shape_index]);
+                }
+                new_stack = numpy.attr("zeros")(
+                    new_shape,
+                    py::arg("dtype") = base.attr("dtype"));
+            }
+
+            ome_zarr_c::bindings::set_item(new_stack, dims_to_slice, out);
         }
 
         rv.append(new_stack);
@@ -290,12 +293,61 @@ py::list scaler_nearest(
     py::object base,
     py::int_ downscale = py::int_(2),
     py::int_ max_layer = py::int_(4)) {
-    return scaler_by_plane(
+    return run_scaler_by_plane(
         base,
         [downscale](py::object plane, py::ssize_t size_y, py::ssize_t size_x) {
             return scaler_nearest_plane(plane, size_y, size_x, downscale);
         },
         max_layer);
+}
+
+py::list scaler_by_plane_nearest(
+    py::object base,
+    py::int_ downscale = py::int_(2),
+    py::int_ max_layer = py::int_(4)) {
+    return run_scaler_by_plane(
+        base,
+        [downscale](py::object plane, py::ssize_t size_y, py::ssize_t size_x) {
+            return scaler_nearest_plane(plane, size_y, size_x, downscale);
+        },
+        max_layer);
+}
+
+py::list scaler_gaussian(
+    py::object base,
+    py::int_ downscale = py::int_(2),
+    py::int_ max_layer = py::int_(4)) {
+    py::object pyramid = py::module_::import("skimage.transform").attr("pyramid_gaussian")(
+        base,
+        py::arg("downscale") = downscale,
+        py::arg("max_layer") = max_layer,
+        py::arg("channel_axis") = py::none());
+
+    py::list result;
+    py::object dtype = base.attr("dtype");
+    for (const py::handle& level : py::iterable(pyramid)) {
+        result.append(py::reinterpret_borrow<py::object>(level).attr("astype")(dtype));
+    }
+    return result;
+}
+
+py::list scaler_laplacian(
+    py::object base,
+    py::int_ downscale = py::int_(2),
+    py::int_ max_layer = py::int_(4)) {
+    py::object pyramid =
+        py::module_::import("skimage.transform").attr("pyramid_laplacian")(
+            base,
+            py::arg("downscale") = downscale,
+            py::arg("max_layer") = max_layer,
+            py::arg("channel_axis") = py::none());
+
+    py::list result;
+    py::object dtype = base.attr("dtype");
+    for (const py::handle& level : py::iterable(pyramid)) {
+        result.append(py::reinterpret_borrow<py::object>(level).attr("astype")(dtype));
+    }
+    return result;
 }
 
 py::list scaler_local_mean(
@@ -369,8 +421,29 @@ void register_scale_bindings(py::module_& m) {
           py::arg("image"),
           py::arg("downscale") = 2,
           py::arg("order") = 1);
+    m.def("scaler_nearest_plane",
+          &scaler_nearest_plane,
+          py::arg("plane"),
+          py::arg("size_y"),
+          py::arg("size_x"),
+          py::arg("downscale") = 2);
+    m.def("scaler_by_plane_nearest",
+          &scaler_by_plane_nearest,
+          py::arg("base"),
+          py::arg("downscale") = 2,
+          py::arg("max_layer") = 4);
     m.def("scaler_nearest",
           &scaler_nearest,
+          py::arg("base"),
+          py::arg("downscale") = 2,
+          py::arg("max_layer") = 4);
+    m.def("scaler_gaussian",
+          &scaler_gaussian,
+          py::arg("base"),
+          py::arg("downscale") = 2,
+          py::arg("max_layer") = 4);
+    m.def("scaler_laplacian",
+          &scaler_laplacian,
           py::arg("base"),
           py::arg("downscale") = 2,
           py::arg("max_layer") = 4);
