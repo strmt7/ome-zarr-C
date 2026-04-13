@@ -244,18 +244,20 @@ def _write_pyramid_to_zarr(
 ) -> list:
     group, fmt = check_group_fmt(group, fmt)
 
+    runtime_plan = dict(
+        _core.writer_pyramid_plan(pyramid, int(fmt.zarr_format), axes, storage_options)
+    )
     zarr_array_kwargs: dict[str, Any] = {}
-    zarr_format = fmt.zarr_format
+    zarr_format = int(runtime_plan["zarr_format"])
     options = _resolve_storage_options(storage_options, 0)
     zarr_array_kwargs["zarr_format"] = zarr_format
 
-    if zarr_format == 2:
+    if bool(runtime_plan["use_v2_chunk_key_encoding"]):
         zarr_array_kwargs["chunk_key_encoding"] = {"name": "v2", "separator": "/"}
     else:
-        if axes is not None:
-            zarr_array_kwargs["dimension_names"] = [
-                a["name"] for a in axes if isinstance(a, dict)
-            ]
+        dimension_names = list(runtime_plan["dimension_names"])
+        if len(dimension_names) > 0:
+            zarr_array_kwargs["dimension_names"] = dimension_names
     if "compressor" in options:
         zarr_array_kwargs["compressors"] = [options.pop("compressor")]
 
@@ -263,14 +265,13 @@ def _write_pyramid_to_zarr(
     datasets: list[dict] = []
     delayed = []
 
-    for idx, level in enumerate(pyramid):
+    for idx, (level, level_plan) in enumerate(
+        zip(pyramid, list(runtime_plan["levels"]), strict=False)
+    ):
         options = _resolve_storage_options(storage_options, idx)
 
         chunks_opt = None
-        if isinstance(storage_options, list) and isinstance(storage_options[idx], dict):
-            if "chunks" in storage_options[idx]:
-                chunks_opt = options.pop("chunks", None)
-        elif isinstance(storage_options, dict) and "chunks" in storage_options:
+        if bool(level_plan["has_chunks"]):
             chunks_opt = options.pop("chunks", None)
 
         if chunks_opt is not None:
@@ -292,12 +293,12 @@ def _write_pyramid_to_zarr(
             da.to_zarr(
                 arr=level_image,
                 url=group.store,
-                component=str(Path(group.path, f"s{idx}")),
+                component=str(Path(group.path, str(level_plan["component"]))),
                 compute=False,
                 **zarr_array_kwargs,
             )
         )
-        datasets.append({"path": f"s{idx}"})
+        datasets.append({"path": str(level_plan["component"])})
 
     if compute:
         da.compute(*delayed)
@@ -420,9 +421,6 @@ def write_labels(
     group, fmt = check_group_fmt(group, fmt)
     sub_group = group.require_group(f"labels/{name}")
 
-    if scaler is _DEFAULT_LABEL_SCALER:
-        scaler = Scaler(order=0)
-
     if type(fmt) in (FormatV01, FormatV02, FormatV03):
         raise DeprecationWarning(
             "Writing ome-zarr "
@@ -431,20 +429,26 @@ def write_labels(
 
     axes = _get_valid_axes(len(labels.shape), axes, fmt)
     dims = _extract_dims_from_axes(axes)
+    labels_plan = dict(
+        _core.writer_labels_plan(
+            dims,
+            scaler is _DEFAULT_LABEL_SCALER,
+            scaler is None,
+            0 if scaler in (None, _DEFAULT_LABEL_SCALER) else int(scaler.max_layer),
+            method,
+        )
+    )
 
-    if scaler is not None:
+    if bool(labels_plan["warn_scaler_deprecated"]):
         msg = """
         The 'scaler' argument is deprecated and will be removed in version 0.13.0.
         Please use the 'scale_factors' argument instead.
         """
-        scale_factors = [
-            {d: 2**i if d in SPATIAL_DIMS else 1 for d in dims}
-            for i in range(1, scaler.max_layer + 1)
-        ]
         warnings.warn(msg, DeprecationWarning, stacklevel=2)
+        scale_factors = list(labels_plan["scale_factors"])
 
-    if method is None:
-        method = Methods.NEAREST
+    if method is None or scaler is not None or scaler is _DEFAULT_LABEL_SCALER:
+        method = str(labels_plan["resolved_method"])
 
     if not isinstance(labels, da.Array):
         labels = da.from_array(labels)

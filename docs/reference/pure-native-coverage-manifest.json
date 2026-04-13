@@ -45,12 +45,16 @@
     {"upstream_file": "format.py", "qualname": "FormatV05.zarr_format", "boundary_files": ["cpp/bindings/format_bindings.cpp", "ome_zarr_c/format.py"], "native_files": ["cpp/native/format.cpp"]},
     {"upstream_file": "format.py", "qualname": "FormatV05.chunk_key_encoding", "boundary_files": ["cpp/bindings/format_bindings.cpp", "ome_zarr_c/format.py"], "native_files": ["cpp/native/format.cpp"]},
 
+    {"upstream_file": "io.py", "qualname": "ZarrLocation.__init__", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
+    {"upstream_file": "io.py", "qualname": "ZarrLocation.__init_metadata", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
     {"upstream_file": "io.py", "qualname": "ZarrLocation.__repr__", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
     {"upstream_file": "io.py", "qualname": "ZarrLocation.__eq__", "boundary_files": ["ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
     {"upstream_file": "io.py", "qualname": "ZarrLocation.basename", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
     {"upstream_file": "io.py", "qualname": "ZarrLocation.parts", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
     {"upstream_file": "io.py", "qualname": "ZarrLocation.subpath", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
+    {"upstream_file": "io.py", "qualname": "ZarrLocation._isfile", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
     {"upstream_file": "io.py", "qualname": "ZarrLocation._ishttp", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
+    {"upstream_file": "io.py", "qualname": "parse_url", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
 
     {"upstream_file": "reader.py", "qualname": "Node.add", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Node.__repr__", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
@@ -63,7 +67,10 @@
     {"upstream_file": "reader.py", "qualname": "OMERO.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "OMERO.__init__", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Well.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
+    {"upstream_file": "reader.py", "qualname": "Well.__init__", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Plate.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
+    {"upstream_file": "reader.py", "qualname": "Plate.get_pyramid_lazy", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
+    {"upstream_file": "reader.py", "qualname": "Plate.get_tile_path", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
 
     {"upstream_file": "scale.py", "qualname": "Scaler.methods", "boundary_files": ["cpp/bindings/scale_bindings.cpp", "ome_zarr_c/scale.py"], "native_files": ["cpp/native/scale.cpp"]},
     {"upstream_file": "scale.py", "qualname": "Scaler.func", "boundary_files": ["cpp/bindings/scale_bindings.cpp", "ome_zarr_c/scale.py"], "native_files": ["cpp/native/scale.cpp"]},
@@ -75,8 +82,11 @@
     {"upstream_file": "scale.py", "qualname": "Scaler._by_plane", "boundary_files": ["cpp/bindings/scale_bindings.cpp", "ome_zarr_c/scale.py"], "native_files": ["cpp/native/scale.cpp"]},
     {"upstream_file": "scale.py", "qualname": "_build_pyramid", "boundary_files": ["cpp/bindings/scale_bindings.cpp", "ome_zarr_c/scale.py"], "native_files": ["cpp/native/scale.cpp", "cpp/native/dask_utils.cpp"]},
 
+    {"upstream_file": "utils.py", "qualname": "find_multiscales", "boundary_files": ["cpp/bindings/utils_bindings.cpp", "ome_zarr_c/utils.py"], "native_files": ["cpp/native/utils.cpp"]},
     {"upstream_file": "utils.py", "qualname": "splitall", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/utils.py"], "native_files": ["cpp/native/utils.cpp"]},
     {"upstream_file": "utils.py", "qualname": "strip_common_prefix", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/utils.py"], "native_files": ["cpp/native/utils.cpp"]},
+    {"upstream_file": "utils.py", "qualname": "view", "boundary_files": ["cpp/bindings/utils_bindings.cpp", "ome_zarr_c/utils.py"], "native_files": ["cpp/native/utils.cpp"]},
+    {"upstream_file": "utils.py", "qualname": "finder", "boundary_files": ["cpp/bindings/utils_bindings.cpp", "ome_zarr_c/utils.py"], "native_files": ["cpp/native/utils.cpp"]},
 
     {"upstream_file": "writer.py", "qualname": "_get_valid_axes", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "_extract_dims_from_axes", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
@@ -88,11 +98,15 @@
     {"upstream_file": "writer.py", "qualname": "_retuple", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "check_group_fmt", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
     {"upstream_file": "writer.py", "qualname": "check_format", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_multiscale", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "_write_pyramid_to_zarr", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
     {"upstream_file": "writer.py", "qualname": "write_multiscales_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
     {"upstream_file": "writer.py", "qualname": "write_plate_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
     {"upstream_file": "writer.py", "qualname": "write_well_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "write_label_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "get_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
-    {"upstream_file": "writer.py", "qualname": "add_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]}
+    {"upstream_file": "writer.py", "qualname": "add_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_multiscale_labels", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp", "cpp/native/scale.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_labels", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp", "cpp/native/scale.cpp"]}
   ]
 }

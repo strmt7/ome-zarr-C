@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -164,6 +165,35 @@ ReaderWellPlan reader_well_plan(const std::vector<std::string>& image_paths) {
     return plan;
 }
 
+std::vector<ReaderWellLevelPlan> reader_well_level_plans(
+    const std::vector<std::string>& image_paths,
+    const std::vector<std::string>& dataset_paths,
+    std::size_t row_count,
+    std::size_t column_count) {
+    std::vector<ReaderWellLevelPlan> plans;
+    plans.reserve(dataset_paths.size());
+    for (const auto& dataset_path : dataset_paths) {
+        ReaderWellLevelPlan plan{};
+        plan.tile_paths.reserve(row_count * column_count);
+        plan.has_tile.reserve(row_count * column_count);
+        for (std::size_t row = 0; row < row_count; ++row) {
+            for (std::size_t col = 0; col < column_count; ++col) {
+                const std::size_t field_index = (column_count * row) + col;
+                const bool has_tile = field_index < image_paths.size();
+                plan.has_tile.push_back(has_tile);
+                if (has_tile) {
+                    plan.tile_paths.push_back(
+                        image_paths[field_index] + "/" + dataset_path);
+                } else {
+                    plan.tile_paths.push_back("");
+                }
+            }
+        }
+        plans.push_back(std::move(plan));
+    }
+    return plans;
+}
+
 ReaderPlatePlan reader_plate_plan(
     const std::vector<std::string>& row_names,
     const std::vector<std::string>& col_names,
@@ -176,6 +206,40 @@ ReaderPlatePlan reader_plate_plan(
     plan.row_count = row_names.size();
     plan.column_count = col_names.size();
     return plan;
+}
+
+std::vector<ReaderPlateLevelPlan> reader_plate_level_plans(
+    const std::vector<std::string>& row_names,
+    const std::vector<std::string>& col_names,
+    const std::vector<std::string>& well_paths,
+    const std::string& first_field_path,
+    const std::vector<std::string>& dataset_paths) {
+    const std::set<std::string> well_path_set(well_paths.begin(), well_paths.end());
+    std::vector<ReaderPlateLevelPlan> plans;
+    plans.reserve(dataset_paths.size());
+    for (const auto& dataset_path : dataset_paths) {
+        ReaderPlateLevelPlan plan{};
+        plan.tile_paths.reserve(row_names.size() * col_names.size());
+        plan.has_tile.reserve(row_names.size() * col_names.size());
+        for (const auto& row_name : row_names) {
+            for (const auto& col_name : col_names) {
+                const auto well_path = row_name + "/" + col_name;
+                const bool has_tile = well_path_set.find(well_path) != well_path_set.end();
+                plan.has_tile.push_back(has_tile);
+                if (has_tile) {
+                    plan.tile_paths.push_back(reader_plate_tile_path(
+                        row_name,
+                        col_name,
+                        first_field_path,
+                        dataset_path));
+                } else {
+                    plan.tile_paths.push_back("");
+                }
+            }
+        }
+        plans.push_back(std::move(plan));
+    }
+    return plans;
 }
 
 std::string reader_plate_tile_path(

@@ -6,11 +6,10 @@ import logging
 from pathlib import Path
 
 import dask.array as da
-import zarr
 from zarr.storage import FsspecStore, LocalStore, StoreLike
 
 from . import _core
-from .format import CurrentFormat, Format, detect_format
+from .format import CurrentFormat, Format
 
 LOGGER = logging.getLogger("ome_zarr.io")
 _DEFAULT_FORMAT = CurrentFormat()
@@ -26,58 +25,23 @@ class ZarrLocation:
         fmt: Format = _DEFAULT_FORMAT,
     ) -> None:
         LOGGER.debug("ZarrLocation.__init__ path: %s, fmt: %s", path, fmt.version)
-        self.__fmt = fmt
-        self.__mode = mode
-        if isinstance(path, Path):
-            self.__path = str(path.resolve())
-        elif isinstance(path, str):
-            self.__path = path
-        elif isinstance(path, FsspecStore):
-            self.__path = path.path
-        elif isinstance(path, LocalStore):
-            self.__path = str(path.root)
-        else:
-            raise TypeError(f"not expecting: {type(path)}")
-
-        loader = fmt
-        self.__store: FsspecStore | LocalStore = (
-            path
-            if isinstance(path, (FsspecStore, LocalStore))
-            else loader.init_store(self.__path, mode)
-        )
-        self.__init_metadata()
-        detected = detect_format(self.__metadata, loader)
-        LOGGER.debug("ZarrLocation.__init__ %s detected: %s", path, detected)
-        if detected != fmt:
-            LOGGER.warning(
-                "version mismatch: detected: %s, requested: %s", detected, fmt
-            )
-            self.__fmt = detected
-            self.__store = detected.init_store(self.__path, mode)
-            self.__init_metadata()
+        state = dict(_core.io_location_state(path, mode, fmt))
+        self.__fmt = state["fmt"]
+        self.__mode = str(state["mode"])
+        self.__path = str(state["path"])
+        self.__store = state["store"]
+        self.zgroup = dict(state["zgroup"])
+        self.zarray = dict(state["zarray"])
+        self.__metadata = dict(state["metadata"])
+        self.__exists = bool(state["exists"])
+        LOGGER.debug("ZarrLocation.__init__ %s detected: %s", path, self.__fmt)
 
     def __init_metadata(self) -> None:
-        self.zgroup: dict = {}
-        self.zarray: dict = {}
-        self.__metadata: dict = {}
-        self.__exists = True
-        zarr_format = None
-        try:
-            group = zarr.open_group(
-                store=self.__store, path="/", mode="r", zarr_format=zarr_format
-            )
-            self.zgroup = group.attrs.asdict()
-            if "ome" in self.zgroup:
-                self.zgroup = self.zgroup["ome"]
-            self.__metadata = self.zgroup
-        except (ValueError, FileNotFoundError):
-            if self.__mode == "w":
-                zarr_format = self.__fmt.zarr_format
-                zarr.open_group(
-                    store=self.__store, path="/", mode="w", zarr_format=zarr_format
-                )
-            else:
-                self.__exists = False
+        state = dict(_core.io_location_state(self.__store, self.__mode, self.__fmt))
+        self.zgroup = dict(state["zgroup"])
+        self.zarray = dict(state["zarray"])
+        self.__metadata = dict(state["metadata"])
+        self.__exists = bool(state["exists"])
 
     def __repr__(self) -> str:
         return str(
@@ -143,7 +107,7 @@ class ZarrLocation:
         )
 
     def _isfile(self) -> bool:
-        return isinstance(self.__store, LocalStore)
+        return bool(_core.io_is_local_store(self.__store))
 
     def _ishttp(self) -> bool:
         if isinstance(self.__store, LocalStore) or not hasattr(self.__store, "fs"):
@@ -159,7 +123,7 @@ def parse_url(
     """Convert a path string or URL to a ZarrLocation subclass."""
 
     loc = ZarrLocation(path, mode=mode, fmt=fmt)
-    if "r" in mode and not loc.exists():
+    if bool(_core.io_parse_url_returns_none(mode, loc.exists())):
         return None
     return loc
 

@@ -5,12 +5,8 @@ from __future__ import annotations
 import csv
 import http.server as http_server
 import importlib
-import json
 import logging
-import os
-import urllib
 import webbrowser
-from datetime import datetime
 from pathlib import Path
 
 import dask.array as da
@@ -50,29 +46,13 @@ def info(path: str, stats: bool = False):
 def view(
     input_path: str, port: int = 8000, dry_run: bool = False, force: bool = False
 ) -> None:
-    if not force:
-        zarrs = []
-        if (Path(input_path) / ".zattrs").exists() or (
-            Path(input_path) / "zarr.json"
-        ).exists():
-            zarrs = find_multiscales(Path(input_path))
-        if len(zarrs) == 0:
-            print(
-                f"No OME-Zarr images found in {input_path}. "
-                f"Try $ ome_zarr finder {input_path} "
-                "or use -f to force open in browser."
-            )
-            return
+    plan = dict(_core.utils_view_plan(input_path, port, force))
+    if bool(plan["should_warn"]):
+        print(str(plan["warning_message"]))
+        return
 
-    parent_dir, image_name = os.path.split(input_path)
-    if len(image_name) == 0:
-        parent_dir, image_name = os.path.split(parent_dir)
-    parent_dir = str(parent_dir)
-
-    url = (
-        f"https://ome.github.io/ome-ngff-validator/"
-        f"?source=http://localhost:{port}/{image_name}"
-    )
+    parent_dir = str(plan["parent_dir"])
+    url = str(plan["url"])
 
     class CORSRequestHandler(RangeRequestHandler):
         def end_headers(self) -> None:
@@ -92,56 +72,23 @@ def view(
 
 
 def finder(input_path: str, port: int = 8000, dry_run: bool = False) -> None:
-    parent_path, server_dir = os.path.split(input_path)
-    if len(server_dir) == 0:
-        parent_path, server_dir = os.path.split(parent_path)
-
-    def walk(path: Path):
-        if (path / ".zattrs").exists() or (path / "zarr.json").exists():
-            yield from find_multiscales(path)
-        else:
-            for child in path.iterdir():
-                if (child / ".zattrs").exists() or (child / "zarr.json").exists():
-                    yield from find_multiscales(child)
-                elif child.is_dir():
-                    yield from walk(child)
-
-    zarrs = list(walk(Path(input_path)))
+    zarrs = list(_core.utils_finder_discover_images(input_path))
     if len(zarrs) == 0:
         print("No OME-Zarr files found in", input_path)
         return
 
+    plan = dict(_core.utils_finder_plan(input_path, port))
+    parent_path = str(plan["parent_path"])
+    server_dir = str(plan["server_dir"])
     col_names = ["File Path", "File Name", "Folders", "Uploaded"]
-    bff_csv = os.path.join(input_path, "biofile_finder.csv")
+    rows = list(_core.utils_finder_rows(input_path, port, zarrs, server_dir))
+    bff_csv = str(plan["csv_path"])
     with open(bff_csv, "w", newline="") as csvfile:
         writer = csv.writer(csvfile, delimiter=",")
         writer.writerow(col_names)
-        for zarr_img in zarrs:
-            relpath = os.path.relpath(zarr_img[0], input_path)
-            rel_url = "/".join(splitall(relpath))
-            file_path = f"http://localhost:{port}/{server_dir}/{rel_url}"
-            name = zarr_img[1] or os.path.basename(zarr_img[0])
-            folders_path = os.path.relpath(zarr_img[2], input_path)
-            folders = ",".join(splitall(folders_path))
-            timestamp = ""
-            try:
-                mtime = os.path.getmtime(zarr_img[0])
-                timestamp = datetime.fromtimestamp(mtime).strftime(
-                    "%Y-%m-%d %H:%M:%S.%Z"
-                )
-            except OSError:
-                pass
-            writer.writerow([file_path, name, folders, timestamp])
+        writer.writerows(rows)
 
-    source = {
-        "uri": f"http://localhost:{port}/{server_dir}/biofile_finder.csv",
-        "type": "csv",
-        "name": "biofile_finder.csv",
-    }
-    url = (
-        f"https://bff.allencell.org/app?source={urllib.parse.quote(json.dumps(source))}"
-    )
-    url += "&v=2"
+    url = str(plan["url"])
 
     class CORSRequestHandler(RangeRequestHandler):
         def end_headers(self) -> None:

@@ -5,6 +5,33 @@
 
 namespace ome_zarr_c::native_code {
 
+IoConstructorPlan io_constructor_plan(
+    IoPathKind path_kind,
+    const std::string& raw_path) {
+    IoConstructorPlan plan{};
+    plan.use_input_store =
+        path_kind == IoPathKind::fsspec_store ||
+        path_kind == IoPathKind::local_store;
+    plan.normalized_path = raw_path;
+    return plan;
+}
+
+IoMetadataPlan io_metadata_plan(
+    bool metadata_loaded,
+    bool mode_is_write,
+    bool has_ome_namespace) {
+    IoMetadataPlan plan{};
+    if (metadata_loaded) {
+        plan.exists = true;
+        plan.unwrap_ome_namespace = has_ome_namespace;
+        return plan;
+    }
+    plan.create_group = mode_is_write;
+    plan.exists = mode_is_write;
+    plan.unwrap_ome_namespace = false;
+    return plan;
+}
+
 std::string io_basename(const std::string& path) {
     std::string normalized = path;
     if (normalized.size() > 1 && normalized.back() == '/') {
@@ -70,6 +97,14 @@ std::string io_repr(
         suffix += " [zarray]";
     }
     return subpath + suffix;
+}
+
+bool io_is_local_store(IoPathKind path_kind) {
+    return path_kind == IoPathKind::local_store;
+}
+
+bool io_parse_url_returns_none(const std::string& mode, bool exists) {
+    return mode.find('r') != std::string::npos && !exists;
 }
 
 bool io_protocol_is_http(const std::vector<std::string>& protocols) {

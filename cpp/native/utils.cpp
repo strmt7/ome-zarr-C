@@ -1,6 +1,7 @@
 #include "utils.hpp"
 
 #include <algorithm>
+#include <sstream>
 
 namespace ome_zarr_c::native_code {
 
@@ -25,6 +26,44 @@ std::pair<std::string, std::string> posix_split(const std::string& path) {
     }
 
     return {head, tail};
+}
+
+std::pair<std::string, std::string> split_head_tail(const std::string& path) {
+    if (path.empty()) {
+        return {"", ""};
+    }
+
+    auto split_index = path.find_last_of('/');
+    if (split_index == std::string::npos) {
+        return {"", path};
+    }
+    return {
+        path.substr(0, split_index),
+        path.substr(split_index + 1),
+    };
+}
+
+std::pair<std::string, std::string> split_like_os_path(const std::string& path) {
+    if (path.empty()) {
+        return {"", ""};
+    }
+    if (path == "/") {
+        return {"/", ""};
+    }
+    if (path.back() == '/') {
+        return {path.substr(0, path.size() - 1), ""};
+    }
+    return split_head_tail(path);
+}
+
+std::string join_path(const std::string& left, const std::string& right) {
+    if (left.empty()) {
+        return right;
+    }
+    if (!left.empty() && left.back() == '/') {
+        return left + right;
+    }
+    return left + "/" + right;
 }
 
 }  // namespace
@@ -84,6 +123,137 @@ std::vector<std::string> splitall(const std::string& path) {
     }
 
     return parts;
+}
+
+std::string utils_missing_metadata_message() {
+    return "No .zattrs or zarr.json found in {path_to_zattrs}";
+}
+
+std::vector<UtilsDiscoveredImage> utils_plate_images(
+    const std::string& path_to_zattrs,
+    const std::string& basename,
+    const std::string& dirname,
+    const std::vector<std::string>& wells) {
+    if (wells.empty()) {
+        return {};
+    }
+    return {
+        UtilsDiscoveredImage{
+            join_path(join_path(path_to_zattrs, wells.front()), "0"),
+            basename,
+            dirname,
+        }
+    };
+}
+
+std::vector<UtilsDiscoveredImage> utils_bioformats_images(
+    const std::string& path_to_zattrs,
+    const std::string& basename,
+    const std::string& dirname,
+    const std::vector<std::optional<std::string>>& image_names) {
+    std::vector<UtilsDiscoveredImage> images;
+    images.reserve(image_names.size());
+    for (std::size_t index = 0; index < image_names.size(); ++index) {
+        const auto& maybe_name = image_names[index];
+        images.push_back(
+            UtilsDiscoveredImage{
+                join_path(path_to_zattrs, std::to_string(index)),
+                maybe_name.value_or(basename + " Series:" + std::to_string(index)),
+                dirname,
+            });
+    }
+    return images;
+}
+
+std::vector<UtilsDiscoveredImage> utils_single_multiscales_image(
+    const std::string& path_to_zattrs,
+    const std::string& basename,
+    const std::string& dirname) {
+    return {UtilsDiscoveredImage{path_to_zattrs, basename, dirname}};
+}
+
+UtilsViewPlan utils_view_plan(
+    const std::string& input_path,
+    int port,
+    bool force,
+    std::size_t discovered_count) {
+    UtilsViewPlan plan{};
+    if (!force && discovered_count == 0) {
+        plan.should_warn = true;
+        plan.warning_message =
+            "No OME-Zarr images found in " + input_path + ". "
+            "Try $ ome_zarr finder " + input_path +
+            " or use -f to force open in browser.";
+        return plan;
+    }
+
+    auto [parent_dir, image_name] = split_like_os_path(input_path);
+    if (image_name.empty()) {
+        const auto split_parent = split_like_os_path(parent_dir);
+        parent_dir = split_parent.first;
+        image_name = split_parent.second;
+    }
+    plan.parent_dir = parent_dir;
+    plan.image_name = image_name;
+    plan.url =
+        "https://ome.github.io/ome-ngff-validator/?source=http://localhost:" +
+        std::to_string(port) + "/" + image_name;
+    return plan;
+}
+
+UtilsFinderPlan utils_finder_plan(const std::string& input_path, int port) {
+    auto [parent_path, server_dir] = split_like_os_path(input_path);
+    if (server_dir.empty()) {
+        const auto split_parent = split_like_os_path(parent_path);
+        parent_path = split_parent.first;
+        server_dir = split_parent.second;
+    }
+
+    const std::string csv_path = join_path(input_path, "biofile_finder.csv");
+    const std::string source_uri =
+        "http://localhost:" + std::to_string(port) + "/" + server_dir +
+        "/biofile_finder.csv";
+
+    return UtilsFinderPlan{
+        parent_path,
+        server_dir,
+        csv_path,
+        source_uri,
+        "https://bff.allencell.org/app",
+    };
+}
+
+UtilsFinderRow utils_finder_row(
+    int port,
+    const std::string& server_dir,
+    const std::string& relpath,
+    const std::string& name,
+    const std::string& folders_path,
+    const std::string& uploaded) {
+    std::string rel_url;
+    const auto rel_parts = splitall(relpath);
+    for (std::size_t index = 0; index < rel_parts.size(); ++index) {
+        if (index > 0) {
+            rel_url += "/";
+        }
+        rel_url += rel_parts[index];
+    }
+
+    std::string folders;
+    const auto folder_parts = splitall(folders_path);
+    for (std::size_t index = 0; index < folder_parts.size(); ++index) {
+        if (index > 0) {
+            folders += ",";
+        }
+        folders += folder_parts[index];
+    }
+
+    return UtilsFinderRow{
+        "http://localhost:" + std::to_string(port) + "/" + server_dir + "/" + rel_url,
+        name,
+        folders,
+        uploaded,
+    };
 }
 
 }  // namespace ome_zarr_c::native_code

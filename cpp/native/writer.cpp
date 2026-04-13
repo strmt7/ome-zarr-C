@@ -224,4 +224,52 @@ WriterLabelMetadataPlan writer_label_metadata_plan(const std::string& version) {
     return plan;
 }
 
+WriterPyramidPlan writer_pyramid_plan(
+    const std::vector<std::vector<std::int64_t>>& shapes,
+    int zarr_format,
+    const std::vector<std::string>& axis_names,
+    const std::vector<std::vector<std::size_t>>& explicit_chunks) {
+    WriterPyramidPlan plan{};
+    plan.zarr_format = zarr_format;
+    plan.use_v2_chunk_key_encoding = zarr_format == 2;
+    plan.use_dimension_names = zarr_format != 2 && !axis_names.empty();
+    plan.dimension_names = axis_names;
+    plan.levels.reserve(shapes.size());
+
+    for (std::size_t index = 0; index < shapes.size(); ++index) {
+        WriterPyramidLevelPlan level{};
+        level.component = "s" + std::to_string(index);
+        if (index < explicit_chunks.size() && !explicit_chunks[index].empty()) {
+            level.has_chunks = true;
+            level.chunks = explicit_chunks[index];
+        }
+        plan.levels.push_back(std::move(level));
+    }
+
+    return plan;
+}
+
+WriterLabelsPlan writer_labels_plan(
+    const std::vector<std::string>& dims,
+    bool use_default_scaler,
+    bool scaler_is_none,
+    std::int64_t scaler_max_layer,
+    const std::optional<std::string>& requested_method) {
+    WriterLabelsPlan plan{};
+    plan.resolved_method = requested_method.value_or("nearest");
+    if (use_default_scaler || !scaler_is_none) {
+        plan.warn_scaler_deprecated = true;
+        const std::int64_t level_count = use_default_scaler ? 4 : scaler_max_layer;
+        for (std::int64_t level = 1; level <= level_count; ++level) {
+            std::map<std::string, std::int64_t> level_plan;
+            for (const auto& dim : dims) {
+                const bool spatial = dim == "x" || dim == "y" || dim == "z";
+                level_plan[dim] = spatial ? (std::int64_t{1} << level) : 1;
+            }
+            plan.scale_factors.push_back(std::move(level_plan));
+        }
+    }
+    return plan;
+}
+
 }  // namespace ome_zarr_c::native_code
