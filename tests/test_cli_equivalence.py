@@ -91,7 +91,7 @@ def _run_main(main_func, args: list[str], replacements: dict[str, str]):
     stream = io.StringIO()
     patched = (
         patch.object(_py_writer.da, "to_zarr", _compat_to_zarr)
-        if main_func is _py_cli.main
+        if main_func is _py_cli.main and args and args[0] in {"create", "scale"}
         else nullcontext()
     )
     try:

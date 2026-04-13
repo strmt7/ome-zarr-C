@@ -6,6 +6,8 @@
 - `docs/reference/native-cpp-debt-baseline.json`: ratcheting baseline for the
   remaining mixed C++ debt footprint
 - `docs/reference/benchmark-suite.md`: pyperf benchmark architecture and scope
+- `docs/reference/public-benchmark-fixtures.md`: provenance, licensing, and
+  size notes for public real-data benchmark fixtures
 - `docs/reference/immutable-parity-proof.md`: content-addressed parity and
   native-C++ integrity rules
 - `docs/reference/ai-agent-context-routing.md`: smallest-correct-context router

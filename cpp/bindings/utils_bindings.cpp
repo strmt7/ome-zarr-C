@@ -95,9 +95,11 @@ py::list find_multiscales_impl(py::object path_to_zattrs) {
     py::object json = py::module_::import("json");
     py::object logging = py::module_::import("logging");
     py::object os_path = py::module_::import("os").attr("path");
+    py::object pathlib = py::module_::import("pathlib");
     py::object element_tree = py::module_::import("xml.etree.ElementTree");
     py::object logger = logging.attr("getLogger")(py::str("ome_zarr.utils"));
     const bool return_string_paths = py::isinstance<py::str>(path_to_zattrs);
+    py::object path_obj = pathlib.attr("Path")(path_to_zattrs);
     const std::string native_path = py::cast<std::string>(py::str(path_to_zattrs));
     const std::string basename =
         py::cast<std::string>(os_path.attr("basename")(path_to_zattrs));
@@ -106,8 +108,8 @@ py::list find_multiscales_impl(py::object path_to_zattrs) {
 
     py::object text = py::none();
     for (const char* name : {".zattrs", "zarr.json"}) {
-        py::object candidate = ome_zarr_c::bindings::true_divide(
-            path_to_zattrs, py::str(name));
+        py::object candidate =
+            ome_zarr_c::bindings::true_divide(path_obj, py::str(name));
         if (py::cast<bool>(candidate.attr("exists")())) {
             text = read_text_with_open(
                 ome_zarr_c::bindings::true_divide(path_to_zattrs, py::str(name)));

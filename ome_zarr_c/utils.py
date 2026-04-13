@@ -163,7 +163,7 @@ def download(input_path: str, output_dir: str = ".") -> None:
             if isinstance(spec, _reader.Multiscales):
                 datasets = spec.datasets
                 resolutions = node.data
-                zarr_array_kwargs = {"zarr_format": fmt.zarr_format}
+                zarr_array_kwargs = {}
                 if bool(node_plan["use_v2_chunk_key_encoding"]):
                     zarr_array_kwargs["chunk_key_encoding"] = {
                         "name": "v2",
@@ -185,7 +185,7 @@ def download(input_path: str, output_dir: str = ".") -> None:
                                 arr=data,
                                 url=root.store,
                                 component=dataset,
-                                **zarr_array_kwargs,
+                                zarr_array_kwargs=zarr_array_kwargs,
                             )
             else:
                 zarr.group(str(target_path))
