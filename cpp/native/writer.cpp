@@ -5,6 +5,8 @@
 #include <set>
 #include <stdexcept>
 
+#include "format.hpp"
+
 namespace ome_zarr_c::native_code {
 
 ValidAxesPlan get_valid_axes_plan(
@@ -162,6 +164,64 @@ std::vector<std::size_t> validate_datasets(const std::vector<DatasetInput>& data
     }
 
     return transformation_indices;
+}
+
+WriterFormatPlan resolve_writer_format(
+    int group_zarr_format,
+    const std::optional<std::string>& requested_version) {
+    if (requested_version.has_value()) {
+        const int requested_zarr_format = format_zarr_format(requested_version.value());
+        if (requested_zarr_format != group_zarr_format) {
+            throw std::invalid_argument(
+                "Group is zarr_format: " + std::to_string(group_zarr_format) +
+                " but OME-Zarr v" + requested_version.value() +
+                " is " + std::to_string(requested_zarr_format));
+        }
+        return WriterFormatPlan{requested_version.value(), requested_zarr_format};
+    }
+
+    if (group_zarr_format == 2) {
+        return WriterFormatPlan{"0.4", 2};
+    }
+    return WriterFormatPlan{"0.5", 3};
+}
+
+bool writer_uses_legacy_root_attrs(const std::string& version) {
+    return version == "0.1" || version == "0.2" ||
+           version == "0.3" || version == "0.4";
+}
+
+WriterMultiscalesMetadataPlan writer_multiscales_metadata_plan(
+    const std::string& version,
+    const std::string& group_name) {
+    WriterMultiscalesMetadataPlan plan{};
+    plan.legacy_root_attrs = writer_uses_legacy_root_attrs(version);
+    plan.embed_version_in_multiscales = plan.legacy_root_attrs;
+    plan.write_root_version = !plan.legacy_root_attrs;
+    plan.group_name = group_name;
+    return plan;
+}
+
+WriterPlateMetadataPlan writer_plate_metadata_plan(const std::string& version) {
+    WriterPlateMetadataPlan plan{};
+    plan.legacy_root_attrs = writer_uses_legacy_root_attrs(version);
+    plan.embed_plate_version = plan.legacy_root_attrs || version == "0.5";
+    plan.write_root_version = !plan.legacy_root_attrs;
+    return plan;
+}
+
+WriterWellMetadataPlan writer_well_metadata_plan(const std::string& version) {
+    WriterWellMetadataPlan plan{};
+    plan.legacy_root_attrs = writer_uses_legacy_root_attrs(version);
+    plan.embed_well_version = plan.legacy_root_attrs;
+    plan.write_root_version = !plan.legacy_root_attrs;
+    return plan;
+}
+
+WriterLabelMetadataPlan writer_label_metadata_plan(const std::string& version) {
+    WriterLabelMetadataPlan plan{};
+    plan.legacy_root_attrs = writer_uses_legacy_root_attrs(version);
+    return plan;
 }
 
 }  // namespace ome_zarr_c::native_code

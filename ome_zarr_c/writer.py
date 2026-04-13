@@ -14,7 +14,14 @@ import numpy as np
 import zarr
 from dask.graph_manipulation import bind
 
-from .format import CurrentFormat, Format, FormatV01, FormatV02, FormatV03, FormatV04
+from .format import (
+    CurrentFormat,
+    Format,
+    FormatV01,
+    FormatV02,
+    FormatV03,
+    format_from_version,
+)
 from .scale import Methods, Scaler
 
 _core = importlib.import_module("ome_zarr_c._core")
@@ -103,14 +110,12 @@ def check_group_fmt(
     mode: str = "a",
 ) -> tuple[zarr.Group, Format]:
     """Create/check a zarr group against the requested OME-Zarr format."""
-
-    if isinstance(group, str):
-        if fmt is None:
-            fmt = CurrentFormat()
-        group = zarr.open_group(group, mode=mode, zarr_format=fmt.zarr_format)
-    else:
-        fmt = check_format(group, fmt)
-    return group, fmt
+    checked_group, version = _core.writer_check_group_fmt(
+        group,
+        None if fmt is None else fmt.version,
+        mode,
+    )
+    return checked_group, format_from_version(str(version))
 
 
 def check_format(
@@ -118,21 +123,9 @@ def check_format(
     fmt: Format | None = None,
 ) -> Format:
     """Check if the format is valid for the given group."""
-
-    zarr_format = group.info._zarr_format
-    if fmt is not None:
-        if fmt.zarr_format != zarr_format:
-            raise ValueError(
-                "Group is zarr_format: "
-                f"{zarr_format} but OME-Zarr {fmt.version} "
-                f"is {fmt.zarr_format}"
-            )
-    elif zarr_format == 2:
-        fmt = FormatV04()
-    elif zarr_format == 3:
-        fmt = CurrentFormat()
-    assert fmt is not None
-    return fmt
+    return format_from_version(
+        str(_core.writer_check_format(group, None if fmt is None else fmt.version))
+    )
 
 
 def write_multiscale(
@@ -192,45 +185,14 @@ def write_multiscales_metadata(
             if axes is not None:
                 ndim = len(axes)
 
-    if (
-        isinstance(metadata, dict)
-        and metadata.get("metadata")
-        and isinstance(metadata["metadata"], dict)
-        and "omero" in metadata["metadata"]
-    ):
-        omero_metadata = metadata["metadata"].pop("omero")
-        if omero_metadata is None:
-            raise KeyError("If `'omero'` is present, value cannot be `None`.")
-        for channel in omero_metadata["channels"]:
-            if "color" in channel and (
-                not isinstance(channel["color"], str) or len(channel["color"]) != 6
-            ):
-                raise TypeError("`'color'` must be a hex code string.")
-            if "window" in channel:
-                if not isinstance(channel["window"], dict):
-                    raise TypeError("`'window'` must be a dict.")
-                for key in ["min", "max", "start", "end"]:
-                    if key not in channel["window"]:
-                        raise KeyError(f"`'{key}'` not found in `'window'`.")
-                    if not isinstance(channel["window"][key], (int, float)):
-                        raise TypeError(f"`'{key}'` must be an int or float.")
-
-        add_metadata(group, {"omero": omero_metadata})
-
-    multiscales = [
-        dict(datasets=_validate_datasets(datasets, ndim, fmt), name=name or group.name)
-    ]
-    if len(metadata.get("metadata", {})) > 0:
-        multiscales[0]["metadata"] = metadata["metadata"]
-    if axes is not None:
-        multiscales[0]["axes"] = axes
-
-    if fmt.version in ("0.1", "0.2", "0.3", "0.4"):
-        multiscales[0]["version"] = fmt.version
-    else:
-        add_metadata(group, {"version": fmt.version})
-
-    add_metadata(group, {"multiscales": multiscales})
+    _core.writer_write_multiscales_metadata(
+        group,
+        _validate_datasets(datasets, ndim, fmt),
+        fmt.version,
+        axes,
+        name,
+        metadata,
+    )
 
 
 def write_plate_metadata(
@@ -244,25 +206,16 @@ def write_plate_metadata(
     name: str | None = None,
 ) -> None:
     group, fmt = check_group_fmt(group, fmt)
-    plate: dict[str, str | int | list[dict]] = {
-        "columns": _validate_plate_rows_columns(columns),
-        "rows": _validate_plate_rows_columns(rows),
-        "wells": _validate_plate_wells(wells, rows, columns, fmt=fmt),
-    }
-    if name is not None:
-        plate["name"] = name
-    if field_count is not None:
-        plate["field_count"] = field_count
-    if acquisitions is not None:
-        plate["acquisitions"] = _validate_plate_acquisitions(acquisitions)
-
-    if fmt.version in ("0.1", "0.2", "0.3", "0.4"):
-        plate["version"] = fmt.version
-        group.attrs["plate"] = plate
-    else:
-        if fmt.version == "0.5":
-            plate["version"] = fmt.version
-        group.attrs["ome"] = {"version": fmt.version, "plate": plate}
+    _core.writer_write_plate_metadata(
+        group,
+        _validate_plate_rows_columns(rows),
+        _validate_plate_rows_columns(columns),
+        _validate_plate_wells(wells, rows, columns, fmt=fmt),
+        fmt.version,
+        None if acquisitions is None else _validate_plate_acquisitions(acquisitions),
+        field_count,
+        name,
+    )
 
 
 def write_well_metadata(
@@ -271,15 +224,11 @@ def write_well_metadata(
     fmt: Format | None = None,
 ) -> None:
     group, fmt = check_group_fmt(group, fmt)
-    well: dict[str, Any] = {
-        "images": _validate_well_images(images),
-    }
-
-    if fmt.version in ("0.1", "0.2", "0.3", "0.4"):
-        well["version"] = fmt.version
-        group.attrs["well"] = well
-    else:
-        group.attrs["ome"] = {"version": fmt.version, "well": well}
+    _core.writer_write_well_metadata(
+        group,
+        _validate_well_images(images),
+        fmt.version,
+    )
 
 
 def _write_pyramid_to_zarr(
@@ -386,51 +335,28 @@ def write_label_metadata(
     **metadata: list[dict[str, Any]] | dict[str, Any] | str,
 ) -> None:
     group, fmt = check_group_fmt(group, fmt)
-    label_group = group[name]
-    image_label_metadata = {**metadata}
-    if colors is not None:
-        image_label_metadata["colors"] = colors
-    if properties is not None:
-        image_label_metadata["properties"] = properties
-    image_label_metadata["version"] = fmt.version
-
-    label_list = get_metadata(group).get("labels", [])
-    label_list.append(name)
-
-    add_metadata(group, {"labels": label_list}, fmt=fmt)
-    add_metadata(label_group, {"image-label": image_label_metadata}, fmt=fmt)
+    _core.writer_write_label_metadata(
+        group,
+        name,
+        colors,
+        properties,
+        fmt.version,
+        metadata,
+    )
 
 
 def get_metadata(group: zarr.Group | str) -> dict:
-    if isinstance(group, str):
-        group = zarr.open_group(group, mode="r")
-    attrs = group.attrs
-    if group.info._zarr_format == 3:
-        attrs = attrs.get("ome", {})
-    else:
-        attrs = dict(attrs)
-    return attrs
+    return dict(_core.writer_get_metadata(group))
 
 
 def add_metadata(
     group: zarr.Group | str, metadata: dict[str, Any], fmt: Format | None = None
 ) -> None:
-    group, fmt = check_group_fmt(group, fmt)
-    attrs = group.attrs
-    if fmt.version not in ("0.1", "0.2", "0.3", "0.4"):
-        attrs = attrs.get("ome", {})
-
-    for key, value in metadata.items():
-        if isinstance(value, dict) and isinstance(attrs.get(key), dict):
-            attrs[key].update(value)
-        else:
-            attrs[key] = value
-
-    if fmt.version in ("0.1", "0.2", "0.3", "0.4"):
-        for key, value in attrs.items():
-            group.attrs[key] = value
-    else:
-        group.attrs["ome"] = attrs
+    _core.writer_add_metadata(
+        group,
+        metadata,
+        None if fmt is None else fmt.version,
+    )
 
 
 def write_multiscale_labels(

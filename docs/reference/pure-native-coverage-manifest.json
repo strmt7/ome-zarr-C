@@ -15,7 +15,9 @@
     {"upstream_file": "conversions.py", "qualname": "int_to_rgba_255", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/conversions.py"], "native_files": ["cpp/native/conversions.cpp"]},
     {"upstream_file": "conversions.py", "qualname": "rgba_to_int", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/conversions.py"], "native_files": ["cpp/native/conversions.cpp"]},
 
-    {"upstream_file": "csv.py", "qualname": "parse_csv_value", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/csv.py"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "parse_csv_value", "boundary_files": ["cpp/bindings/csv_bindings.cpp", "ome_zarr_c/csv.py"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "csv_to_zarr", "boundary_files": ["cpp/bindings/csv_bindings.cpp", "ome_zarr_c/csv.py"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "dict_to_zarr", "boundary_files": ["cpp/bindings/csv_bindings.cpp", "ome_zarr_c/csv.py"], "native_files": ["cpp/native/csv.cpp"]},
 
     {"upstream_file": "dask_utils.py", "qualname": "_better_chunksize", "boundary_files": ["cpp/bindings/dask_utils_bindings.cpp", "ome_zarr_c/dask_utils.py"], "native_files": ["cpp/native/dask_utils.cpp"]},
     {"upstream_file": "dask_utils.py", "qualname": "resize", "boundary_files": ["cpp/bindings/dask_utils_bindings.cpp", "ome_zarr_c/dask_utils.py"], "native_files": ["cpp/native/dask_utils.cpp"]},
@@ -53,9 +55,13 @@
     {"upstream_file": "reader.py", "qualname": "Node.add", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Node.__repr__", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Labels.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
+    {"upstream_file": "reader.py", "qualname": "Labels.__init__", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Label.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
+    {"upstream_file": "reader.py", "qualname": "Label.__init__", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Multiscales.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
+    {"upstream_file": "reader.py", "qualname": "Multiscales.__init__", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "OMERO.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
+    {"upstream_file": "reader.py", "qualname": "OMERO.__init__", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Well.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
     {"upstream_file": "reader.py", "qualname": "Plate.matches", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp"]},
 
@@ -79,6 +85,14 @@
     {"upstream_file": "writer.py", "qualname": "_validate_plate_rows_columns", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "_validate_datasets", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "_validate_plate_wells", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
-    {"upstream_file": "writer.py", "qualname": "_retuple", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]}
+    {"upstream_file": "writer.py", "qualname": "_retuple", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "check_group_fmt", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "check_format", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_multiscales_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_plate_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_well_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "write_label_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "get_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]},
+    {"upstream_file": "writer.py", "qualname": "add_metadata", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp"]}
   ]
 }

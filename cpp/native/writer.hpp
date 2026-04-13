@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -73,5 +74,49 @@ struct DatasetInput {
 };
 
 std::vector<std::size_t> validate_datasets(const std::vector<DatasetInput>& datasets);
+
+struct WriterFormatPlan {
+    std::string resolved_version;
+    int resolved_zarr_format;
+};
+
+WriterFormatPlan resolve_writer_format(
+    int group_zarr_format,
+    const std::optional<std::string>& requested_version);
+
+bool writer_uses_legacy_root_attrs(const std::string& version);
+
+struct WriterMultiscalesMetadataPlan {
+    bool legacy_root_attrs;
+    bool embed_version_in_multiscales;
+    bool write_root_version;
+    std::string group_name;
+};
+
+WriterMultiscalesMetadataPlan writer_multiscales_metadata_plan(
+    const std::string& version,
+    const std::string& group_name);
+
+struct WriterPlateMetadataPlan {
+    bool legacy_root_attrs;
+    bool embed_plate_version;
+    bool write_root_version;
+};
+
+WriterPlateMetadataPlan writer_plate_metadata_plan(const std::string& version);
+
+struct WriterWellMetadataPlan {
+    bool legacy_root_attrs;
+    bool embed_well_version;
+    bool write_root_version;
+};
+
+WriterWellMetadataPlan writer_well_metadata_plan(const std::string& version);
+
+struct WriterLabelMetadataPlan {
+    bool legacy_root_attrs;
+};
+
+WriterLabelMetadataPlan writer_label_metadata_plan(const std::string& version);
 
 }  // namespace ome_zarr_c::native_code

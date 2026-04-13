@@ -30,6 +30,10 @@ std::vector<std::string> reader_matching_specs(const ReaderSpecFlags& flags) {
     return matches;
 }
 
+std::vector<std::string> reader_labels_names(const std::vector<std::string>& labels) {
+    return labels;
+}
+
 std::string reader_node_repr(const std::string& zarr_repr, bool visible) {
     return visible ? zarr_repr : zarr_repr + " (hidden)";
 }
@@ -55,6 +59,41 @@ ReaderMultiscalesPlan reader_multiscales_plan(
         plan.any_coordinate_transformations =
             plan.any_coordinate_transformations || dataset.has_coordinate_transformations;
     }
+    return plan;
+}
+
+ReaderMultiscalesSummary reader_multiscales_summary(
+    const ReaderMultiscalesInput& input) {
+    const auto plan = reader_multiscales_plan(input.datasets);
+    ReaderMultiscalesSummary summary{};
+    summary.version = input.has_version ? input.version : "0.1";
+    summary.name = input.has_name ? input.name : "";
+    summary.paths = plan.paths;
+    summary.any_coordinate_transformations = plan.any_coordinate_transformations;
+    return summary;
+}
+
+ReaderLabelColorPlan reader_label_color_plan(const ReaderLabelColorInput& input) {
+    ReaderLabelColorPlan plan{};
+    plan.keep = input.label_is_bool || input.label_is_int;
+    plan.label_is_bool = input.label_is_bool;
+    plan.label_bool = input.label_bool;
+    plan.label_int = input.label_int;
+    if (input.has_rgba) {
+        for (const auto component : input.rgba) {
+            plan.rgba.push_back(static_cast<double>(component) / 255.0);
+        }
+    }
+    return plan;
+}
+
+ReaderLabelPropertyPlan reader_label_property_plan(
+    const ReaderLabelPropertyInput& input) {
+    ReaderLabelPropertyPlan plan{};
+    plan.keep = input.label_is_bool || input.label_is_int;
+    plan.label_is_bool = input.label_is_bool;
+    plan.label_bool = input.label_bool;
+    plan.label_int = input.label_int;
     return plan;
 }
 
@@ -88,6 +127,26 @@ ReaderOmeroChannelPlan reader_omero_channel_plan(
         plan.visible_mode = ReaderVisibleMode::keep_raw_active;
     }
     plan.has_complete_window = has_window && has_window_start && has_window_end;
+    return plan;
+}
+
+ReaderOmeroPlan reader_omero_plan(
+    const std::string& model,
+    const std::vector<ReaderOmeroChannelInput>& channels) {
+    ReaderOmeroPlan plan{};
+    for (const auto& channel : channels) {
+        plan.channels.push_back(reader_omero_channel_plan(
+            model,
+            channel.has_color,
+            channel.color,
+            channel.has_label,
+            channel.label,
+            channel.has_active,
+            channel.active_truthy,
+            channel.has_window,
+            channel.has_window_start,
+            channel.has_window_end));
+    }
     return plan;
 }
 

@@ -67,7 +67,18 @@ bool reader_matches_well(const py::object& zarr) {
 }
 
 py::object reader_labels_names(const py::dict& root_attrs) {
-    return root_attrs.attr("get")(py::str("labels"), py::list());
+    std::vector<std::string> labels;
+    py::object raw = root_attrs.attr("get")(py::str("labels"), py::list());
+    if (!raw.is_none()) {
+        for (const py::handle& label_handle : py::iterable(raw)) {
+            labels.push_back(py::cast<std::string>(label_handle));
+        }
+    }
+    py::list result;
+    for (const auto& label : ome_zarr_c::native_code::reader_labels_names(labels)) {
+        result.append(py::str(label));
+    }
+    return result;
 }
 
 py::str reader_node_repr(const py::object& zarr, bool visible) {
@@ -110,18 +121,39 @@ py::dict reader_label_payload(
             try {
                 py::object label_value = color.attr("__getitem__")(py::str("label-value"));
                 py::object rgba = color.attr("get")(py::str("rgba"), py::none());
-                if (!rgba.is_none() && ome_zarr_c::bindings::object_truthy(rgba)) {
-                    py::list normalized;
+                ome_zarr_c::native_code::ReaderLabelColorInput input{};
+                input.label_is_bool = PyBool_Check(label_value.ptr()) != 0;
+                input.label_bool = input.label_is_bool &&
+                    py::cast<bool>(label_value);
+                input.label_is_int = PyLong_Check(label_value.ptr()) != 0;
+                input.label_int = input.label_is_int
+                    ? py::cast<std::int64_t>(label_value)
+                    : 0;
+                input.has_rgba = !rgba.is_none() &&
+                    ome_zarr_c::bindings::object_truthy(rgba);
+                if (input.has_rgba) {
                     for (const py::handle& entry : rgba) {
-                        normalized.append(
-                            ome_zarr_c::bindings::true_divide(entry, py::int_(255)));
+                        input.rgba.push_back(py::cast<std::int64_t>(entry));
                     }
-                    rgba = normalized;
                 }
 
-                if (PyBool_Check(label_value.ptr()) || PyLong_Check(label_value.ptr())) {
-                    colors[label_value] = rgba;
+                const auto plan =
+                    ome_zarr_c::native_code::reader_label_color_plan(input);
+                if (!plan.keep) {
+                    continue;
                 }
+
+                py::object key;
+                if (plan.label_is_bool) {
+                    key = py::bool_(plan.label_bool);
+                } else {
+                    key = py::int_(plan.label_int);
+                }
+                py::list normalized;
+                for (const double entry : plan.rgba) {
+                    normalized.append(py::float_(entry));
+                }
+                colors[key] = normalized;
             } catch (...) {
             }
         }
@@ -133,9 +165,28 @@ py::dict reader_label_payload(
         for (const py::handle& props_handle : props_list) {
             py::object props = py::reinterpret_borrow<py::object>(props_handle);
             py::object label_value = props.attr("__getitem__")(py::str("label-value"));
+            const auto plan = ome_zarr_c::native_code::reader_label_property_plan(
+                ome_zarr_c::native_code::ReaderLabelPropertyInput{
+                    PyBool_Check(label_value.ptr()) != 0,
+                    PyBool_Check(label_value.ptr()) != 0 &&
+                        py::cast<bool>(label_value),
+                    PyLong_Check(label_value.ptr()) != 0,
+                    PyLong_Check(label_value.ptr()) != 0
+                        ? py::cast<std::int64_t>(label_value)
+                        : 0,
+                });
+            if (!plan.keep) {
+                continue;
+            }
             py::dict props_copy = py::dict(props);
             props_copy.attr("pop")(py::str("label-value"));
-            properties[label_value] = props_copy;
+            py::object key;
+            if (plan.label_is_bool) {
+                key = py::bool_(plan.label_bool);
+            } else {
+                key = py::int_(plan.label_int);
+            }
+            properties[key] = props_copy;
         }
     }
 
@@ -162,11 +213,6 @@ py::dict reader_multiscales_payload(const py::dict& root_attrs) {
     py::object datasets = first.attr("__getitem__")(py::str("datasets"));
     py::object axes = first.attr("get")(py::str("axes"), py::none());
 
-    payload["version"] = first.attr("get")(py::str("version"), py::str("0.1"));
-    payload["datasets"] = datasets;
-    payload["axes"] = axes;
-    payload["name"] = first.attr("get")(py::str("name"), py::none());
-
     std::vector<ome_zarr_c::native_code::ReaderMultiscalesDatasetInput> native_datasets;
     native_datasets.reserve(py::len(datasets));
     for (const py::handle& dataset_handle : datasets) {
@@ -179,7 +225,18 @@ py::dict reader_multiscales_payload(const py::dict& root_attrs) {
         native_datasets.push_back(std::move(input));
     }
 
-    const auto plan = ome_zarr_c::native_code::reader_multiscales_plan(native_datasets);
+    const auto plan = ome_zarr_c::native_code::reader_multiscales_summary(
+        ome_zarr_c::native_code::ReaderMultiscalesInput{
+            !first.attr("get")(py::str("version"), py::none()).is_none(),
+            py::cast<std::string>(first.attr("get")(py::str("version"), py::str("0.1"))),
+            !first.attr("get")(py::str("name"), py::none()).is_none(),
+            py::cast<std::string>(py::str(first.attr("get")(py::str("name"), py::none()))),
+            native_datasets,
+        });
+    payload["version"] = py::str(plan.version);
+    payload["datasets"] = datasets;
+    payload["axes"] = axes;
+    payload["name"] = first.attr("get")(py::str("name"), py::none());
     py::list paths;
     py::list transformations;
     for (const py::handle& dataset_handle : datasets) {
@@ -213,14 +270,12 @@ py::dict reader_omero_payload(const py::dict& image_data, bool node_visible) {
     py::list contrast_limits;
     py::list names;
     py::list visibles;
+    std::vector<ome_zarr_c::native_code::ReaderOmeroChannelInput> native_channels;
+    native_channels.reserve(channel_count);
     for (py::size_t idx = 0; idx < channel_count; ++idx) {
         contrast_limits.append(py::none());
         names.append(py::str("channel_" + std::to_string(idx)));
         visibles.append(py::bool_(true));
-    }
-
-    py::object contrast_limits_value = contrast_limits;
-    for (py::size_t idx = 0; idx < channel_count; ++idx) {
         py::object channel = channels.attr("__getitem__")(py::int_(idx));
 
         py::object color = channel.attr("get")(py::str("color"), py::none());
@@ -233,9 +288,7 @@ py::dict reader_omero_payload(const py::dict& image_data, bool node_visible) {
             start = window.attr("get")(py::str("start"), py::none());
             end = window.attr("get")(py::str("end"), py::none());
         }
-
-        const auto plan = ome_zarr_c::native_code::reader_omero_channel_plan(
-            model,
+        native_channels.push_back(ome_zarr_c::native_code::ReaderOmeroChannelInput{
             !color.is_none(),
             color.is_none() ? "" : py::cast<std::string>(color),
             !label.is_none(),
@@ -244,16 +297,34 @@ py::dict reader_omero_payload(const py::dict& image_data, bool node_visible) {
             !active.is_none() && ome_zarr_c::bindings::object_truthy(active),
             !window.is_none(),
             !start.is_none(),
-            !end.is_none());
+            !end.is_none(),
+        });
+    }
 
-        if (plan.has_color) {
+    py::object contrast_limits_value = contrast_limits;
+    const auto plan =
+        ome_zarr_c::native_code::reader_omero_plan(model, native_channels);
+    for (py::size_t idx = 0; idx < channel_count; ++idx) {
+        py::object channel = channels.attr("__getitem__")(py::int_(idx));
+        py::object label = channel.attr("get")(py::str("label"), py::none());
+        py::object active = channel.attr("get")(py::str("active"), py::none());
+        py::object window = channel.attr("get")(py::str("window"), py::none());
+        py::object start = py::none();
+        py::object end = py::none();
+        if (!window.is_none()) {
+            start = window.attr("get")(py::str("start"), py::none());
+            end = window.attr("get")(py::str("end"), py::none());
+        }
+        const auto& channel_plan = plan.channels[idx];
+
+        if (channel_plan.has_color) {
             py::list rgb;
-            if (plan.force_greyscale_rgb) {
+            if (channel_plan.force_greyscale_rgb) {
                 rgb.append(py::int_(1));
                 rgb.append(py::int_(1));
                 rgb.append(py::int_(1));
             } else {
-                for (const double component : plan.rgb) {
+                for (const double component : channel_plan.rgb) {
                     rgb.append(py::float_(component));
                 }
             }
@@ -267,23 +338,23 @@ py::dict reader_omero_payload(const py::dict& image_data, bool node_visible) {
             colormaps.append(colormap);
         }
 
-        if (plan.has_label) {
+        if (channel_plan.has_label) {
             names[idx] = label;
         }
 
         if (!active.is_none()) {
-            if (plan.visible_mode ==
+            if (channel_plan.visible_mode ==
                 ome_zarr_c::native_code::ReaderVisibleMode::node_visible_if_active) {
                 visibles[idx] = py::bool_(node_visible);
             } else if (
-                plan.visible_mode ==
+                channel_plan.visible_mode ==
                 ome_zarr_c::native_code::ReaderVisibleMode::keep_raw_active) {
                 visibles[idx] = active;
             }
         }
 
         if (!window.is_none()) {
-            if (!plan.has_complete_window) {
+            if (!channel_plan.has_complete_window) {
                 contrast_limits_value = py::none();
             } else if (!contrast_limits_value.is_none()) {
                 py::list limits;
