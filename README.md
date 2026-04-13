@@ -174,6 +174,28 @@ performance on the verified kernel and runtime slices:
 .venv/bin/python -m pip install -e '.[dev,benchmark]' --no-build-isolation
 ```
 
+The extension now builds with an explicit portable release profile by default:
+
+- Unix-like hosts: `-O3` and hidden symbol visibility
+- Windows hosts: `/O2`
+- no unsafe math flags such as `-ffast-math`
+
+Optional build-time tuning knobs:
+
+- `OME_ZARR_C_ENABLE_LTO=1`: enable link-time optimization
+- `OME_ZARR_C_MARCH_NATIVE=1`: enable host-specific CPU tuning on Unix-like hosts
+
+Example host-tuned rebuild for local benchmarking only:
+
+```bash
+OME_ZARR_C_ENABLE_LTO=1 OME_ZARR_C_MARCH_NATIVE=1 \
+  .venv/bin/python -m pip install -e '.[dev,benchmark]' --no-build-isolation
+```
+
+The host-tuned profile is intentionally opt-in because it is not portable across
+different CPU targets. The default profile is the one intended for reproducible
+CI and portable deployments.
+
 Run the current proven-safe local verification lane:
 
 ```bash
@@ -239,18 +261,31 @@ available only when `OME_ZARR_BENCH_INCLUDE_LARGE=1`.
 See `docs/reference/benchmark-suite.md` for the methodology and
 `docs/reference/public-benchmark-fixtures.md` for fixture provenance.
 
-Latest local benchmark snapshot on `2026-04-13`:
+Latest completed broad snapshot on `2026-04-13` before the current `-O3`
+retime:
 
 - `core`: `29` cases, geometric mean `0.982x` (`python / cpp`)
 - `public-api`: `38` cases, geometric mean `0.993x`
 - `realdata`: `3` default public fixtures, geometric mean `0.995x`
 - public API coverage checker: `89` documented callables, `8` abstract
   exclusions, `0` uncovered callables
-- strongest current wins include:
-  - `conversions.rgba_to_int_batch`: `2.142x`
-  - `conversions.int_to_rgba_batch`: `1.816x`
-  - `scale.scaler_methods`: `4.591x`
-  - `dask_utils.resize_2d`: `1.307x`
+
+Latest targeted local reruns on the current portable `-O3` build:
+
+- `core` conversions micro-slice: geometric mean `2.032x`
+- `core` data-oriented micro-slice: geometric mean `1.503x`
+- `core` meso compute slice: geometric mean `1.059x`
+- strongest measured wins in those reruns:
+  - `conversions.rgba_to_int_batch`: `2.167x`
+  - `conversions.int_to_rgba_batch`: `1.906x`
+  - `data.rgb_to_5d_batch`: `2.451x`
+  - `data.make_circle_batch`: `2.100x`
+  - `dask_utils.resize_2d`: `1.321x`
+  - `scale.build_pyramid_local_mean`: `1.108x`
+- still-slower paths in the same reruns:
+  - `writer.validate_datasets_batch`: `0.829x`
+  - `format.matches`: `0.798x`
+  - `format.well_and_coord`: `0.631x`
 
 For read-only surfaces that print absolute paths, parity tests should run the
 upstream and converted implementations against the same fixture path so the

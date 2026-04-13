@@ -131,6 +131,29 @@ Install the benchmark dependency:
 .venv/bin/python -m pip install -e '.[dev,benchmark]' --no-build-isolation
 ```
 
+Build profile notes:
+
+- the repository now appends an explicit portable release profile by default
+  when building the extension:
+  - Unix-like hosts: `-O3` and hidden symbol visibility
+  - Windows hosts: `/O2`
+- unsafe math flags are intentionally excluded because parity comes first
+- optional tuning knobs:
+  - `OME_ZARR_C_ENABLE_LTO=1` enables link-time optimization
+  - `OME_ZARR_C_MARCH_NATIVE=1` enables host-specific CPU tuning on Unix-like
+    hosts
+
+Example host-tuned rebuild for local benchmark experiments:
+
+```bash
+OME_ZARR_C_ENABLE_LTO=1 OME_ZARR_C_MARCH_NATIVE=1 \
+  .venv/bin/python -m pip install -e '.[dev,benchmark]' --no-build-isolation
+```
+
+When you change either build-profile environment variable, rebuild the editable
+install before benchmarking so the timed extension binary actually reflects the
+requested profile.
+
 List the available cases across all suites:
 
 ```bash
@@ -228,7 +251,8 @@ machine-dependent.
 
 ## Current Snapshot
 
-Latest local snapshot on `2026-04-13`:
+Latest completed broad snapshot on `2026-04-13` before the current `-O3`
+retime:
 
 - `core`: `29` paired cases, geometric-mean speedup `0.982x` (`python / cpp`)
 - `public-api`: `38` paired cases, geometric-mean speedup `0.993x`
@@ -238,22 +262,31 @@ Latest local snapshot on `2026-04-13`:
   - `8` abstract exclusions
   - `0` uncovered callable entrypoints
 
-High-signal cases from the same snapshot:
+Latest completed targeted reruns on the current portable `-O3` build:
 
-- `conversions.rgba_to_int_batch`: `2.142x` faster in C++
-- `conversions.int_to_rgba_batch`: `1.816x` faster in C++
-- `scale.scaler_methods`: `4.591x` faster in C++
-- `dask_utils.resize_2d`: `1.307x` faster in C++
-- `reader.image_surface`: `1.193x` faster in C++
-- `format.matches`: `0.337x`, currently slower in C++
+- `core` conversions micro-slice: geometric-mean speedup `2.032x`
+- `core` data-oriented micro-slice: geometric-mean speedup `1.503x`
+- `core` meso compute slice: geometric-mean speedup `1.059x`
+- strongest current wins in those reruns:
+  - `conversions.rgba_to_int_batch`: `2.167x`
+  - `conversions.int_to_rgba_batch`: `1.906x`
+  - `data.rgb_to_5d_batch`: `2.451x`
+  - `data.make_circle_batch`: `2.100x`
+  - `dask_utils.resize_2d`: `1.321x`
+  - `scale.build_pyramid_local_mean`: `1.108x`
+- notable slower paths in the same reruns:
+  - `writer.validate_datasets_batch`: `0.829x`
+  - `format.matches`: `0.798x`
+  - `format.well_and_coord`: `0.631x`
 
 Interpretation:
 
-- The strongest gains are in conversion kernels, scaler method dispatch, and
-  selected read/write runtime flows.
-- The broad suite-level picture is still near-flat overall because several
-  boundary-heavy helper and format paths remain slower.
-- The public real-data suite is also near-flat overall on the current machine.
+- The strongest gains are in arithmetic-heavy conversion and array-shaping
+  kernels.
+- The meso compute slice is modestly faster overall on the current machine.
+- The broad suite-level picture was still near-flat in the last completed
+  all-suite run, so targeted wins should not be overstated as package-wide wins.
+- Boundary-heavy helper and format paths are still the main performance drag.
 - Filesystem-heavy runtime paths are noisier than in-memory kernels, so the
   summaries use `pyperf` medians and geometric means instead of raw
   means.

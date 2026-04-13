@@ -49,20 +49,55 @@ using CoordinateTransformations = std::vector<CoordinateTransformation>;
 struct CoordinateTransformationValidationInput {
     bool has_type;
     std::string type;
-    std::string transformation_repr;
     bool has_scale;
     std::size_t scale_length;
     std::vector<bool> scale_numeric;
-    std::string scale_repr;
     bool has_translation;
     std::size_t translation_length;
     std::vector<bool> translation_numeric;
-    std::string translation_repr;
 };
 
 struct CoordinateTransformationsValidationInput {
-    std::string transformations_repr;
     std::vector<CoordinateTransformationValidationInput> transformations;
+};
+
+enum class CoordinateTransformationsValidationErrorCode {
+    count_mismatch,
+    missing_type,
+    invalid_scale_count,
+    first_not_scale,
+    missing_scale_argument,
+    scale_length_mismatch,
+    scale_non_numeric,
+    invalid_translation_count,
+    missing_translation_argument,
+    translation_length_mismatch,
+    translation_non_numeric,
+};
+
+class CoordinateTransformationsValidationError final : public std::exception {
+  public:
+    CoordinateTransformationsValidationError(
+        CoordinateTransformationsValidationErrorCode code,
+        std::size_t group_index = 0,
+        std::size_t transformation_index = 0,
+        int actual_count = 0);
+
+    const char* what() const noexcept override;
+
+    CoordinateTransformationsValidationErrorCode code() const noexcept;
+
+    std::size_t group_index() const noexcept;
+
+    std::size_t transformation_index() const noexcept;
+
+    int actual_count() const noexcept;
+
+  private:
+    CoordinateTransformationsValidationErrorCode code_;
+    std::size_t group_index_;
+    std::size_t transformation_index_;
+    int actual_count_;
 };
 
 struct WellDictV04 {

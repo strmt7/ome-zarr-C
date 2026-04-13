@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../native/format.hpp"
+#include "common.hpp"
 
 namespace py = pybind11;
 
@@ -13,6 +14,48 @@ namespace {
 
 std::string repr_object(const py::handle& obj) {
     return py::cast<std::string>(py::repr(obj));
+}
+
+py::object dict_get_item_or_none(const py::dict& mapping, const char* key) {
+    PyObject* value = PyDict_GetItemString(mapping.ptr(), key);
+    if (value == nullptr) {
+        return py::none();
+    }
+    return py::reinterpret_borrow<py::object>(value);
+}
+
+py::object mapping_version_or_none(const py::object& mapping_like) {
+    if (mapping_like.is_none() || !ome_zarr_c::bindings::object_truthy(mapping_like)) {
+        return py::none();
+    }
+    if (PyDict_Check(mapping_like.ptr())) {
+        PyObject* value = PyDict_GetItemString(mapping_like.ptr(), "version");
+        if (value == nullptr) {
+            return py::none();
+        }
+        return py::reinterpret_borrow<py::object>(value);
+    }
+    return mapping_like.attr("get")(py::str("version"), py::none());
+}
+
+py::object get_metadata_version_object(py::dict metadata) {
+    py::object multiscales = dict_get_item_or_none(metadata, "multiscales");
+    if (!multiscales.is_none() && ome_zarr_c::bindings::object_truthy(multiscales)) {
+        PyObject* first = PySequence_GetItem(multiscales.ptr(), 0);
+        if (first == nullptr) {
+            throw py::error_already_set();
+        }
+        py::object dataset = py::reinterpret_steal<py::object>(first);
+        return mapping_version_or_none(dataset);
+    }
+
+    for (const char* key : {"plate", "well", "image-label"}) {
+        py::object version = mapping_version_or_none(dict_get_item_or_none(metadata, key));
+        if (!version.is_none()) {
+            return version;
+        }
+    }
+    return py::none();
 }
 
 [[noreturn]] void raise_value_error_args(const py::tuple& args) {
@@ -84,6 +127,97 @@ bool is_number_like(const py::handle& value) {
     return PyFloat_Check(value.ptr()) || PyLong_Check(value.ptr());
 }
 
+[[noreturn]] void raise_coordinate_transformations_validation_error(
+    const ome_zarr_c::native_code::CoordinateTransformationsValidationError& error,
+    int ndim,
+    int nlevels,
+    const py::list& coordinate_transformations) {
+    switch (error.code()) {
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::count_mismatch:
+            throw py::value_error(
+                "coordinate_transformations count: " +
+                std::to_string(error.actual_count()) +
+                " must match datasets " +
+                std::to_string(nlevels));
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::missing_type:
+            {
+                py::object group =
+                    coordinate_transformations[py::int_(error.group_index())];
+            throw py::value_error(
+                "Missing type in: " + repr_object(group));
+            }
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::invalid_scale_count:
+            throw py::value_error(
+                "Must supply 1 'scale' item in coordinate_transformations");
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::first_not_scale:
+            throw py::value_error(
+                "First coordinate_transformations must be 'scale'");
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::missing_scale_argument:
+            {
+                py::object group =
+                    coordinate_transformations[py::int_(error.group_index())];
+                py::object first = py::cast<py::list>(group)[py::int_(0)];
+            throw py::value_error(
+                "Missing scale argument in: " + repr_object(first));
+            }
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::scale_length_mismatch:
+            {
+                py::object group =
+                    coordinate_transformations[py::int_(error.group_index())];
+                py::object first = py::cast<py::list>(group)[py::int_(0)];
+            throw py::value_error(
+                "'scale' list " +
+                repr_object(first.attr("__getitem__")(py::str("scale"))) +
+                " must match number of image dimensions: " +
+                std::to_string(ndim));
+            }
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::scale_non_numeric:
+            {
+                py::object group =
+                    coordinate_transformations[py::int_(error.group_index())];
+                py::object first = py::cast<py::list>(group)[py::int_(0)];
+            throw py::value_error(
+                "'scale' values must all be numbers: " +
+                repr_object(first.attr("__getitem__")(py::str("scale"))));
+            }
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::invalid_translation_count:
+            throw py::value_error(
+                "Must supply 0 or 1 'translation' item incoordinate_transformations");
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::missing_translation_argument:
+            {
+                py::object group =
+                    coordinate_transformations[py::int_(error.group_index())];
+                py::object first = py::cast<py::list>(group)[py::int_(0)];
+            throw py::value_error(
+                "Missing scale argument in: " + repr_object(first));
+            }
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::translation_length_mismatch:
+            {
+                py::object group =
+                    coordinate_transformations[py::int_(error.group_index())];
+            throw py::value_error(
+                "'translation' list " +
+                repr_object(
+                    py::cast<py::list>(group)[py::int_(error.transformation_index())]
+                        .attr("__getitem__")(py::str("translation"))) +
+                " must match image dimensions count: " +
+                std::to_string(ndim));
+            }
+        case ome_zarr_c::native_code::CoordinateTransformationsValidationErrorCode::translation_non_numeric:
+            {
+                py::object group =
+                    coordinate_transformations[py::int_(error.group_index())];
+            throw py::value_error(
+                "'translation' values must all be numbers: " +
+                repr_object(
+                    py::cast<py::list>(group)[py::int_(error.transformation_index())]
+                        .attr("__getitem__")(py::str("translation"))));
+            }
+    }
+
+    throw py::value_error("Unknown coordinate transformation validation error");
+}
+
 std::string normalize_known_format_version(const py::handle& version) {
     try {
         return ome_zarr_c::native_code::normalize_known_format_version(
@@ -107,27 +241,27 @@ py::str resolve_format_version(const py::handle& version) {
 }
 
 py::object get_metadata_version(py::dict metadata) {
-    const auto version =
-        ome_zarr_c::native_code::get_metadata_version(metadata_summary_from_dict(metadata));
-    if (version.has_value()) {
-        return py::str(version.value());
-    }
-    return py::none();
+    return get_metadata_version_object(metadata);
 }
 
 py::object detect_format_version(py::dict metadata) {
-    const auto detected =
-        ome_zarr_c::native_code::detect_format_version(metadata_summary_from_dict(metadata));
-    if (!detected.has_value()) {
+    py::object version = get_metadata_version_object(metadata);
+    if (version.is_none() || !py::isinstance<py::str>(version)) {
         return py::none();
     }
-    return py::str(detected.value());
+    const std::string version_string = py::cast<std::string>(version);
+    if (!ome_zarr_c::native_code::is_known_format_version_string(version_string)) {
+        return py::none();
+    }
+    return version;
 }
 
 bool format_matches(const std::string& version, py::dict metadata) {
-    return ome_zarr_c::native_code::format_matches(
-        version,
-        metadata_summary_from_dict(metadata));
+    py::object metadata_version = get_metadata_version_object(metadata);
+    if (metadata_version.is_none()) {
+        return false;
+    }
+    return ome_zarr_c::bindings::objects_equal(metadata_version, py::str(version));
 }
 
 int format_zarr_format(const std::string& version) {
@@ -369,7 +503,6 @@ void validate_coordinate_transformations(
     for (const py::handle& transformations_handle : coordinate_transformations) {
         py::list transformations = py::cast<py::list>(transformations_handle);
         ome_zarr_c::native_code::CoordinateTransformationsValidationInput native_group;
-        native_group.transformations_repr = repr_object(transformations);
         native_group.transformations.reserve(py::len(transformations));
 
         for (const py::handle& transformation_handle : transformations) {
@@ -377,7 +510,6 @@ void validate_coordinate_transformations(
             ome_zarr_c::native_code::CoordinateTransformationValidationInput
                 native_transformation;
             native_transformation.has_type = false;
-            native_transformation.transformation_repr = repr_object(transformation);
             native_transformation.has_scale = false;
             native_transformation.scale_length = 0;
             native_transformation.has_translation = false;
@@ -392,7 +524,6 @@ void validate_coordinate_transformations(
             if (transformation.contains("scale")) {
                 native_transformation.has_scale = true;
                 py::sequence scale_values = py::cast<py::sequence>(transformation["scale"]);
-                native_transformation.scale_repr = repr_object(transformation["scale"]);
                 native_transformation.scale_length = py::len(scale_values);
                 native_transformation.scale_numeric.reserve(native_transformation.scale_length);
                 for (const py::handle& value : scale_values) {
@@ -404,8 +535,6 @@ void validate_coordinate_transformations(
                 native_transformation.has_translation = true;
                 py::sequence translation_values =
                     py::cast<py::sequence>(transformation["translation"]);
-                native_transformation.translation_repr =
-                    repr_object(transformation["translation"]);
                 native_transformation.translation_length = py::len(translation_values);
                 native_transformation.translation_numeric.reserve(
                     native_transformation.translation_length);
@@ -424,6 +553,9 @@ void validate_coordinate_transformations(
     try {
         ome_zarr_c::native_code::validate_coordinate_transformations(
             ndim, nlevels, native_groups);
+    } catch (const ome_zarr_c::native_code::CoordinateTransformationsValidationError& exc) {
+        raise_coordinate_transformations_validation_error(
+            exc, ndim, nlevels, coordinate_transformations);
     } catch (const std::invalid_argument& exc) {
         throw py::value_error(exc.what());
     }

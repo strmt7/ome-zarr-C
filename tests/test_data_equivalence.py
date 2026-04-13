@@ -70,11 +70,20 @@ def test_make_circle_matches_upstream() -> None:
         actual = _run_make_circle(_cpp_data.make_circle, h, w, value, dtype)
         assert expected == actual
 
+    py_target = np.zeros((16, 16), dtype=np.int16)
+    cpp_target = np.zeros((16, 16), dtype=np.int16)
+    py_view = py_target[3:11, 4:12]
+    cpp_view = cpp_target[3:11, 4:12]
+    _py_data.make_circle(8, 8, 5, py_view)
+    _cpp_data.make_circle(8, 8, 5, cpp_view)
+    assert _array_digest(py_target) == _array_digest(cpp_target)
+
 
 def test_rgb_to_5d_matches_upstream() -> None:
     cases = [
         np.arange(16, dtype=np.uint8).reshape(4, 4),
         np.arange(4 * 5 * 3, dtype=np.uint8).reshape(4, 5, 3),
+        np.arange(8 * 10 * 3, dtype=np.uint16).reshape(8, 10, 3)[::2, ::2, :],
         np.arange(2 * 3 * 4 * 5, dtype=np.uint8).reshape(2, 3, 4, 5),
     ]
 
