@@ -5,7 +5,9 @@ import importlib
 import math
 import os
 import random
+import shutil
 import sys
+import tempfile
 import time
 import warnings
 from collections.abc import Callable
@@ -17,6 +19,18 @@ from typing import Any
 import dask
 import dask.array as da
 import numpy as np
+
+from benchmarks.runtime_support import (
+    rewrite_snapshot_prefix,
+    run_cli_main,
+    run_create_zarr,
+    run_info,
+    run_parse_url,
+    run_write_image,
+    snapshot_tree,
+    write_minimal_v2_image,
+    write_minimal_v3_image,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM_ROOT = ROOT / "source_code_v.0.15.0"
@@ -32,16 +46,22 @@ _py_csv = importlib.import_module("ome_zarr.csv")
 _py_data = importlib.import_module("ome_zarr.data")
 _py_dask_utils = importlib.import_module("ome_zarr.dask_utils")
 _py_format = importlib.import_module("ome_zarr.format")
+_py_io = importlib.import_module("ome_zarr.io")
+_py_cli = importlib.import_module("ome_zarr.cli")
+_py_utils = importlib.import_module("ome_zarr.utils")
 _py_scale = importlib.import_module("ome_zarr.scale")
 _py_writer = importlib.import_module("ome_zarr.writer")
 
 _cpp_axes = importlib.import_module("ome_zarr_c.axes")
+_cpp_cli = importlib.import_module("ome_zarr_c.cli")
 _cpp_conversions = importlib.import_module("ome_zarr_c.conversions")
 _cpp_csv = importlib.import_module("ome_zarr_c.csv")
 _cpp_data = importlib.import_module("ome_zarr_c.data")
 _cpp_dask_utils = importlib.import_module("ome_zarr_c.dask_utils")
 _cpp_format = importlib.import_module("ome_zarr_c.format")
+_cpp_io = importlib.import_module("ome_zarr_c.io")
 _cpp_scale = importlib.import_module("ome_zarr_c.scale")
+_cpp_utils = importlib.import_module("ome_zarr_c.utils")
 _cpp_writer = importlib.import_module("ome_zarr_c.writer")
 
 
@@ -75,7 +95,7 @@ def benchmark_environment_metadata() -> dict[str, str]:
         )
     )
     return {
-        "benchmark_scope": "verified-native-backed-in-memory-only",
+        "benchmark_scope": "verified-native-backed-kernels-and-runtime-local-tempdir",
         "dask_scheduler": "single-threaded",
         "thread_env": thread_settings,
         "upstream_snapshot": "ome-zarr-py v0.15.0",
@@ -147,6 +167,9 @@ def _digest_array(array: np.ndarray) -> tuple[tuple[int, ...], str, str]:
 
 
 def _canonicalize(value: Any) -> Any:
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        raw = bytes(value)
+        return ("bytes", len(raw), hashlib.sha256(raw).hexdigest())
     if isinstance(value, da.Array):
         return ("dask", _digest_array(_compute_dask(value)))
     if isinstance(value, np.ndarray):
@@ -187,6 +210,11 @@ def _assert_parity(case_name: str, py_value: object, cpp_value: object) -> None:
 
 
 def _touch(value: Any) -> float:
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        raw = bytes(value)
+        if not raw:
+            return 0.0
+        return float(len(raw)) + float(raw[0]) + float(raw[-1])
     if isinstance(value, da.Array):
         return _touch(_compute_dask(value))
     if isinstance(value, np.ndarray):
@@ -224,6 +252,16 @@ def _touch(value: Any) -> float:
             + float(len(repr_value))
         )
     raise TypeError(f"Unsupported benchmark touch value: {type(value)!r}")
+
+
+def _touch_outcome(outcome: Any) -> float:
+    total = 0.0
+    total += _touch(outcome.value)
+    total += _touch(outcome.payload)
+    total += _touch(outcome.stdout)
+    total += _touch(outcome.records)
+    total += _touch(outcome.tree)
+    return total
 
 
 def _float_payload(value: float) -> float:
@@ -442,6 +480,57 @@ def _cpp_scalers() -> dict[str, object]:
                 max_layer=3,
             ),
         }
+
+
+@lru_cache(maxsize=1)
+def _runtime_source_dir() -> Path:
+    return Path(tempfile.mkdtemp(prefix="ome-zarr-c-bench-src-"))
+
+
+@lru_cache(maxsize=1)
+def _runtime_v2_source() -> Path:
+    root = _runtime_source_dir() / "image-v2.zarr"
+    write_minimal_v2_image(root)
+    return root
+
+
+@lru_cache(maxsize=1)
+def _runtime_v3_source() -> Path:
+    root = _runtime_source_dir() / "image-v3.zarr"
+    write_minimal_v3_image(root)
+    return root
+
+
+@lru_cache(maxsize=1)
+def _runtime_cli_download_source() -> Path:
+    root = _runtime_source_dir() / "cli-download-source.zarr"
+    replacements = {str(root): "<SOURCE>"}
+    random.seed(0)
+    outcome = run_cli_main(
+        _py_cli.main,
+        ["create", "--method=astronaut", str(root), "--format", "0.5"],
+        replacements,
+    )
+    _assert_outcome_ok("runtime.cli.download_v05.source", outcome)
+    return root
+
+
+def _fresh_runtime_dir(prefix: str) -> Path:
+    return Path(tempfile.mkdtemp(prefix=f"ome-zarr-c-bench-{prefix}-"))
+
+
+def _assert_outcome_ok(case_name: str, outcome: Any) -> None:
+    if outcome.status != "ok":
+        raise AssertionError(
+            f"Benchmark case {case_name} failed unexpectedly: "
+            f"{outcome.error_type} {outcome.error_message}"
+        )
+
+
+def _runtime_fmt_pair(version: str):
+    if version == "0.4":
+        return _py_format.FormatV04(), _cpp_format.FormatV04()
+    return _py_format.FormatV05(), _cpp_format.FormatV05()
 
 
 def _verify_int_to_rgba() -> None:
@@ -844,6 +933,373 @@ def _bench_astronaut(module: object) -> float:
     return _touch(module.astronaut())
 
 
+def _verify_parse_url_v2() -> None:
+    assert run_parse_url(_py_io.parse_url, _runtime_v2_source()) == run_parse_url(
+        _cpp_io.parse_url, _runtime_v2_source()
+    )
+
+
+def _verify_parse_url_v3() -> None:
+    assert run_parse_url(_py_io.parse_url, _runtime_v3_source()) == run_parse_url(
+        _cpp_io.parse_url, _runtime_v3_source()
+    )
+
+
+def _bench_parse_url(module: object, source: Path, case_name: str) -> float:
+    outcome = run_parse_url(module.parse_url, source)
+    _assert_outcome_ok(case_name, outcome)
+    return _touch_outcome(outcome)
+
+
+def _verify_info_v2() -> None:
+    assert run_info(_py_utils.info, _runtime_v2_source(), stats=False) == run_info(
+        _cpp_utils.info, _runtime_v2_source(), stats=False
+    )
+
+
+def _verify_info_v3_with_stats() -> None:
+    assert run_info(_py_utils.info, _runtime_v3_source(), stats=True) == run_info(
+        _cpp_utils.info, _runtime_v3_source(), stats=True
+    )
+
+
+def _bench_info(module: object, source: Path, *, stats: bool, case_name: str) -> float:
+    outcome = run_info(module.info, source, stats=stats)
+    _assert_outcome_ok(case_name, outcome)
+    return _touch_outcome(outcome)
+
+
+def _verify_cli_download_v05() -> None:
+    py_source = _fresh_runtime_dir("py-cli-download") / "source.zarr"
+    cpp_source = _fresh_runtime_dir("cpp-cli-download") / "source.zarr"
+    py_output_root = _fresh_runtime_dir("py-cli-download-out")
+    cpp_output_root = _fresh_runtime_dir("cpp-cli-download-out")
+    replacements = {
+        str(py_source): "<SOURCE>",
+        str(cpp_source): "<SOURCE>",
+        str(py_output_root): "<OUT>",
+        str(cpp_output_root): "<OUT>",
+    }
+    try:
+        random.seed(0)
+        py_create = run_cli_main(
+            _py_cli.main,
+            ["create", "--method=astronaut", str(py_source), "--format", "0.5"],
+            replacements,
+        )
+        random.seed(0)
+        cpp_create = run_cli_main(
+            _cpp_cli.main,
+            ["create", "--method=astronaut", str(cpp_source), "--format", "0.5"],
+            replacements,
+        )
+        assert py_create == cpp_create
+        expected = run_cli_main(
+            _py_cli.main,
+            ["download", str(py_source), f"--output={py_output_root}"],
+            replacements,
+        )
+        actual = run_cli_main(
+            _cpp_cli.main,
+            ["download", str(cpp_source), f"--output={cpp_output_root}"],
+            replacements,
+        )
+        assert expected.status == actual.status == "ok"
+        assert "downloading..." in expected.stdout
+        assert "downloading..." in actual.stdout
+        assert rewrite_snapshot_prefix(
+            snapshot_tree(py_output_root),
+            py_source.name,
+            "<SOURCE_ROOT>",
+        ) == rewrite_snapshot_prefix(
+            snapshot_tree(cpp_output_root),
+            cpp_source.name,
+            "<SOURCE_ROOT>",
+        )
+    finally:
+        shutil.rmtree(py_source.parent, ignore_errors=True)
+        shutil.rmtree(cpp_source.parent, ignore_errors=True)
+        shutil.rmtree(py_output_root, ignore_errors=True)
+        shutil.rmtree(cpp_output_root, ignore_errors=True)
+
+
+def _bench_cli_download(module: object, case_name: str) -> float:
+    output_root = _fresh_runtime_dir("utils-download")
+    source = _runtime_cli_download_source()
+    replacements = {
+        str(source): "<SOURCE>",
+        str(output_root): "<OUT>",
+    }
+    try:
+        outcome = run_cli_main(
+            module.main,
+            ["download", str(source), f"--output={output_root}"],
+            replacements,
+        )
+        _assert_outcome_ok(case_name, outcome)
+        return _touch_outcome(outcome) + _touch(snapshot_tree(output_root))
+    finally:
+        shutil.rmtree(output_root, ignore_errors=True)
+
+
+def _verify_write_image_numpy_v05() -> None:
+    image = np.arange(3 * 32 * 32, dtype=np.uint8).reshape(3, 32, 32)
+    py_root = _fresh_runtime_dir("py-write-image") / "image.zarr"
+    cpp_root = _fresh_runtime_dir("cpp-write-image") / "image.zarr"
+    py_fmt, cpp_fmt = _runtime_fmt_pair("0.5")
+    try:
+        expected = run_write_image(
+            _py_writer.write_image,
+            py_root,
+            image,
+            str(py_root),
+            fmt=py_fmt,
+            axes="cyx",
+            scale_factors=(2, 4),
+        )
+        actual = run_write_image(
+            _cpp_writer.write_image,
+            cpp_root,
+            image,
+            str(cpp_root),
+            fmt=cpp_fmt,
+            axes="cyx",
+            scale_factors=(2, 4),
+        )
+        assert expected == actual
+    finally:
+        shutil.rmtree(py_root.parent, ignore_errors=True)
+        shutil.rmtree(cpp_root.parent, ignore_errors=True)
+
+
+def _bench_write_image_numpy(module: object, case_name: str) -> float:
+    image = np.arange(3 * 32 * 32, dtype=np.uint8).reshape(3, 32, 32)
+    root = _fresh_runtime_dir("write-image") / "image.zarr"
+    fmt = _py_format.FormatV05() if module is _py_writer else _cpp_format.FormatV05()
+    try:
+        outcome = run_write_image(
+            module.write_image,
+            root,
+            image,
+            str(root),
+            fmt=fmt,
+            axes="cyx",
+            scale_factors=(2, 4),
+        )
+        _assert_outcome_ok(case_name, outcome)
+        return _touch_outcome(outcome)
+    finally:
+        shutil.rmtree(root.parent, ignore_errors=True)
+
+
+def _verify_write_image_delayed_v05() -> None:
+    image = da.from_array(
+        np.arange(16, dtype=np.uint16).reshape(4, 4),
+        chunks=(2, 2),
+    )
+    py_root = _fresh_runtime_dir("py-write-image-delayed") / "image.zarr"
+    cpp_root = _fresh_runtime_dir("cpp-write-image-delayed") / "image.zarr"
+    try:
+        expected = run_write_image(
+            _py_writer.write_image,
+            py_root,
+            image,
+            str(py_root),
+            fmt=_py_format.FormatV05(),
+            axes=["y", "x"],
+            scale_factors=(2,),
+            compute=False,
+        )
+        actual = run_write_image(
+            _cpp_writer.write_image,
+            cpp_root,
+            image,
+            str(cpp_root),
+            fmt=_cpp_format.FormatV05(),
+            axes=["y", "x"],
+            scale_factors=(2,),
+            compute=False,
+        )
+        assert expected == actual
+    finally:
+        shutil.rmtree(py_root.parent, ignore_errors=True)
+        shutil.rmtree(cpp_root.parent, ignore_errors=True)
+
+
+def _bench_write_image_delayed(module: object, case_name: str) -> float:
+    image = da.from_array(
+        np.arange(16, dtype=np.uint16).reshape(4, 4),
+        chunks=(2, 2),
+    )
+    root = _fresh_runtime_dir("write-image-delayed") / "image.zarr"
+    fmt = _py_format.FormatV05() if module is _py_writer else _cpp_format.FormatV05()
+    try:
+        outcome = run_write_image(
+            module.write_image,
+            root,
+            image,
+            str(root),
+            fmt=fmt,
+            axes=["y", "x"],
+            scale_factors=(2,),
+            compute=False,
+        )
+        _assert_outcome_ok(case_name, outcome)
+        return _touch_outcome(outcome)
+    finally:
+        shutil.rmtree(root.parent, ignore_errors=True)
+
+
+def _verify_create_zarr_coins_v05() -> None:
+    py_root = _fresh_runtime_dir("py-create-zarr") / "coins.zarr"
+    cpp_root = _fresh_runtime_dir("cpp-create-zarr") / "coins.zarr"
+    try:
+        expected = run_create_zarr(
+            _py_data.create_zarr,
+            py_root,
+            method=_py_data.coins,
+            label_name="coins",
+            fmt=_py_format.FormatV05(),
+            seed=0,
+        )
+        actual = run_create_zarr(
+            _cpp_data.create_zarr,
+            cpp_root,
+            method=_cpp_data.coins,
+            label_name="coins",
+            fmt=_cpp_format.FormatV05(),
+            seed=0,
+        )
+        assert expected == actual
+    finally:
+        shutil.rmtree(py_root.parent, ignore_errors=True)
+        shutil.rmtree(cpp_root.parent, ignore_errors=True)
+
+
+def _bench_create_zarr_coins(module: object, case_name: str) -> float:
+    root = _fresh_runtime_dir("create-zarr-coins") / "coins.zarr"
+    method = _py_data.coins if module is _py_data else _cpp_data.coins
+    fmt = _py_format.FormatV05() if module is _py_data else _cpp_format.FormatV05()
+    try:
+        outcome = run_create_zarr(
+            module.create_zarr,
+            root,
+            method=method,
+            label_name="coins",
+            fmt=fmt,
+            seed=0,
+        )
+        _assert_outcome_ok(case_name, outcome)
+        return _touch_outcome(outcome)
+    finally:
+        shutil.rmtree(root.parent, ignore_errors=True)
+
+
+def _verify_create_zarr_astronaut_v05() -> None:
+    py_root = _fresh_runtime_dir("py-create-zarr-astronaut") / "astronaut.zarr"
+    cpp_root = _fresh_runtime_dir("cpp-create-zarr-astronaut") / "astronaut.zarr"
+    try:
+        expected = run_create_zarr(
+            _py_data.create_zarr,
+            py_root,
+            method=_py_data.astronaut,
+            label_name="circles",
+            fmt=_py_format.FormatV05(),
+            seed=0,
+        )
+        actual = run_create_zarr(
+            _cpp_data.create_zarr,
+            cpp_root,
+            method=_cpp_data.astronaut,
+            label_name="circles",
+            fmt=_cpp_format.FormatV05(),
+            seed=0,
+        )
+        assert expected == actual
+    finally:
+        shutil.rmtree(py_root.parent, ignore_errors=True)
+        shutil.rmtree(cpp_root.parent, ignore_errors=True)
+
+
+def _bench_create_zarr_astronaut(module: object, case_name: str) -> float:
+    root = _fresh_runtime_dir("create-zarr-astronaut") / "astronaut.zarr"
+    method = _py_data.astronaut if module is _py_data else _cpp_data.astronaut
+    fmt = _py_format.FormatV05() if module is _py_data else _cpp_format.FormatV05()
+    try:
+        outcome = run_create_zarr(
+            module.create_zarr,
+            root,
+            method=method,
+            label_name="circles",
+            fmt=fmt,
+            seed=0,
+        )
+        _assert_outcome_ok(case_name, outcome)
+        return _touch_outcome(outcome)
+    finally:
+        shutil.rmtree(root.parent, ignore_errors=True)
+
+
+def _verify_cli_create_info_v05() -> None:
+    py_root = _fresh_runtime_dir("py-cli") / "cli-image.zarr"
+    cpp_root = _fresh_runtime_dir("cpp-cli") / "cli-image.zarr"
+    replacements = {
+        str(py_root): "<ROOT>",
+        str(cpp_root): "<ROOT>",
+    }
+    try:
+        random.seed(0)
+        py_create = run_cli_main(
+            _py_cli.main,
+            ["create", "--method=coins", str(py_root), "--format", "0.5"],
+            replacements,
+        )
+        random.seed(0)
+        cpp_create = run_cli_main(
+            _cpp_cli.main,
+            ["create", "--method=coins", str(cpp_root), "--format", "0.5"],
+            replacements,
+        )
+        assert py_create == cpp_create
+        assert snapshot_tree(py_root) == snapshot_tree(cpp_root)
+        assert run_cli_main(
+            _py_cli.main,
+            ["info", str(py_root)],
+            replacements,
+        ) == run_cli_main(
+            _cpp_cli.main,
+            ["info", str(cpp_root)],
+            replacements,
+        )
+    finally:
+        shutil.rmtree(py_root.parent, ignore_errors=True)
+        shutil.rmtree(cpp_root.parent, ignore_errors=True)
+
+
+def _bench_cli_create_info(module: object, case_name: str) -> float:
+    root = _fresh_runtime_dir("cli-create-info") / "cli-image.zarr"
+    replacements = {str(root): "<ROOT>"}
+    try:
+        random.seed(0)
+        create = run_cli_main(
+            module.main,
+            ["create", "--method=coins", str(root), "--format", "0.5"],
+            replacements,
+        )
+        _assert_outcome_ok(case_name, create)
+        info = run_cli_main(
+            module.main,
+            ["info", str(root)],
+            replacements,
+        )
+        _assert_outcome_ok(case_name, info)
+        return (
+            _touch_outcome(create) + _touch_outcome(info) + _touch(snapshot_tree(root))
+        )
+    finally:
+        shutil.rmtree(root.parent, ignore_errors=True)
+
+
 ALL_CASES = (
     _make_case(
         "micro",
@@ -996,6 +1452,136 @@ ALL_CASES = (
         _verify_astronaut,
         lambda: _bench_astronaut(_py_data),
         lambda: _bench_astronaut(_cpp_data),
+    ),
+    _make_case(
+        "runtime",
+        "io.parse_url_v2_image",
+        (
+            "Local-store parse_url and ZarrLocation state extraction for a "
+            "minimal v2 image."
+        ),
+        _verify_parse_url_v2,
+        lambda: _bench_parse_url(
+            _py_io, _runtime_v2_source(), "runtime.io.parse_url_v2_image"
+        ),
+        lambda: _bench_parse_url(
+            _cpp_io, _runtime_v2_source(), "runtime.io.parse_url_v2_image"
+        ),
+    ),
+    _make_case(
+        "runtime",
+        "io.parse_url_v3_image",
+        (
+            "Local-store parse_url and ZarrLocation state extraction for a "
+            "minimal v3 image."
+        ),
+        _verify_parse_url_v3,
+        lambda: _bench_parse_url(
+            _py_io, _runtime_v3_source(), "runtime.io.parse_url_v3_image"
+        ),
+        lambda: _bench_parse_url(
+            _cpp_io, _runtime_v3_source(), "runtime.io.parse_url_v3_image"
+        ),
+    ),
+    _make_case(
+        "runtime",
+        "utils.info_v2_image",
+        "Recursive info traversal for a minimal v2 OME-Zarr image.",
+        _verify_info_v2,
+        lambda: _bench_info(
+            _py_utils,
+            _runtime_v2_source(),
+            stats=False,
+            case_name="runtime.utils.info_v2_image",
+        ),
+        lambda: _bench_info(
+            _cpp_utils,
+            _runtime_v2_source(),
+            stats=False,
+            case_name="runtime.utils.info_v2_image",
+        ),
+    ),
+    _make_case(
+        "runtime",
+        "utils.info_v3_image_with_stats",
+        "Recursive info traversal plus stats for a minimal v3 OME-Zarr image.",
+        _verify_info_v3_with_stats,
+        lambda: _bench_info(
+            _py_utils,
+            _runtime_v3_source(),
+            stats=True,
+            case_name="runtime.utils.info_v3_image_with_stats",
+        ),
+        lambda: _bench_info(
+            _cpp_utils,
+            _runtime_v3_source(),
+            stats=True,
+            case_name="runtime.utils.info_v3_image_with_stats",
+        ),
+    ),
+    _make_case(
+        "runtime",
+        "cli.download_v05",
+        "CLI download roundtrip for a format 0.5 source created on the same stack.",
+        _verify_cli_download_v05,
+        lambda: _bench_cli_download(_py_cli, "runtime.cli.download_v05"),
+        lambda: _bench_cli_download(_cpp_cli, "runtime.cli.download_v05"),
+    ),
+    _make_case(
+        "runtime",
+        "writer.write_image_v05_numpy",
+        "Filesystem-backed write_image for a NumPy RGB-like image in format 0.5.",
+        _verify_write_image_numpy_v05,
+        lambda: _bench_write_image_numpy(
+            _py_writer, "runtime.writer.write_image_v05_numpy"
+        ),
+        lambda: _bench_write_image_numpy(
+            _cpp_writer, "runtime.writer.write_image_v05_numpy"
+        ),
+    ),
+    _make_case(
+        "runtime",
+        "writer.write_image_v05_delayed",
+        "Filesystem-backed write_image for a delayed Dask image in format 0.5.",
+        _verify_write_image_delayed_v05,
+        lambda: _bench_write_image_delayed(
+            _py_writer, "runtime.writer.write_image_v05_delayed"
+        ),
+        lambda: _bench_write_image_delayed(
+            _cpp_writer, "runtime.writer.write_image_v05_delayed"
+        ),
+    ),
+    _make_case(
+        "runtime",
+        "data.create_zarr_coins_v05",
+        "End-to-end create_zarr on the synthetic coins dataset in format 0.5.",
+        _verify_create_zarr_coins_v05,
+        lambda: _bench_create_zarr_coins(
+            _py_data, "runtime.data.create_zarr_coins_v05"
+        ),
+        lambda: _bench_create_zarr_coins(
+            _cpp_data, "runtime.data.create_zarr_coins_v05"
+        ),
+    ),
+    _make_case(
+        "runtime",
+        "data.create_zarr_astronaut_v05",
+        "End-to-end create_zarr on the synthetic astronaut dataset in format 0.5.",
+        _verify_create_zarr_astronaut_v05,
+        lambda: _bench_create_zarr_astronaut(
+            _py_data, "runtime.data.create_zarr_astronaut_v05"
+        ),
+        lambda: _bench_create_zarr_astronaut(
+            _cpp_data, "runtime.data.create_zarr_astronaut_v05"
+        ),
+    ),
+    _make_case(
+        "runtime",
+        "cli.create_info_v05",
+        "CLI create plus info roundtrip for the synthetic coins dataset in format 0.5.",
+        _verify_cli_create_info_v05,
+        lambda: _bench_cli_create_info(_py_cli, "runtime.cli.create_info_v05"),
+        lambda: _bench_cli_create_info(_cpp_cli, "runtime.cli.create_info_v05"),
     ),
 )
 

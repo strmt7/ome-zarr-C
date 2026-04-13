@@ -36,6 +36,13 @@ def build_qualname_spans(source: str) -> dict[str, Span]:
     return spans
 
 
+def callable_line_numbers(spans: dict[str, Span]) -> set[int]:
+    line_numbers: set[int] = set()
+    for span in spans.values():
+        line_numbers.update(range(span.start, span.end + 1))
+    return line_numbers
+
+
 def upstream_total_lines(upstream_root: Path) -> int:
     return sum(
         len(path.read_text().splitlines())
@@ -76,6 +83,7 @@ def main() -> int:
     total_converted = 0
 
     for entry in entries:
+        entry_type = entry.get("entry_type", "qualname")
         upstream_file = upstream_root / entry["upstream_file"]
         if not upstream_file.exists():
             raise SystemExit(f"missing upstream file: {upstream_file}")
@@ -89,24 +97,36 @@ def main() -> int:
             entry["upstream_file"],
             build_qualname_spans(upstream_file.read_text()),
         )
-        qualname = entry["qualname"]
-        if qualname not in spans:
-            upstream_file_name = entry["upstream_file"]
-            raise SystemExit(
-                f"missing qualname {qualname!r} in upstream file {upstream_file_name}"
-            )
+        if entry_type == "qualname":
+            qualname = entry["qualname"]
+            if qualname not in spans:
+                upstream_file_name = entry["upstream_file"]
+                raise SystemExit(
+                    "missing qualname "
+                    f"{qualname!r} in upstream file {upstream_file_name}"
+                )
+            line_count = spans[qualname].line_count
+        elif entry_type == "non_callable_scaffold":
+            total_lines = len(upstream_file.read_text().splitlines())
+            line_count = total_lines - len(callable_line_numbers(spans))
+            if line_count < 0:
+                raise SystemExit(
+                    f"negative non-callable scaffold count for {entry['upstream_file']}"
+                )
+        else:
+            raise SystemExit(f"unsupported manifest entry type: {entry_type}")
 
-        line_count = spans[qualname].line_count
         total_converted += line_count
-        resolved_entries.append(
-            {
-                "upstream_file": entry["upstream_file"],
-                "qualname": qualname,
-                "line_count": line_count,
-                "boundary_files": entry.get("boundary_files", []),
-                "native_files": entry["native_files"],
-            }
-        )
+        resolved_entry = {
+            "entry_type": entry_type,
+            "upstream_file": entry["upstream_file"],
+            "line_count": line_count,
+            "boundary_files": entry.get("boundary_files", []),
+            "native_files": entry["native_files"],
+        }
+        if entry_type == "qualname":
+            resolved_entry["qualname"] = entry["qualname"]
+        resolved_entries.append(resolved_entry)
 
     total_upstream = upstream_total_lines(upstream_root)
     percentage = (total_converted / total_upstream) * 100 if total_upstream else 0.0

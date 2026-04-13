@@ -128,21 +128,28 @@ semantics already live in `cpp/native/`:
 This metric is intentionally stricter than `split-native` and should be used
 for claims about real native semantic ownership.
 
-## Runtime-Blocked Surfaces
+## Dependency-Sensitive Surfaces
 
-Some native-backed or partially ported paths are intentionally not counted in
-the verified set above because this runtime currently hangs on local and
-in-memory Zarr store operations. Until that blocker is resolved and the
-relevant differential lanes are green, these surfaces remain unverified:
+Most store-backed reader/writer/data/CLI paths are now covered by differential
+tests and runtime benchmarks on this stack. The main remaining paired-runtime
+gap is lower-level upstream `ome_zarr.utils.download()`, which still raises on
+this dependency stack because its direct `zarr` call path passes
+`zarr_array_kwargs` into a current `zarr` API that rejects it. The benchmark
+suite therefore measures the parity-proven CLI download surface instead of
+claiming a lower-level paired benchmark that is not actually runnable here.
 
-- `ome_zarr_c.csv.dict_to_zarr`
-- `ome_zarr_c.csv.csv_to_zarr`
-- `ome_zarr_c.utils.info`
-- `ome_zarr_c.data.create_zarr`
-- metadata-writing and path/store-writing functions in `ome_zarr_c.writer`
-- other reader/writer/io surfaces that require live Zarr store creation or open
+## Deployment
 
-## Local Development
+Host prerequisites:
+
+- Python `3.12`
+- a working C++17 toolchain for building the `pybind11` extension
+- Python headers for the selected interpreter
+
+Typical Linux package examples:
+
+- Debian or Ubuntu: `build-essential python3.12-dev`
+- Fedora: `gcc-c++ python3.12-devel`
 
 Create a local environment and install the editable package:
 
@@ -153,7 +160,7 @@ python3 -m venv .venv
 ```
 
 Install the benchmark dependency when you want to quantify upstream-vs-native
-performance on the verified in-memory slices:
+performance on the verified kernel and runtime slices:
 
 ```bash
 .venv/bin/python -m pip install -e .[benchmark] --no-build-isolation
@@ -214,9 +221,18 @@ Common benchmark commands:
 .venv/bin/python -m benchmarks.report /tmp/ome-zarr-c-bench.json
 ```
 
-The first suite intentionally excludes the runtime-blocked store-backed paths
-and focuses on parity-proven in-memory surfaces only. See
-`docs/reference/benchmark-suite.md` for the methodology and scope rules.
+The suite now covers both deterministic in-memory kernels and deterministic
+local-tempdir runtime flows such as `parse_url`, `info`, `write_image`,
+`create_zarr`, and CLI create/info/download. See
+`docs/reference/benchmark-suite.md` for the methodology, scope rules, and the
+remaining direct-download blocker on this dependency stack.
+
+Current committed benchmark snapshot:
+
+- full paired suite geometric mean: `0.977x` (`python / cpp`)
+- runtime-focused rerun geometric mean: `1.024x`
+- strongest current wins include conversion kernels, `dask_utils.resize_2d`,
+  and delayed `write_image`
 
 For read-only surfaces that print absolute paths, parity tests should run the
 upstream and converted implementations against the same fixture path so the
