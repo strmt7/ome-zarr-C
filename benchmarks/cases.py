@@ -11,7 +11,7 @@ import tempfile
 import time
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -184,12 +184,19 @@ def _canonicalize(value: Any) -> Any:
         if math.isinf(value):
             return ("float", "inf" if value > 0 else "-inf")
         return ("float", value)
+    if isinstance(value, type):
+        return ("type", value.__module__, value.__qualname__)
     if isinstance(value, (int, str, type(None))):
         return value
     if isinstance(value, dict):
         return {
             key: _canonicalize(value[key])
             for key in sorted(value, key=lambda item: repr(item))
+        }
+    if is_dataclass(value):
+        return {
+            field.name: _canonicalize(getattr(value, field.name))
+            for field in fields(value)
         }
     if isinstance(value, list):
         return [_canonicalize(item) for item in value]
@@ -237,10 +244,14 @@ def _touch(value: Any) -> float:
         return value
     if isinstance(value, str):
         return float(len(value))
+    if isinstance(value, type):
+        return float(len(value.__module__) + len(value.__qualname__))
     if isinstance(value, dict):
         return sum(
             _touch(value[key]) for key in sorted(value, key=lambda item: repr(item))
         )
+    if is_dataclass(value):
+        return sum(_touch(getattr(value, field.name)) for field in fields(value))
     if isinstance(value, (list, tuple)):
         return sum(_touch(item) for item in value)
     if hasattr(value, "version") and hasattr(value, "zarr_format"):

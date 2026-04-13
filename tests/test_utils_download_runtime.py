@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import io
+import json
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -91,6 +92,11 @@ def test_download_roundtrip_writes_minimal_v2_image(tmp_path) -> None:
         ]
     }
     assert copied["0"][:].tolist() == [[1, 2], [3, 4]]
+    assert (output / source.name / "0" / "0" / "0").is_file()
+    assert not (output / source.name / "0" / "0.0").exists()
+    copied_zarray = json.loads((output / source.name / "0" / ".zarray").read_text())
+    assert copied_zarray["dimension_separator"] == "/"
+    assert copied_zarray["compressor"]["id"] == "blosc"
     assert "downloading..." in stream.getvalue()
 
 

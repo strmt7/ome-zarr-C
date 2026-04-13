@@ -16,7 +16,7 @@ license = "BSD-2-Clause"
 dependencies = [
     "Deprecated",
     "aiohttp",
-    "dask>=2026.3.0",
+    "dask>=2025.12.0,<=2026.1.1",
     "fsspec[s3]>=0.8,!=2021.07.0,!=2023.9.0",
     "numpy>=2.4.4",
     "rangehttpserver>=1.4.0",

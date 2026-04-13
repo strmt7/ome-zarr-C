@@ -276,6 +276,8 @@ def run_cli_main(main_func, args: list[str], replacements: dict[str, str]):
     patched = (
         patch.object(_py_writer.da, "to_zarr", _compat_to_zarr)
         if main_func.__module__.startswith("ome_zarr.")
+        and args
+        and args[0] in {"create", "scale"}
         else nullcontext()
     )
     try:

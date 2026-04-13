@@ -128,15 +128,23 @@ semantics already live in `cpp/native/`:
 This metric is intentionally stricter than `split-native` and should be used
 for claims about real native semantic ownership.
 
+Current committed manifest:
+
+- `3856 / 4180 = 92.248804%` pure-native coverage
+
 ## Dependency-Sensitive Surfaces
 
-Most store-backed reader/writer/data/CLI paths are now covered by differential
-tests and runtime benchmarks on this stack. The main remaining paired-runtime
-gap is lower-level upstream `ome_zarr.utils.download()`, which still raises on
-this dependency stack because its direct `zarr` call path passes
-`zarr_array_kwargs` into a current `zarr` API that rejects it. The benchmark
-suite therefore measures the parity-proven CLI download surface instead of
-claiming a lower-level paired benchmark that is not actually runnable here.
+Store-backed reader, writer, data, CLI, and `utils.download()` paths are now
+covered by differential tests and benchmark lanes on the currently qualified
+dependency window shipped in `pyproject.toml`.
+
+The verified parity and benchmark stack for this repository currently depends
+on the project-managed `dask` window:
+
+- `dask>=2025.12.0,<=2026.1.1`
+
+Changing that window is possible, but it requires rerunning parity and
+benchmark qualification before making any performance or compatibility claim.
 
 ## Deployment
 
@@ -156,14 +164,14 @@ Create a local environment and install the editable package:
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e .[dev]
+.venv/bin/python -m pip install -e '.[dev]' --no-build-isolation
 ```
 
 Install the benchmark dependency when you want to quantify upstream-vs-native
 performance on the verified kernel and runtime slices:
 
 ```bash
-.venv/bin/python -m pip install -e .[benchmark] --no-build-isolation
+.venv/bin/python -m pip install -e '.[dev,benchmark]' --no-build-isolation
 ```
 
 Run the current proven-safe local verification lane:
@@ -211,28 +219,38 @@ Common benchmark commands:
 
 ```bash
 .venv/bin/python -m benchmarks.run --list
-.venv/bin/python -m benchmarks.run --verify-only
-.venv/bin/python -m benchmarks.run \
-  --processes 6 \
-  --values 10 \
-  --warmups 1 \
-  --min-time 0.02 \
-  --output /tmp/ome-zarr-c-bench.json
-.venv/bin/python -m benchmarks.report /tmp/ome-zarr-c-bench.json
+.venv/bin/python -m benchmarks.run --suite core --verify-only
+.venv/bin/python -m benchmarks.run --suite public-api --verify-only
+.venv/bin/python -m benchmarks.run --suite realdata --verify-only
+.venv/bin/python scripts/check_public_api_benchmark_coverage.py
 ```
 
-The suite now covers both deterministic in-memory kernels and deterministic
-local-tempdir runtime flows such as `parse_url`, `info`, `write_image`,
-`create_zarr`, and CLI create/info/download. See
-`docs/reference/benchmark-suite.md` for the methodology, scope rules, and the
-remaining direct-download blocker on this dependency stack.
+The suite now has three layers:
 
-Current committed benchmark snapshot:
+- `core`: converted kernels plus deterministic runtime flows
+- `public-api`: coverage-checked timings for the documented upstream public API
+- `realdata`: paired `parse_url`/`info`/reader timings on public OME-Zarr data
 
-- full paired suite geometric mean: `0.977x` (`python / cpp`)
-- runtime-focused rerun geometric mean: `1.024x`
-- strongest current wins include conversion kernels, `dask_utils.resize_2d`,
-  and delayed `write_image`
+The real-data suite downloads public benchmark fixtures into
+`.benchmarks-fixtures/` by default, or into `OME_ZARR_BENCH_FIXTURE_ROOT` when
+that environment variable is set. An additional `455.3 MiB` BIA fixture is
+available only when `OME_ZARR_BENCH_INCLUDE_LARGE=1`.
+
+See `docs/reference/benchmark-suite.md` for the methodology and
+`docs/reference/public-benchmark-fixtures.md` for fixture provenance.
+
+Latest local benchmark snapshot on `2026-04-13`:
+
+- `core`: `29` cases, geometric mean `0.982x` (`python / cpp`)
+- `public-api`: `38` cases, geometric mean `0.993x`
+- `realdata`: `3` default public fixtures, geometric mean `0.995x`
+- public API coverage checker: `89` documented callables, `8` abstract
+  exclusions, `0` uncovered callables
+- strongest current wins include:
+  - `conversions.rgba_to_int_batch`: `2.142x`
+  - `conversions.int_to_rgba_batch`: `1.816x`
+  - `scale.scaler_methods`: `4.591x`
+  - `dask_utils.resize_2d`: `1.307x`
 
 For read-only surfaces that print absolute paths, parity tests should run the
 upstream and converted implementations against the same fixture path so the
