@@ -8,15 +8,18 @@ work on parity-proven native-backed surfaces.
 - The official `pyperf` documentation describes a benchmark architecture with
   calibration, warmups, multiple worker processes, and structured result files.
 - The `pyperf` benchmarking guide also recommends tuning the system, analyzing
-  stability, and adjusting runs/values/loops rather than trusting a single wall
-  clock reading.
+  stability, and adjusting runs, values, and loops rather than trusting a
+  single wall clock reading.
 - The `pyperf` system guide documents CPU affinity and other system-noise
   controls that can improve repeatability on Linux.
+- The `pyperf` analysis guide documents result comparison and post-run
+  inspection instead of relying on raw means or a single fastest sample.
 
 References:
 
 - <https://pyperf.readthedocs.io/en/latest/run_benchmark.html>
 - <https://pyperf.readthedocs.io/en/latest/system.html>
+- <https://pyperf.readthedocs.io/en/latest/analyze.html>
 
 ## Why Not `asv` First
 
@@ -38,26 +41,33 @@ The benchmark suite intentionally measures only surfaces that satisfy all of the
 following:
 
 - parity is already proven against the frozen `v0.15.0` upstream snapshot
-- the benchmark input is in-memory and reproducible
-- the workload does not depend on the currently blocked store-backed Zarr paths
+- the benchmark input is reproducible, either fully in-memory or on a
+  deterministic local tempdir fixture
+- the workload does not depend on network access or remote object stores
 - the workload does not depend on network access, browser launching, or live
   filesystem traversal noise
 
-Excluded from the first suite:
+Included in the current suite:
 
-- `ome_zarr_c.csv.dict_to_zarr`
-- `ome_zarr_c.csv.csv_to_zarr`
-- `ome_zarr_c.utils.info`
-- `ome_zarr_c.data.create_zarr`
-- writer metadata/path/store-writing functions
-- reader/io/store-backed paths
-- side-effect-heavy stdout-oriented flows such as `Scaler.zoom`
+- in-memory helper kernels such as conversions, Dask resizing, and pyramid
+  construction
+- deterministic local-store runtime flows such as `parse_url`, `info`,
+  `write_image`, `create_zarr`, and CLI create/info/download
+
+Excluded from the paired suite on this dependency stack:
+
+- direct upstream `ome_zarr.utils.download()` because it still raises here when
+  its lower-level `zarr` call path passes `zarr_array_kwargs` into the current
+  `zarr` API
+- network-backed stores, browser launches, and other non-deterministic flows
 
 ## Benchmark Layout
 
 - `benchmarks/run.py`: executes paired upstream-vs-native `pyperf` timings
 - `benchmarks/cases.py`: benchmark registry, parity guards, and deterministic
   benchmark inputs
+- `benchmarks/runtime_support.py`: deterministic tempdir fixtures and shared
+  runtime parity helpers reused by the benchmark registry
 - `benchmarks/report.py`: turns a `pyperf` JSON file into a markdown summary
 
 Each paired case benchmarks the Python upstream function and the converted
@@ -113,6 +123,18 @@ Run only the kernel tier with tighter sampling:
   --output /tmp/ome-zarr-c-bench-meso.json
 ```
 
+Run only the deterministic runtime tier:
+
+```bash
+.venv/bin/python -m benchmarks.run \
+  --group runtime \
+  --processes 6 \
+  --values 10 \
+  --warmups 1 \
+  --min-time 0.03 \
+  --output /tmp/ome-zarr-c-bench-runtime.json
+```
+
 Render the paired summary:
 
 ```bash
@@ -121,6 +143,38 @@ Render the paired summary:
   --markdown-out /tmp/ome-zarr-c-bench.md
 ```
 
+## Current Snapshot
+
+Committed benchmark snapshot on `2026-04-13`:
+
+- Full paired suite: `29` cases, geometric-mean speedup `0.977x`
+  (`python / cpp`)
+- Group geometric means:
+  - `micro`: `0.912x`
+  - `meso`: `1.090x`
+  - `macro`: `0.981x`
+  - `runtime`: `0.985x`
+- Runtime-focused rerun: `10` cases, geometric-mean speedup `1.024x`
+
+High-signal cases from the same snapshot:
+
+- `conversions.rgba_to_int_batch`: `2.171x` faster in C++
+- `conversions.int_to_rgba_batch`: `1.809x` faster in C++
+- `dask_utils.resize_2d`: `1.303x` faster in C++
+- `writer.write_image_v05_delayed` runtime rerun: `1.278x` faster in C++
+- `data.create_zarr_astronaut_v05` runtime rerun: `1.074x` faster in C++
+- `utils.info_v3_image_with_stats` runtime rerun: `0.889x`, currently slower
+
+Interpretation:
+
+- The strongest gains are in converted compute kernels and some delayed write
+  paths.
+- The full-suite geometric mean is still slightly below break-even because
+  several boundary-heavy micro cases remain slower.
+- Filesystem-heavy runtime paths are noisier than in-memory kernels, so the
+  committed summaries use `pyperf` medians and geometric means instead of raw
+  means.
+
 ## Benchmark Hygiene
 
 - Keep BLAS/OpenMP thread counts pinned to `1` unless there is an explicit
@@ -128,5 +182,6 @@ Render the paired summary:
 - Prefer the single-threaded Dask scheduler for reproducibility.
 - Treat the first numbers as a baseline, not a marketing claim.
 - Re-run unstable cases with more `--processes`, `--values`, or `--min-time`.
-- If `pyperf` reports instability, do not ignore it; adjust the run and inspect
-  the results again.
+- If `pyperf` reports instability, do not ignore it; adjust the run, inspect
+  the results again, and prefer medians or geometric means over a single raw
+  sample.

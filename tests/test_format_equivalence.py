@@ -174,6 +174,51 @@ def test_validate_well_dict_matches_upstream() -> None:
         )
 
 
+def test_format_v01_init_store_matches_upstream_local_and_remote(
+    tmp_path, monkeypatch
+) -> None:
+    py_fmt = _py_format.FormatV01()
+    cpp_fmt = _cpp_format.FormatV01()
+
+    py_local = py_fmt.init_store(str(tmp_path / "py-local.zarr"), mode="w")
+    cpp_local = cpp_fmt.init_store(str(tmp_path / "cpp-local.zarr"), mode="w")
+    assert type(py_local) is type(cpp_local)
+    assert not py_local.read_only
+    assert not cpp_local.read_only
+
+    calls: list[tuple[str, bool]] = []
+
+    class _SentinelStore:
+        def __init__(self, path: str, read_only: bool) -> None:
+            self.path = path
+            self.read_only = read_only
+
+    def fake_from_url(path: str, storage_options=None, read_only=False):
+        assert storage_options is None
+        calls.append((path, read_only))
+        return _SentinelStore(path, read_only)
+
+    monkeypatch.setattr(
+        _py_format.FsspecStore,
+        "from_url",
+        staticmethod(fake_from_url),
+    )
+    monkeypatch.setattr(
+        _cpp_format.FsspecStore,
+        "from_url",
+        staticmethod(fake_from_url),
+    )
+
+    py_remote = py_fmt.init_store("https://example.invalid/image.zarr", mode="r")
+    cpp_remote = cpp_fmt.init_store("https://example.invalid/image.zarr", mode="r")
+    assert isinstance(py_remote, _SentinelStore)
+    assert isinstance(cpp_remote, _SentinelStore)
+    assert calls == [
+        ("https://example.invalid/image.zarr", True),
+        ("https://example.invalid/image.zarr", True),
+    ]
+
+
 def test_generate_coordinate_transformations_match_upstream() -> None:
     py_fmt = _py_format.FormatV04()
     cpp_fmt = _cpp_format.FormatV04()
