@@ -249,6 +249,19 @@ WriterPyramidPlan writer_pyramid_plan(
     return plan;
 }
 
+WriterStorageOptionsPlan writer_storage_options_plan(
+    bool has_storage_options,
+    bool is_list) {
+    WriterStorageOptionsPlan plan{};
+    plan.return_copy = has_storage_options && !is_list;
+    plan.return_item = has_storage_options && is_list;
+    return plan;
+}
+
+WriterBloscPlan writer_blosc_plan() {
+    return {"zstd", 5, "SHUFFLE"};
+}
+
 WriterLabelsPlan writer_labels_plan(
     const std::vector<std::string>& dims,
     bool use_default_scaler,
@@ -269,6 +282,47 @@ WriterLabelsPlan writer_labels_plan(
             plan.scale_factors.push_back(std::move(level_plan));
         }
     }
+    return plan;
+}
+
+WriterImagePlan writer_image_plan(
+    const std::vector<std::string>& dims,
+    bool scaler_present,
+    std::int64_t scaler_max_layer,
+    const std::string& scaler_method,
+    const std::optional<std::string>& requested_method) {
+    WriterImagePlan plan{};
+    plan.resolved_method = requested_method.value_or("resize");
+
+    if (!scaler_present) {
+        return plan;
+    }
+
+    plan.warn_scaler_deprecated = true;
+    for (std::int64_t level = 1; level <= scaler_max_layer; ++level) {
+        std::map<std::string, std::int64_t> level_plan;
+        for (const auto& dim : dims) {
+            const bool spatial = dim == "x" || dim == "y" || dim == "z";
+            level_plan[dim] = spatial ? (std::int64_t{1} << level) : 1;
+        }
+        plan.scale_factors.push_back(std::move(level_plan));
+    }
+
+    if (scaler_method == "local_mean") {
+        plan.resolved_method = "local_mean";
+    } else if (scaler_method == "nearest") {
+        plan.resolved_method = "nearest";
+    } else if (scaler_method == "resize_image") {
+        plan.resolved_method = "resize";
+    } else if (scaler_method == "laplacian") {
+        plan.resolved_method = "resize";
+        plan.warn_laplacian_fallback = true;
+    } else if (scaler_method == "zoom") {
+        plan.resolved_method = "zoom";
+    } else {
+        plan.resolved_method = "resize";
+    }
+
     return plan;
 }
 

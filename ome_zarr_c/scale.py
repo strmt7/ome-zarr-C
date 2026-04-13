@@ -98,9 +98,9 @@ class Scaler:
         pyramid = func(base)
 
         if self.labeled:
-            self.__assert_values(pyramid)
+            _core.scaler_assert_values(pyramid)
 
-        grp = self.__create_group(output_directory, base, pyramid)
+        grp = _core.scaler_create_group(output_directory, base, pyramid)
 
         if self.copy_metadata:
             print(f"copying attribute keys: {list(base.attrs.keys())}")
@@ -113,32 +113,12 @@ class Scaler:
         return getattr(self, self.method)
 
     def __assert_values(self, pyramid: list[np.ndarray]) -> None:
-        expected = set(np.unique(pyramid[0]))
-        print(f"level 0 {pyramid[0].shape} = {len(expected)} labels")
-        for i in range(1, len(pyramid)):
-            level = pyramid[i]
-            print(f"level {i}", pyramid[i].shape, len(expected))
-            found = set(np.unique(level))
-            if not expected.issuperset(found):
-                raise Exception(
-                    f"{len(found)} found values are not "
-                    "a subset of {len(expected)} values"
-                )
+        _core.scaler_assert_values(pyramid)
 
     def __create_group(
         self, dir_path: str, base: np.ndarray, pyramid: list[np.ndarray]
     ) -> zarr.Group:
-        grp = zarr.open_group(dir_path, mode="w")
-        grp.create_dataset("base", data=base)
-        series = []
-        for i in range(len(pyramid)):
-            if i == 0:
-                path = "base"
-            else:
-                path = str(i)
-                grp.create_dataset(path, data=pyramid[i])
-            series.append({"path": path})
-        return grp
+        return _core.scaler_create_group(dir_path, base, pyramid)
 
     def resize_image(self, image: ArrayLike) -> ArrayLike:
         return _core.scaler_resize_image(image, self.downscale, self.order)

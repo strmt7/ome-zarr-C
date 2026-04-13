@@ -128,6 +128,90 @@ def check_format(
     )
 
 
+def write_image(
+    image: ArrayLike,
+    group: zarr.Group | str,
+    scale_factors: list[int] | tuple[int, ...] | list[dict[str, int]] = (2, 4, 8, 16),
+    method: Methods | str | None = Methods.RESIZE,
+    scaler: Scaler | None = None,
+    fmt: Format | None = None,
+    axes: AxesType = None,
+    coordinate_transformations: list[list[dict[str, Any]]] | None = None,
+    storage_options: dict[str, Any] | list[dict[str, Any]] | None = None,
+    compute: bool | None = True,
+    **metadata: str | dict[str, Any] | list[dict[str, Any]],
+) -> list:
+    from .scale import _build_pyramid
+
+    if method is None:
+        method = Methods.RESIZE
+
+    group, fmt = check_group_fmt(group, fmt)
+
+    if not isinstance(image, da.Array):
+        image = da.from_array(image)
+
+    if type(fmt) in (FormatV01, FormatV02, FormatV03):
+        raise DeprecationWarning(
+            "Writing ome-zarr "
+            f"v{fmt.version} is deprecated and has been removed in version 0.15.0."
+        )
+
+    axes = _get_valid_axes(len(image.shape), axes, fmt)
+    dims = _extract_dims_from_axes(axes)
+
+    runtime_plan = dict(
+        _core.writer_image_plan(
+            dims,
+            scaler is not None,
+            0 if scaler is None else int(scaler.max_layer),
+            "" if scaler is None else str(scaler.method),
+            method,
+        )
+    )
+
+    if bool(runtime_plan["warn_scaler_deprecated"]):
+        msg = """
+            The 'scaler' argument is deprecated and will be removed in a future version.
+            Please use the 'scale_factors' argument instead.
+            """
+        warnings.warn(msg, DeprecationWarning, stacklevel=2)
+        scale_factors = list(runtime_plan["scale_factors"])
+        method = str(runtime_plan["resolved_method"])
+
+    if bool(runtime_plan["warn_laplacian_fallback"]):
+        warnings.warn(
+            "Laplacian downsampling is not supported anymore.Falling back to `resize`",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    if method is None:
+        method = Methods.RESIZE
+
+    pyramid = _build_pyramid(
+        image,
+        scale_factors,
+        dims=dims,
+        method=method,
+    )
+
+    name = metadata.pop("name", None)
+    name = str(name) if name is not None else None
+
+    return _write_pyramid_to_zarr(
+        pyramid,
+        group,
+        fmt=fmt,
+        axes=axes,
+        coordinate_transformations=coordinate_transformations,
+        storage_options=storage_options,
+        name=name,
+        compute=compute,
+        **metadata,
+    )
+
+
 def write_multiscale(
     pyramid: ListOfArrayLike,
     group: zarr.Group | str,
@@ -254,11 +338,12 @@ def _write_pyramid_to_zarr(
 
     if bool(runtime_plan["use_v2_chunk_key_encoding"]):
         zarr_array_kwargs["chunk_key_encoding"] = {"name": "v2", "separator": "/"}
+        zarr_array_kwargs["compressor"] = options.pop("compressor", _blosc_compressor())
     else:
         dimension_names = list(runtime_plan["dimension_names"])
         if len(dimension_names) > 0:
             zarr_array_kwargs["dimension_names"] = dimension_names
-    if "compressor" in options:
+    if not bool(runtime_plan["use_v2_chunk_key_encoding"]) and "compressor" in options:
         zarr_array_kwargs["compressors"] = [options.pop("compressor")]
 
     shapes = []
@@ -288,16 +373,39 @@ def _write_pyramid_to_zarr(
             level_image.shape,
             level_image.dtype,
         )
-
-        delayed.append(
-            da.to_zarr(
-                arr=level_image,
-                url=group.store,
-                component=str(Path(group.path, str(level_plan["component"]))),
-                compute=False,
-                **zarr_array_kwargs,
+        component = str(Path(group.path, str(level_plan["component"])))
+        if bool(runtime_plan["use_v2_chunk_key_encoding"]):
+            compressor = zarr_array_kwargs["compressor"]
+            chunk_key_encoding = dict(zarr_array_kwargs["chunk_key_encoding"])
+            chunks = zarr_array_kwargs.get("chunks", level_image.chunksize)
+            target = zarr.open_array(
+                store=group.store,
+                path=component,
+                mode="w",
+                shape=level_image.shape,
+                chunks=chunks,
+                dtype=level_image.dtype,
+                zarr_format=2,
+                dimension_separator=str(chunk_key_encoding["separator"]),
+                compressor=compressor,
             )
-        )
+            delayed.append(
+                da.to_zarr(
+                    arr=level_image,
+                    url=target,
+                    compute=False,
+                )
+            )
+        else:
+            delayed.append(
+                da.to_zarr(
+                    arr=level_image,
+                    url=group.store,
+                    component=component,
+                    compute=False,
+                    **zarr_array_kwargs,
+                )
+            )
         datasets.append({"path": str(level_plan["component"])})
 
     if compute:
@@ -503,6 +611,7 @@ __all__ = [
     "check_group_fmt",
     "get_metadata",
     "write_label_metadata",
+    "write_image",
     "write_labels",
     "write_multiscale",
     "write_multiscale_labels",

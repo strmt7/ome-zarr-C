@@ -72,4 +72,60 @@ AstronautPlan astronaut_plan() {
     return plan;
 }
 
+CreateZarrPlan create_zarr_plan(
+    const std::string& version,
+    const std::vector<std::size_t>& base_shape,
+    const std::vector<std::size_t>& smallest_shape,
+    const std::vector<std::size_t>& chunks) {
+    CreateZarrPlan plan{};
+    plan.legacy_five_d = version == "0.1" || version == "0.2";
+    plan.axes_is_none = plan.legacy_five_d;
+
+    if (plan.legacy_five_d) {
+        plan.size_c = base_shape.size() > 1 ? base_shape[1] : 1;
+        plan.labels_axes_is_none = true;
+    } else {
+        if (base_shape.size() == 3) {
+            plan.axes = "cyx";
+            plan.size_c = 3;
+        } else {
+            const std::string tczyx = "tczyx";
+            plan.axes = tczyx.substr(tczyx.size() - base_shape.size());
+            plan.size_c = 1;
+        }
+        plan.labels_axes = plan.axes;
+        plan.labels_axes.erase(
+            std::remove(plan.labels_axes.begin(), plan.labels_axes.end(), 'c'),
+            plan.labels_axes.end());
+        plan.labels_axes_is_none = plan.labels_axes.empty();
+    }
+
+    if (chunks.empty()) {
+        plan.chunks = smallest_shape;
+        for (std::size_t zct = 0; zct < 3; ++zct) {
+            if (zct + 2 < plan.chunks.size()) {
+                plan.chunks[zct] = 1;
+            }
+        }
+    } else {
+        plan.chunks = chunks;
+    }
+
+    plan.color_image = plan.size_c != 1;
+    if (!plan.color_image) {
+        plan.channel_model = "greyscale";
+        plan.channels = {CreateZarrChannelPlan{"FF0000", "", false}};
+    } else {
+        plan.channel_model = "color";
+        plan.channels = {
+            CreateZarrChannelPlan{"FF0000", "Red", true},
+            CreateZarrChannelPlan{"00FF00", "Green", true},
+            CreateZarrChannelPlan{"0000FF", "Blue", true},
+        };
+    }
+    plan.random_label_count = 8;
+    plan.source_image = "../../";
+    return plan;
+}
+
 }  // namespace ome_zarr_c::native_code

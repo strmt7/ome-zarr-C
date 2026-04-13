@@ -154,6 +154,15 @@ ChunkKeyEncoding format_chunk_key_encoding(const std::string& version) {
     return {"v2", "/"};
 }
 
+FormatInitStorePlan format_init_store_plan(
+    const std::string& path,
+    const std::string& mode) {
+    const bool read_only = mode == "r";
+    const bool use_fsspec =
+        path.rfind("http", 0) == 0 || path.rfind("s3", 0) == 0;
+    return {use_fsspec, read_only};
+}
+
 std::vector<CoordinateTransformations> generate_coordinate_transformations(
     const std::vector<std::vector<double>>& shapes) {
     if (shapes.empty()) {

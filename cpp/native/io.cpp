@@ -70,7 +70,12 @@ std::string io_subpath(
         const auto target = subpath.empty()
             ? std::filesystem::path(path)
             : std::filesystem::path(path) / subpath;
-        return std::filesystem::absolute(target).lexically_normal().string();
+        std::string normalized =
+            std::filesystem::absolute(target).lexically_normal().string();
+        while (normalized.size() > 1 && normalized.back() == '/') {
+            normalized.pop_back();
+        }
+        return normalized;
     }
     if (is_http) {
         std::string base = path;

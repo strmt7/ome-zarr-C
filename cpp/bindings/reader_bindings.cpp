@@ -178,7 +178,8 @@ py::dict reader_label_payload(
             if (!plan.keep) {
                 continue;
             }
-            py::dict props_copy = py::dict(props);
+            py::dict props_copy =
+                py::cast<py::dict>(props.attr("copy")());
             props_copy.attr("pop")(py::str("label-value"));
             py::object key;
             if (plan.label_is_bool) {

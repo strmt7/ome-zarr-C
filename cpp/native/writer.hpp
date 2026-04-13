@@ -140,6 +140,23 @@ WriterPyramidPlan writer_pyramid_plan(
     const std::vector<std::string>& axis_names,
     const std::vector<std::vector<std::size_t>>& explicit_chunks);
 
+struct WriterStorageOptionsPlan {
+    bool return_copy;
+    bool return_item;
+};
+
+WriterStorageOptionsPlan writer_storage_options_plan(
+    bool has_storage_options,
+    bool is_list);
+
+struct WriterBloscPlan {
+    std::string cname;
+    int clevel;
+    std::string shuffle_attr;
+};
+
+WriterBloscPlan writer_blosc_plan();
+
 struct WriterLabelsPlan {
     std::string resolved_method;
     bool warn_scaler_deprecated;
@@ -151,6 +168,20 @@ WriterLabelsPlan writer_labels_plan(
     bool use_default_scaler,
     bool scaler_is_none,
     std::int64_t scaler_max_layer,
+    const std::optional<std::string>& requested_method);
+
+struct WriterImagePlan {
+    std::string resolved_method;
+    bool warn_scaler_deprecated;
+    bool warn_laplacian_fallback;
+    std::vector<std::map<std::string, std::int64_t>> scale_factors;
+};
+
+WriterImagePlan writer_image_plan(
+    const std::vector<std::string>& dims,
+    bool scaler_present,
+    std::int64_t scaler_max_layer,
+    const std::string& scaler_method,
     const std::optional<std::string>& requested_method);
 
 }  // namespace ome_zarr_c::native_code

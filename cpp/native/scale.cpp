@@ -99,6 +99,19 @@ std::vector<long> scaler_zoom_factors(long downscale, long max_layer) {
     return factors;
 }
 
+std::vector<std::string> scaler_group_dataset_paths(std::size_t pyramid_size) {
+    std::vector<std::string> paths;
+    paths.reserve(pyramid_size);
+    for (std::size_t index = 0; index < pyramid_size; ++index) {
+        if (index == 0) {
+            paths.push_back("base");
+        } else {
+            paths.push_back(std::to_string(index));
+        }
+    }
+    return paths;
+}
+
 std::vector<ScaleLevel> scale_levels_from_ints(
     const std::vector<std::string>& dims,
     std::size_t level_count) {

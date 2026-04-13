@@ -120,14 +120,7 @@ class FormatV01(_VersionedFormat):
     _VERSION = "0.1"
 
     def init_store(self, path: str, mode: str = "r") -> FsspecStore | LocalStore:
-        read_only = mode == "r"
-        if path.startswith(("http", "s3")):
-            return FsspecStore.from_url(
-                path,
-                storage_options=None,
-                read_only=read_only,
-            )
-        return LocalStore(path, read_only=read_only)
+        return _core.format_init_store(path, mode)
 
     def generate_well_dict(
         self, well: str, rows: list[str], columns: list[str]

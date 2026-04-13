@@ -35,7 +35,7 @@ def info(path: str, stats: bool = False):
     reader = _reader.Reader(zarr)
     for node in reader():
         if not node.specs:
-            print(f"not an ome-zarr node: {node}")
+            print(str(_core.utils_info_not_ome_zarr_line(node)))
             continue
 
         for line in _core.info_lines(node, stats):
@@ -120,7 +120,12 @@ def download(input_path: str, output_dir: str = ".") -> None:
         nodes.append(node)
         paths.append(node.zarr.parts())
 
-    common = strip_common_prefix(paths)
+    download_plan = dict(_core.utils_download_plan(paths))
+    common = str(download_plan["common"])
+    paths = [
+        [str(part) for part in path_parts]
+        for path_parts in download_plan["stripped_parts"]
+    ]
     output_path = Path(output_dir)
     root_path = output_path / common
 
@@ -136,10 +141,15 @@ def download(input_path: str, output_dir: str = ".") -> None:
 
         version = node.zarr.version
         fmt = format_from_version(version)
+        node_plan = dict(
+            _core.utils_download_node_plan(
+                int(fmt.zarr_format), "axes" in node.metadata
+            )
+        )
 
         metadata = {}
         node.write_metadata(metadata)
-        if fmt.zarr_format == 3:
+        if bool(node_plan["wrap_ome_metadata"]):
             metadata = {"ome": metadata}
 
         root = zarr.open_group(
@@ -154,7 +164,7 @@ def download(input_path: str, output_dir: str = ".") -> None:
                 datasets = spec.datasets
                 resolutions = node.data
                 zarr_array_kwargs = {"zarr_format": fmt.zarr_format}
-                if fmt.zarr_format == 2:
+                if bool(node_plan["use_v2_chunk_key_encoding"]):
                     zarr_array_kwargs["chunk_key_encoding"] = {
                         "name": "v2",
                         "separator": "/",

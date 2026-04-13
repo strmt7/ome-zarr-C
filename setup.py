@@ -12,6 +12,7 @@ ext_modules = [
         "ome_zarr_c._core",
         [
             "cpp/bindings/basic_bindings.cpp",
+            "cpp/bindings/cli_bindings.cpp",
             "cpp/bindings/csv_bindings.cpp",
             "cpp/bindings/data_bindings.cpp",
             "cpp/bindings/dask_utils_bindings.cpp",
@@ -23,6 +24,7 @@ ext_modules = [
             "cpp/bindings/writer_bindings.cpp",
             "cpp/core.cpp",
             "cpp/native/axes.cpp",
+            "cpp/native/cli.cpp",
             "cpp/native/conversions.cpp",
             "cpp/native/csv.cpp",
             "cpp/native/data.cpp",
