@@ -158,6 +158,17 @@ struct ReaderWellPlan {
 
 ReaderWellPlan reader_well_plan(const std::vector<std::string>& image_paths);
 
+struct ReaderWellLevelPlan {
+    std::vector<std::string> tile_paths;
+    std::vector<bool> has_tile;
+};
+
+std::vector<ReaderWellLevelPlan> reader_well_level_plans(
+    const std::vector<std::string>& image_paths,
+    const std::vector<std::string>& dataset_paths,
+    std::size_t row_count,
+    std::size_t column_count);
+
 struct ReaderPlatePlan {
     std::vector<std::string> row_names;
     std::vector<std::string> col_names;
@@ -170,6 +181,18 @@ ReaderPlatePlan reader_plate_plan(
     const std::vector<std::string>& row_names,
     const std::vector<std::string>& col_names,
     const std::vector<std::string>& well_paths);
+
+struct ReaderPlateLevelPlan {
+    std::vector<std::string> tile_paths;
+    std::vector<bool> has_tile;
+};
+
+std::vector<ReaderPlateLevelPlan> reader_plate_level_plans(
+    const std::vector<std::string>& row_names,
+    const std::vector<std::string>& col_names,
+    const std::vector<std::string>& well_paths,
+    const std::string& first_field_path,
+    const std::vector<std::string>& dataset_paths);
 
 std::string reader_plate_tile_path(
     const std::string& row_name,

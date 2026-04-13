@@ -272,19 +272,24 @@ class Well(Spec):
 
     def __init__(self, node: Node) -> None:
         super().__init__(node)
-        payload = dict(_core.reader_well_payload(self.zarr.root_attrs))
-        self.well_data = payload["well_data"]
+        base_payload = dict(_core.reader_well_payload(self.zarr.root_attrs))
+        self.well_data = base_payload["well_data"]
         LOGGER.info("well_data: %s", self.well_data)
 
-        image_paths = list(payload["image_paths"])
-        column_count = int(payload["column_count"])
-        row_count = int(payload["row_count"])
+        image_paths = list(base_payload["image_paths"])
+        column_count = int(base_payload["column_count"])
+        row_count = int(base_payload["row_count"])
 
         image_zarr = self.zarr.create(image_paths[0])
         image_node = Node(image_zarr, node)
-        self.ds_paths = [
-            d["path"] for d in image_zarr.root_attrs["multiscales"][0]["datasets"]
-        ]
+        payload = dict(
+            _core.reader_well_runtime_payload(
+                self.zarr.root_attrs,
+                image_zarr.root_attrs,
+            )
+        )
+        self.ds_paths = list(payload["dataset_paths"])
+        level_plans = list(payload["levels"])
         x_index = len(image_node.metadata["axes"]) - 1
         y_index = len(image_node.metadata["axes"]) - 2
         self.numpy_type = image_node.data[0].dtype
@@ -292,22 +297,11 @@ class Well(Spec):
         self.img_metadata = image_node.metadata
         self.img_pyramid_shapes = [d.shape for d in image_node.data]
 
-        def get_field(row: int, col: int, level: int) -> da.core.Array:
-            field_index = (column_count * row) + col
-            data = None
-            try:
-                if field_index < len(image_paths):
-                    image_path = image_paths[field_index]
-                    path = f"{image_path}/{self.ds_paths[level]}"
-                    data = self.zarr.load(path)
-            except ValueError:
-                LOGGER.error("Failed to load %s", path)
-            if data is None:
-                data = da.zeros(self.img_pyramid_shapes[level], dtype=self.numpy_type)
-            return data
-
-        def get_lazy_well(level: int, tile_shape: tuple) -> da.Array:
-            del tile_shape
+        pyramid = []
+        for level, tile_shape in enumerate(self.img_pyramid_shapes):
+            level_plan = dict(level_plans[level])
+            tile_paths = list(level_plan["tile_paths"])
+            has_tile = list(level_plan["has_tile"])
             lazy_rows = []
             for row in range(row_count):
                 lazy_row: list[da.Array] = []
@@ -318,14 +312,19 @@ class Well(Spec):
                         col,
                         level,
                     )
-                    lazy_tile = get_field(row, col, level)
-                    lazy_row.append(lazy_tile)
+                    field_index = (column_count * row) + col
+                    data = None
+                    path = tile_paths[field_index]
+                    try:
+                        if bool(has_tile[field_index]):
+                            data = self.zarr.load(path)
+                    except ValueError:
+                        LOGGER.error("Failed to load %s", path)
+                    if data is None:
+                        data = da.zeros(tile_shape, dtype=self.numpy_type)
+                    lazy_row.append(data)
                 lazy_rows.append(da.concatenate(lazy_row, axis=x_index))
-            return da.concatenate(lazy_rows, axis=y_index)
-
-        pyramid = []
-        for level, tile_shape in enumerate(self.img_pyramid_shapes):
-            lazy_well = get_lazy_well(level, tile_shape)
+            lazy_well = da.concatenate(lazy_rows, axis=y_index)
             pyramid.append(lazy_well)
 
         node.data = pyramid
@@ -361,9 +360,15 @@ class Plate(Spec):
             raise Exception("Could not find first well")
         self.first_field_path = well_spec.well_data["images"][0]["path"]
         img0 = self.zarr.create(f"{self.well_paths[0]}/{self.first_field_path}")
-        self.img_paths = [
-            d["path"] for d in img0.root_attrs["multiscales"][0]["datasets"]
-        ]
+        runtime_payload = dict(
+            _core.reader_plate_runtime_payload(
+                self.zarr.root_attrs,
+                self.first_field_path,
+                img0.root_attrs,
+            )
+        )
+        self.img_paths = list(runtime_payload["dataset_paths"])
+        level_plans = list(runtime_payload["levels"])
 
         self.numpy_type = well_spec.numpy_type
         LOGGER.debug("img_pyramid_shapes: %s", well_spec.img_pyramid_shapes)
@@ -371,7 +376,32 @@ class Plate(Spec):
 
         pyramid = []
         for level, tile_shape in enumerate(well_spec.img_pyramid_shapes):
-            lazy_plate = self.get_stitched_grid(level, tile_shape)
+            level_plan = dict(level_plans[level])
+            tile_paths = list(level_plan["tile_paths"])
+            has_tile = list(level_plan["has_tile"])
+            lazy_rows = []
+            for row in range(self.row_count):
+                lazy_row: list[da.Array] = []
+                for col in range(self.column_count):
+                    index = (row * self.column_count) + col
+                    if not bool(has_tile[index]):
+                        LOGGER.debug(
+                            "empty well: %s/%s",
+                            self.row_names[row],
+                            self.col_names[col],
+                        )
+                        lazy_row.append(np.zeros(tile_shape, dtype=self.numpy_type))
+                        continue
+                    path = tile_paths[index]
+                    LOGGER.debug("creating tile... %s with shape: %s", path, tile_shape)
+                    try:
+                        data = self.zarr.load(path)
+                    except ValueError:
+                        LOGGER.exception("Failed to load %s", path)
+                        data = da.zeros(tile_shape, dtype=self.numpy_type)
+                    lazy_row.append(data)
+                lazy_rows.append(da.concatenate(lazy_row, axis=len(self.axes) - 1))
+            lazy_plate = da.concatenate(lazy_rows, axis=len(self.axes) - 2)
             pyramid.append(lazy_plate)
 
         node.data = pyramid

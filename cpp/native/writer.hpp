@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -118,5 +119,38 @@ struct WriterLabelMetadataPlan {
 };
 
 WriterLabelMetadataPlan writer_label_metadata_plan(const std::string& version);
+
+struct WriterPyramidLevelPlan {
+    std::string component;
+    bool has_chunks;
+    std::vector<std::size_t> chunks;
+};
+
+struct WriterPyramidPlan {
+    int zarr_format;
+    bool use_v2_chunk_key_encoding;
+    bool use_dimension_names;
+    std::vector<std::string> dimension_names;
+    std::vector<WriterPyramidLevelPlan> levels;
+};
+
+WriterPyramidPlan writer_pyramid_plan(
+    const std::vector<std::vector<std::int64_t>>& shapes,
+    int zarr_format,
+    const std::vector<std::string>& axis_names,
+    const std::vector<std::vector<std::size_t>>& explicit_chunks);
+
+struct WriterLabelsPlan {
+    std::string resolved_method;
+    bool warn_scaler_deprecated;
+    std::vector<std::map<std::string, std::int64_t>> scale_factors;
+};
+
+WriterLabelsPlan writer_labels_plan(
+    const std::vector<std::string>& dims,
+    bool use_default_scaler,
+    bool scaler_is_none,
+    std::int64_t scaler_max_layer,
+    const std::optional<std::string>& requested_method);
 
 }  // namespace ome_zarr_c::native_code

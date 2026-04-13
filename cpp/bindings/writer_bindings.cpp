@@ -361,6 +361,138 @@ py::object resolve_storage_options(py::object storage_options, py::object path) 
     return options;
 }
 
+py::dict writer_pyramid_plan(
+    py::object pyramid,
+    int zarr_format,
+    py::object axes = py::none(),
+    py::object storage_options = py::none()) {
+    std::vector<std::vector<std::int64_t>> shapes;
+    shapes.reserve(static_cast<std::size_t>(py::len(pyramid)));
+    for (const py::handle& level_handle : py::iterable(pyramid)) {
+        py::object level = py::reinterpret_borrow<py::object>(level_handle);
+        std::vector<std::int64_t> shape;
+        for (const py::handle& dim : py::iterable(level.attr("shape"))) {
+            shape.push_back(py::cast<std::int64_t>(dim));
+        }
+        shapes.push_back(std::move(shape));
+    }
+
+    std::vector<std::string> axis_names;
+    if (!axes.is_none()) {
+        for (const py::handle& axis_handle : py::iterable(axes)) {
+            py::object axis = py::reinterpret_borrow<py::object>(axis_handle);
+            if (py::isinstance<py::dict>(axis) &&
+                py::cast<py::dict>(axis).contains("name")) {
+                axis_names.push_back(
+                    py::cast<std::string>(py::cast<py::dict>(axis)["name"]));
+            }
+        }
+    }
+
+    std::vector<std::vector<std::size_t>> explicit_chunks;
+    explicit_chunks.reserve(shapes.size());
+    for (py::ssize_t index = 0; index < py::len(pyramid); ++index) {
+        py::object chunks = py::none();
+        if (py::isinstance<py::list>(storage_options) &&
+            py::len(storage_options) > index &&
+            py::isinstance<py::dict>(storage_options.attr("__getitem__")(index)) &&
+            py::cast<py::dict>(storage_options.attr("__getitem__")(index)).contains("chunks")) {
+            chunks =
+                storage_options.attr("__getitem__")(index).attr("get")(py::str("chunks"));
+        } else if (py::isinstance<py::dict>(storage_options) &&
+                   py::cast<py::dict>(storage_options).contains("chunks")) {
+            chunks = storage_options.attr("get")(py::str("chunks"));
+        }
+
+        if (chunks.is_none()) {
+            explicit_chunks.push_back({});
+            continue;
+        }
+
+        std::vector<std::size_t> chunk_values;
+        if (PyLong_Check(chunks.ptr())) {
+            chunk_values.push_back(py::cast<std::size_t>(chunks));
+        } else {
+            for (const py::handle& chunk_value : py::iterable(chunks)) {
+                chunk_values.push_back(py::cast<std::size_t>(chunk_value));
+            }
+        }
+        explicit_chunks.push_back(std::move(chunk_values));
+    }
+
+    const auto plan = ome_zarr_c::native_code::writer_pyramid_plan(
+        shapes,
+        zarr_format,
+        axis_names,
+        explicit_chunks);
+
+    py::dict payload;
+    payload["zarr_format"] = py::int_(plan.zarr_format);
+    payload["use_v2_chunk_key_encoding"] = py::bool_(plan.use_v2_chunk_key_encoding);
+    py::list dimension_names;
+    for (const auto& axis_name : plan.dimension_names) {
+        dimension_names.append(py::str(axis_name));
+    }
+    payload["dimension_names"] = dimension_names;
+
+    py::list levels;
+    for (const auto& level_plan : plan.levels) {
+        py::dict level;
+        level["component"] = py::str(level_plan.component);
+        level["has_chunks"] = py::bool_(level_plan.has_chunks);
+        levels.append(level);
+    }
+    payload["levels"] = levels;
+    return payload;
+}
+
+std::optional<std::string> optional_method_name(py::object method) {
+    if (method.is_none()) {
+        return std::nullopt;
+    }
+    if (py::isinstance<py::str>(method)) {
+        return py::cast<std::string>(method);
+    }
+    if (py::hasattr(method, "value") && py::isinstance<py::str>(method.attr("value"))) {
+        return py::cast<std::string>(method.attr("value"));
+    }
+    return py::cast<std::string>(py::str(method));
+}
+
+py::dict writer_labels_plan(
+    py::object dims,
+    bool use_default_scaler,
+    bool scaler_is_none,
+    int scaler_max_layer,
+    py::object method = py::none()) {
+    std::vector<std::string> native_dims;
+    native_dims.reserve(py::len(dims));
+    for (const py::handle& dim_handle : py::iterable(dims)) {
+        native_dims.push_back(py::cast<std::string>(dim_handle));
+    }
+
+    const auto plan = ome_zarr_c::native_code::writer_labels_plan(
+        native_dims,
+        use_default_scaler,
+        scaler_is_none,
+        scaler_max_layer,
+        optional_method_name(method));
+
+    py::dict payload;
+    payload["resolved_method"] = py::str(plan.resolved_method);
+    payload["warn_scaler_deprecated"] = py::bool_(plan.warn_scaler_deprecated);
+    py::list scale_factors;
+    for (const auto& level : plan.scale_factors) {
+        py::dict scale_factor;
+        for (const auto& [dim, factor] : level) {
+            scale_factor[py::str(dim)] = py::int_(factor);
+        }
+        scale_factors.append(scale_factor);
+    }
+    payload["scale_factors"] = scale_factors;
+    return payload;
+}
+
 }  // namespace
 
 void register_writer_bindings(py::module_& m) {
@@ -426,4 +558,19 @@ void register_writer_bindings(py::module_& m) {
         &resolve_storage_options,
         py::arg("storage_options"),
         py::arg("path"));
+    m.def(
+        "writer_pyramid_plan",
+        &writer_pyramid_plan,
+        py::arg("pyramid"),
+        py::arg("zarr_format"),
+        py::arg("axes") = py::none(),
+        py::arg("storage_options") = py::none());
+    m.def(
+        "writer_labels_plan",
+        &writer_labels_plan,
+        py::arg("dims"),
+        py::arg("use_default_scaler"),
+        py::arg("scaler_is_none"),
+        py::arg("scaler_max_layer"),
+        py::arg("method") = py::none());
 }

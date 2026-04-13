@@ -468,6 +468,128 @@ py::str reader_plate_tile_path(
         py::cast<std::string>(dataset_path)));
 }
 
+py::dict reader_well_runtime_payload(
+    const py::dict& root_attrs,
+    const py::dict& image_root_attrs) {
+    py::dict payload = reader_well_payload(root_attrs);
+    py::list image_paths = py::cast<py::list>(payload["image_paths"]);
+    const std::size_t row_count = py::cast<std::size_t>(payload["row_count"]);
+    const std::size_t column_count = py::cast<std::size_t>(payload["column_count"]);
+
+    py::list datasets = py::cast<py::list>(
+        image_root_attrs.attr("__getitem__")(py::str("multiscales"))
+            .attr("__getitem__")(py::int_(0))
+            .attr("__getitem__")(py::str("datasets")));
+    std::vector<std::string> native_image_paths;
+    std::vector<std::string> native_dataset_paths;
+    native_image_paths.reserve(py::len(image_paths));
+    native_dataset_paths.reserve(py::len(datasets));
+    for (const py::handle& image_handle : image_paths) {
+        native_image_paths.push_back(py::cast<std::string>(image_handle));
+    }
+
+    py::list dataset_paths;
+    for (const py::handle& dataset_handle : datasets) {
+        py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
+        const std::string path =
+            py::cast<std::string>(dataset.attr("__getitem__")(py::str("path")));
+        native_dataset_paths.push_back(path);
+        dataset_paths.append(py::str(path));
+    }
+
+    py::list levels;
+    for (const auto& level_plan :
+         ome_zarr_c::native_code::reader_well_level_plans(
+             native_image_paths,
+             native_dataset_paths,
+             row_count,
+             column_count)) {
+        py::dict level;
+        py::list tile_paths;
+        py::list has_tile;
+        for (const auto& tile_path : level_plan.tile_paths) {
+            tile_paths.append(py::str(tile_path));
+        }
+        for (const bool flag : level_plan.has_tile) {
+            has_tile.append(py::bool_(flag));
+        }
+        level["tile_paths"] = tile_paths;
+        level["has_tile"] = has_tile;
+        levels.append(level);
+    }
+
+    payload["dataset_paths"] = dataset_paths;
+    payload["levels"] = levels;
+    return payload;
+}
+
+py::dict reader_plate_runtime_payload(
+    const py::dict& root_attrs,
+    const py::str& first_field_path,
+    const py::dict& image_root_attrs) {
+    py::dict payload = reader_plate_payload(root_attrs);
+    py::list row_names = py::cast<py::list>(payload["row_names"]);
+    py::list col_names = py::cast<py::list>(payload["col_names"]);
+    py::list well_paths = py::cast<py::list>(payload["well_paths"]);
+
+    std::vector<std::string> native_row_names;
+    std::vector<std::string> native_col_names;
+    std::vector<std::string> native_well_paths;
+    native_row_names.reserve(py::len(row_names));
+    native_col_names.reserve(py::len(col_names));
+    native_well_paths.reserve(py::len(well_paths));
+    for (const py::handle& item : row_names) {
+        native_row_names.push_back(py::cast<std::string>(item));
+    }
+    for (const py::handle& item : col_names) {
+        native_col_names.push_back(py::cast<std::string>(item));
+    }
+    for (const py::handle& item : well_paths) {
+        native_well_paths.push_back(py::cast<std::string>(item));
+    }
+
+    py::list datasets = py::cast<py::list>(
+        image_root_attrs.attr("__getitem__")(py::str("multiscales"))
+            .attr("__getitem__")(py::int_(0))
+            .attr("__getitem__")(py::str("datasets")));
+    std::vector<std::string> native_dataset_paths;
+    py::list dataset_paths;
+    native_dataset_paths.reserve(py::len(datasets));
+    for (const py::handle& dataset_handle : datasets) {
+        py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
+        const std::string path =
+            py::cast<std::string>(dataset.attr("__getitem__")(py::str("path")));
+        native_dataset_paths.push_back(path);
+        dataset_paths.append(py::str(path));
+    }
+
+    py::list levels;
+    for (const auto& level_plan :
+         ome_zarr_c::native_code::reader_plate_level_plans(
+             native_row_names,
+             native_col_names,
+             native_well_paths,
+             py::cast<std::string>(first_field_path),
+             native_dataset_paths)) {
+        py::dict level;
+        py::list tile_paths;
+        py::list has_tile;
+        for (const auto& tile_path : level_plan.tile_paths) {
+            tile_paths.append(py::str(tile_path));
+        }
+        for (const bool flag : level_plan.has_tile) {
+            has_tile.append(py::bool_(flag));
+        }
+        level["tile_paths"] = tile_paths;
+        level["has_tile"] = has_tile;
+        levels.append(level);
+    }
+
+    payload["dataset_paths"] = dataset_paths;
+    payload["levels"] = levels;
+    return payload;
+}
+
 }  // namespace
 
 void register_reader_bindings(py::module_& m) {
@@ -499,7 +621,18 @@ void register_reader_bindings(py::module_& m) {
           py::arg("image_data"),
           py::arg("node_visible"));
     m.def("reader_well_payload", &reader_well_payload, py::arg("root_attrs"));
+    m.def(
+        "reader_well_runtime_payload",
+        &reader_well_runtime_payload,
+        py::arg("root_attrs"),
+        py::arg("image_root_attrs"));
     m.def("reader_plate_payload", &reader_plate_payload, py::arg("root_attrs"));
+    m.def(
+        "reader_plate_runtime_payload",
+        &reader_plate_runtime_payload,
+        py::arg("root_attrs"),
+        py::arg("first_field_path"),
+        py::arg("image_root_attrs"));
     m.def("reader_plate_tile_path",
           &reader_plate_tile_path,
           py::arg("row_name"),
