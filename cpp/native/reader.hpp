@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,8 @@ struct ReaderSpecFlags {
 };
 
 std::vector<std::string> reader_matching_specs(const ReaderSpecFlags& flags);
+
+std::vector<std::string> reader_labels_names(const std::vector<std::string>& labels);
 
 std::string reader_node_repr(const std::string& zarr_repr, bool visible);
 
@@ -45,6 +48,60 @@ struct ReaderMultiscalesPlan {
 ReaderMultiscalesPlan reader_multiscales_plan(
     const std::vector<ReaderMultiscalesDatasetInput>& datasets);
 
+struct ReaderMultiscalesInput {
+    bool has_version;
+    std::string version;
+    bool has_name;
+    std::string name;
+    std::vector<ReaderMultiscalesDatasetInput> datasets;
+};
+
+struct ReaderMultiscalesSummary {
+    std::string version;
+    std::string name;
+    std::vector<std::string> paths;
+    bool any_coordinate_transformations;
+};
+
+ReaderMultiscalesSummary reader_multiscales_summary(
+    const ReaderMultiscalesInput& input);
+
+struct ReaderLabelColorInput {
+    bool label_is_bool;
+    bool label_bool;
+    bool label_is_int;
+    std::int64_t label_int;
+    bool has_rgba;
+    std::vector<std::int64_t> rgba;
+};
+
+struct ReaderLabelColorPlan {
+    bool keep;
+    bool label_is_bool;
+    bool label_bool;
+    std::int64_t label_int;
+    std::vector<double> rgba;
+};
+
+ReaderLabelColorPlan reader_label_color_plan(const ReaderLabelColorInput& input);
+
+struct ReaderLabelPropertyInput {
+    bool label_is_bool;
+    bool label_bool;
+    bool label_is_int;
+    std::int64_t label_int;
+};
+
+struct ReaderLabelPropertyPlan {
+    bool keep;
+    bool label_is_bool;
+    bool label_bool;
+    std::int64_t label_int;
+};
+
+ReaderLabelPropertyPlan reader_label_property_plan(
+    const ReaderLabelPropertyInput& input);
+
 enum class ReaderVisibleMode {
     default_true,
     node_visible_if_active,
@@ -72,6 +129,26 @@ ReaderOmeroChannelPlan reader_omero_channel_plan(
     bool has_window,
     bool has_window_start,
     bool has_window_end);
+
+struct ReaderOmeroChannelInput {
+    bool has_color;
+    std::string color;
+    bool has_label;
+    std::string label;
+    bool has_active;
+    bool active_truthy;
+    bool has_window;
+    bool has_window_start;
+    bool has_window_end;
+};
+
+struct ReaderOmeroPlan {
+    std::vector<ReaderOmeroChannelPlan> channels;
+};
+
+ReaderOmeroPlan reader_omero_plan(
+    const std::string& model,
+    const std::vector<ReaderOmeroChannelInput>& channels);
 
 struct ReaderWellPlan {
     std::vector<std::string> image_paths;
