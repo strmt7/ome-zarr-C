@@ -91,6 +91,25 @@ def test_detect_format_matches_upstream() -> None:
         assert _format_signature(py_result) == _format_signature(cpp_result)
 
 
+def test_get_metadata_version_matches_upstream() -> None:
+    metadata_cases = [
+        {},
+        {"multiscales": [{"version": "0.5"}]},
+        {"multiscales": [{"version": 0.5}]},
+        {"multiscales": [{"version": None}]},
+        {"plate": {"version": "0.4"}},
+        {"plate": {"version": 0.4}},
+        {"plate": {}},
+        {"well": {"version": "0.3"}},
+        {"image-label": {"version": "0.2"}},
+    ]
+
+    for metadata in metadata_cases:
+        assert _py_format.FormatV05()._get_metadata_version(
+            metadata
+        ) == _cpp_format.FormatV05()._get_metadata_version(metadata)
+
+
 def test_format_properties_and_matches_align() -> None:
     metadata_cases = [
         {"multiscales": [{"version": "0.1"}]},

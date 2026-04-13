@@ -56,6 +56,37 @@ const std::string& WellGenerationError::detail() const noexcept {
     return detail_;
 }
 
+CoordinateTransformationsValidationError::CoordinateTransformationsValidationError(
+    CoordinateTransformationsValidationErrorCode code,
+    std::size_t group_index,
+    std::size_t transformation_index,
+    int actual_count)
+    : code_(code),
+      group_index_(group_index),
+      transformation_index_(transformation_index),
+      actual_count_(actual_count) {}
+
+const char* CoordinateTransformationsValidationError::what() const noexcept {
+    return "CoordinateTransformationsValidationError";
+}
+
+CoordinateTransformationsValidationErrorCode
+CoordinateTransformationsValidationError::code() const noexcept {
+    return code_;
+}
+
+std::size_t CoordinateTransformationsValidationError::group_index() const noexcept {
+    return group_index_;
+}
+
+std::size_t CoordinateTransformationsValidationError::transformation_index() const noexcept {
+    return transformation_index_;
+}
+
+int CoordinateTransformationsValidationError::actual_count() const noexcept {
+    return actual_count_;
+}
+
 std::string normalize_known_format_version(const std::string& version) {
     for (const auto& known_version : kFormatVersions) {
         if (known_version == version) {
@@ -252,16 +283,22 @@ void validate_coordinate_transformations(
     const std::vector<CoordinateTransformationsValidationInput>& coordinate_transformations) {
     const int count = static_cast<int>(coordinate_transformations.size());
     if (count != nlevels) {
-        throw std::invalid_argument(
-            "coordinate_transformations count: " + std::to_string(count) +
-            " must match datasets " + std::to_string(nlevels));
+        throw CoordinateTransformationsValidationError(
+            CoordinateTransformationsValidationErrorCode::count_mismatch,
+            0,
+            0,
+            count);
     }
 
-    for (const auto& group : coordinate_transformations) {
+    for (std::size_t group_index = 0;
+         group_index < coordinate_transformations.size();
+         ++group_index) {
+        const auto& group = coordinate_transformations[group_index];
         for (const auto& transformation : group.transformations) {
             if (!transformation.has_type) {
-                throw std::invalid_argument(
-                    "Missing type in: " + group.transformations_repr);
+                throw CoordinateTransformationsValidationError(
+                    CoordinateTransformationsValidationErrorCode::missing_type,
+                    group_index);
             }
         }
 
@@ -279,48 +316,60 @@ void validate_coordinate_transformations(
         }
 
         if (scale_count != 1) {
-            throw std::invalid_argument(
-                "Must supply 1 'scale' item in coordinate_transformations");
+            throw CoordinateTransformationsValidationError(
+                CoordinateTransformationsValidationErrorCode::invalid_scale_count,
+                group_index);
         }
         if (group.transformations.front().type != "scale") {
-            throw std::invalid_argument(
-                "First coordinate_transformations must be 'scale'");
+            throw CoordinateTransformationsValidationError(
+                CoordinateTransformationsValidationErrorCode::first_not_scale,
+                group_index);
         }
 
         const auto& first = group.transformations.front();
         if (!first.has_scale) {
-            throw std::invalid_argument(
-                "Missing scale argument in: " + first.transformation_repr);
+            throw CoordinateTransformationsValidationError(
+                CoordinateTransformationsValidationErrorCode::missing_scale_argument,
+                group_index,
+                0);
         }
         if (static_cast<int>(first.scale_length) != ndim) {
-            throw std::invalid_argument(
-                "'scale' list " + first.scale_repr +
-                " must match number of image dimensions: " + std::to_string(ndim));
+            throw CoordinateTransformationsValidationError(
+                CoordinateTransformationsValidationErrorCode::scale_length_mismatch,
+                group_index,
+                0);
         }
         if (any_false(first.scale_numeric)) {
-            throw std::invalid_argument(
-                "'scale' values must all be numbers: " + first.scale_repr);
+            throw CoordinateTransformationsValidationError(
+                CoordinateTransformationsValidationErrorCode::scale_non_numeric,
+                group_index,
+                0);
         }
 
         if (translation_count > 1) {
-            throw std::invalid_argument(
-                "Must supply 0 or 1 'translation' item incoordinate_transformations");
+            throw CoordinateTransformationsValidationError(
+                CoordinateTransformationsValidationErrorCode::invalid_translation_count,
+                group_index);
         }
         if (translation_count == 1) {
             const auto& translation = group.transformations[translation_index];
             if (!translation.has_translation) {
-                throw std::invalid_argument(
-                    "Missing scale argument in: " + first.transformation_repr);
+                throw CoordinateTransformationsValidationError(
+                    CoordinateTransformationsValidationErrorCode::missing_translation_argument,
+                    group_index,
+                    static_cast<std::size_t>(translation_index));
             }
             if (static_cast<int>(translation.translation_length) != ndim) {
-                throw std::invalid_argument(
-                    "'translation' list " + translation.translation_repr +
-                    " must match image dimensions count: " + std::to_string(ndim));
+                throw CoordinateTransformationsValidationError(
+                    CoordinateTransformationsValidationErrorCode::translation_length_mismatch,
+                    group_index,
+                    static_cast<std::size_t>(translation_index));
             }
             if (any_false(translation.translation_numeric)) {
-                throw std::invalid_argument(
-                    "'translation' values must all be numbers: " +
-                    translation.translation_repr);
+                throw CoordinateTransformationsValidationError(
+                    CoordinateTransformationsValidationErrorCode::translation_non_numeric,
+                    group_index,
+                    static_cast<std::size_t>(translation_index));
             }
         }
     }

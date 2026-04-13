@@ -13,20 +13,30 @@ from . import _core
 
 LOGGER = logging.getLogger("ome_zarr_c.format")
 
+_FORMAT_CLASS_BY_VERSION: dict[str, type[Format]] = {}
+
 
 def format_from_version(version: str | float) -> Format:
-    return _format_class_for_version(str(_core.resolve_format_version(version)))()
+    if isinstance(version, float):
+        version = str(version)
+    try:
+        return _format_class_for_version(str(version))()
+    except KeyError as exc:
+        raise ValueError(f"Version {version} not recognized") from exc
 
 
 def format_implementations() -> Iterator[Format]:
-    for version in _core.format_versions():
-        yield _format_class_for_version(str(version))()
+    for cls in (FormatV05, FormatV04, FormatV03, FormatV02, FormatV01):
+        yield cls()
 
 
 def detect_format(metadata: dict, default: Format) -> Format:
-    detected = _core.detect_format_version(metadata)
-    if detected is not None:
-        return _format_class_for_version(str(detected))()
+    if metadata:
+        detected = _core.get_metadata_version(metadata)
+        if isinstance(detected, str):
+            cls = _FORMAT_CLASS_BY_VERSION.get(detected)
+            if cls is not None:
+                return cls()
     return default
 
 
@@ -112,7 +122,7 @@ class _VersionedFormat(Format):
     def matches(self, metadata: dict) -> bool:
         version = self._get_metadata_version(metadata)
         LOGGER.debug("%s matches %s?", self.version, version)
-        return bool(_core.format_matches(self._VERSION, metadata))
+        return version == self.version
 
 
 class FormatV01(_VersionedFormat):
@@ -169,7 +179,7 @@ class FormatV04(FormatV03):
     def generate_well_dict(
         self, well: str, rows: list[str], columns: list[str]
     ) -> dict:
-        return dict(_core.generate_well_dict_v04(well, rows, columns))
+        return _core.generate_well_dict_v04(well, rows, columns)
 
     def validate_well_dict(
         self, well: dict, rows: list[str], columns: list[str]
@@ -179,7 +189,7 @@ class FormatV04(FormatV03):
     def generate_coordinate_transformations(
         self, shapes: list[tuple]
     ) -> list[list[dict[str, Any]]] | None:
-        return list(_core.generate_coordinate_transformations(shapes))
+        return _core.generate_coordinate_transformations(shapes)
 
     def validate_coordinate_transformations(
         self,
@@ -197,13 +207,18 @@ class FormatV05(FormatV04):
 
 
 def _format_class_for_version(version: str) -> type[Format]:
-    return {
+    return _FORMAT_CLASS_BY_VERSION[version]
+
+
+_FORMAT_CLASS_BY_VERSION.update(
+    {
         "0.1": FormatV01,
         "0.2": FormatV02,
         "0.3": FormatV03,
         "0.4": FormatV04,
         "0.5": FormatV05,
-    }[version]
+    }
+)
 
 
 CurrentFormat = FormatV05

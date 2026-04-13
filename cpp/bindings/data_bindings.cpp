@@ -1,6 +1,8 @@
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
 #include <cmath>
+#include <cstring>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -12,46 +14,114 @@ namespace py = pybind11;
 
 namespace {
 
+py::object numpy_module() {
+    static py::object module = py::module_::import("numpy");
+    return module;
+}
+
+void raise_boolean_mask_shape_error(
+    const py::buffer_info& info,
+    py::ssize_t expected_height,
+    py::ssize_t expected_width) {
+    if (info.ndim < 1 || info.shape[0] != expected_height) {
+        throw py::index_error(
+            "boolean index did not match indexed array along axis 0; size of axis is " +
+            std::to_string(info.ndim < 1 ? 0 : info.shape[0]) +
+            " but size of corresponding boolean axis is " +
+            std::to_string(expected_height));
+    }
+    if (info.ndim < 2 || info.shape[1] != expected_width) {
+        throw py::index_error(
+            "boolean index did not match indexed array along axis 1; size of axis is " +
+            std::to_string(info.ndim < 2 ? 0 : info.shape[1]) +
+            " but size of corresponding boolean axis is " +
+            std::to_string(expected_width));
+    }
+}
+
 void data_make_circle(
     py::int_ height,
     py::int_ width,
     py::object value,
-    py::object target) {
+    py::array target) {
+    py::buffer_info target_info = target.request();
+    const py::ssize_t native_height = py::cast<py::ssize_t>(height);
+    const py::ssize_t native_width = py::cast<py::ssize_t>(width);
+    raise_boolean_mask_shape_error(target_info, native_height, native_width);
+
+    py::array scalar = numpy_module().attr("array")(
+        py::make_tuple(value),
+        py::arg("dtype") = target.attr("dtype"));
+    py::buffer_info scalar_info = scalar.request();
+
     const auto points = ome_zarr_c::native_code::circle_points(
         py::cast<std::size_t>(height),
         py::cast<std::size_t>(width));
+    auto* base = static_cast<char*>(target_info.ptr);
     for (const auto& point : points) {
-        ome_zarr_c::bindings::set_item(target, py::make_tuple(point.y, point.x), value);
+        char* destination = base +
+            static_cast<py::ssize_t>(point.y) * target_info.strides[0] +
+            static_cast<py::ssize_t>(point.x) * target_info.strides[1];
+        std::memcpy(destination, scalar_info.ptr, target_info.itemsize);
     }
 }
 
-py::object data_rgb_to_5d(py::object pixels) {
-    py::object numpy = py::module_::import("numpy");
-    py::tuple pixel_shape = py::cast<py::tuple>(pixels.attr("shape"));
+py::array data_rgb_to_5d(py::array pixels) {
+    py::buffer_info input = pixels.request();
     std::vector<std::size_t> native_shape;
-    native_shape.reserve(py::len(pixel_shape));
-    for (const py::handle& dim : pixel_shape) {
-        native_shape.push_back(py::cast<std::size_t>(dim));
+    native_shape.reserve(input.shape.size());
+    for (const py::ssize_t dim : input.shape) {
+        native_shape.push_back(static_cast<std::size_t>(dim));
     }
 
     try {
         const auto channel_order = ome_zarr_c::native_code::rgb_channel_order(native_shape);
         if (native_shape.size() == 2) {
-            py::object stack = numpy.attr("array")(py::make_tuple(pixels));
-            py::object channels = numpy.attr("array")(py::make_tuple(stack));
-            return numpy.attr("array")(py::make_tuple(channels));
+            py::array output(
+                pixels.dtype(),
+                std::vector<py::ssize_t>{1, 1, 1, input.shape[0], input.shape[1]});
+            py::buffer_info out = output.request();
+            auto* in_base = static_cast<const char*>(input.ptr);
+            auto* out_base = static_cast<char*>(out.ptr);
+            for (py::ssize_t y = 0; y < input.shape[0]; ++y) {
+                for (py::ssize_t x = 0; x < input.shape[1]; ++x) {
+                    const char* source =
+                        in_base + y * input.strides[0] + x * input.strides[1];
+                    char* destination =
+                        out_base + y * out.strides[3] + x * out.strides[4];
+                    std::memcpy(destination, source, input.itemsize);
+                }
+            }
+            return output;
         }
 
-        py::list channels;
+        py::array output(
+            pixels.dtype(),
+            std::vector<py::ssize_t>{
+                1,
+                static_cast<py::ssize_t>(channel_order.size()),
+                1,
+                input.shape[0],
+                input.shape[1],
+            });
+        py::buffer_info out = output.request();
+        auto* in_base = static_cast<const char*>(input.ptr);
+        auto* out_base = static_cast<char*>(out.ptr);
         for (const auto channel_index : channel_order) {
-            py::object channel = pixels.attr("__getitem__")(
-                py::make_tuple(
-                    py::slice(py::none(), py::none(), py::none()),
-                    py::slice(py::none(), py::none(), py::none()),
-                    py::int_(channel_index)));
-            channels.append(numpy.attr("array")(py::make_tuple(channel)));
+            for (py::ssize_t y = 0; y < input.shape[0]; ++y) {
+                for (py::ssize_t x = 0; x < input.shape[1]; ++x) {
+                    const char* source = in_base + y * input.strides[0] +
+                        x * input.strides[1] +
+                        static_cast<py::ssize_t>(channel_index) * input.strides[2];
+                    char* destination = out_base +
+                        static_cast<py::ssize_t>(channel_index) * out.strides[1] +
+                        y * out.strides[3] +
+                        x * out.strides[4];
+                    std::memcpy(destination, source, input.itemsize);
+                }
+            }
         }
-        return numpy.attr("array")(py::make_tuple(channels));
+        return output;
     } catch (const std::invalid_argument&) {
         PyErr_SetString(
             PyExc_AssertionError,
