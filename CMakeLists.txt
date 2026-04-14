@@ -71,3 +71,32 @@ if(OME_ZARR_C_NATIVE_BUILD_TESTS)
     target_link_libraries(ome_zarr_native_selftest PRIVATE ome_zarr_native)
     add_test(NAME ome_zarr_native_selftest COMMAND ome_zarr_native_selftest)
 endif()
+
+add_executable(
+    ome_zarr_native_cli
+    cpp/tools/native_cli.cpp
+)
+target_link_libraries(ome_zarr_native_cli PRIVATE ome_zarr_native)
+
+if(OME_ZARR_C_NATIVE_BUILD_TESTS)
+    add_test(
+        NAME ome_zarr_native_cli_help
+        COMMAND ome_zarr_native_cli --help
+    )
+    add_test(
+        NAME ome_zarr_native_cli_format_matches
+        COMMAND ome_zarr_native_cli format matches --version 0.5 --multiscales-version 0.5
+    )
+    add_test(
+        NAME ome_zarr_native_cli_create_plan
+        COMMAND ome_zarr_native_cli cli create-plan --method astronaut
+    )
+    add_test(
+        NAME ome_zarr_native_cli_scale_factors
+        COMMAND ome_zarr_native_cli cli scale-factors --downscale 2 --max-layer 4
+    )
+    add_test(
+        NAME ome_zarr_native_cli_generate_well
+        COMMAND ome_zarr_native_cli format generate-well --path B/3 --rows A,B,C --columns 1,2,3
+    )
+endif()

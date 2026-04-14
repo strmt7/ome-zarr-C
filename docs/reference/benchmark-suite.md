@@ -104,6 +104,9 @@ waits while still preserving a real `pyperf` measurement path.
 - `benchmarks/runtime_support.py`: deterministic tempdir fixtures and shared
   runtime parity helpers reused by the benchmark registry
 - `benchmarks/report.py`: turns a `pyperf` JSON file into a markdown summary
+- `scripts/compare_iteration_benchmarks.py`: bounded per-iteration comparison
+  helper for one touched surface using both the Python-visible suite and the
+  standalone native benchmark
 - `scripts/check_public_api_benchmark_coverage.py`: enforces benchmark
   coverage for documented upstream public callables
 - `CMakeLists.txt` plus `cpp/tools/native_bench_format.cpp` and
@@ -219,6 +222,26 @@ the question at hand, and use `--match` to focus on a hotspot:
 timeout 120s ./build-cpp/ome_zarr_native_bench_core --match format --quick
 timeout 120s ./build-cpp/ome_zarr_native_bench_core --match writer --quick
 ```
+
+For bounded iteration comparisons on the touched hotspot, use the helper
+script. It verifies parity on the selected Python-visible cases, runs a short
+`pyperf` pass, runs the matching native benchmark slice, and prints one table
+with both layers:
+
+```bash
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
+```
+
+The current `format` pairing is the strongest apples-to-apples iteration lane:
+
+- Python-visible side: `public-api` `format.*` cases through the parity harness
+- native side: `ome_zarr_native_bench_core --match format`
+
+The two layers are intentionally reported together but not conflated:
+
+- the `pyperf` row measures user-visible Python/runtime overhead on the parity
+  harness
+- the native row measures pure `cpp/native` semantic cost
 
 List the available cases across all suites:
 

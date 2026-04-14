@@ -29,16 +29,20 @@ def main() -> int:
     native_dev_doc = ROOT / "docs/reference/native-build-and-selftest.md"
     native_bench = ROOT / "cpp/tools/native_bench_format.cpp"
     native_bench_core = ROOT / "cpp/tools/native_bench_core.cpp"
+    native_cli = ROOT / "cpp/tools/native_cli.cpp"
     native_selftest = ROOT / "cpp/tools/native_selftest.cpp"
     cmake_file = ROOT / "CMakeLists.txt"
+    iteration_compare_script = ROOT / "scripts/compare_iteration_benchmarks.py"
 
     for required in (
         standalone_doc,
         native_dev_doc,
         native_bench,
         native_bench_core,
+        native_cli,
         native_selftest,
         cmake_file,
+        iteration_compare_script,
     ):
         if not required.exists():
             issues.append(f"Missing required file: {required.relative_to(ROOT)}")
@@ -67,8 +71,12 @@ def main() -> int:
         issues.append("README.md no longer states the standalone C++ target.")
     if "ome_zarr_native_selftest" not in readme_text:
         issues.append("README.md is missing the native self-test command.")
+    if "ome_zarr_native_cli" not in readme_text:
+        issues.append("README.md is missing the native CLI command.")
     if "ome_zarr_native_bench_core" not in readme_text:
         issues.append("README.md is missing the native core benchmark command.")
+    if "scripts/compare_iteration_benchmarks.py" not in readme_text:
+        issues.append("README.md is missing the iteration benchmark helper command.")
     if "ome_zarr_native_bench_format" in readme_text and not native_bench.exists():
         issues.append(
             "README.md references ome_zarr_native_bench_format, "
@@ -83,6 +91,10 @@ def main() -> int:
         issues.append(
             "README.md references ome_zarr_native_selftest, "
             "but the source file is missing."
+        )
+    if "ome_zarr_native_cli" in readme_text and not native_cli.exists():
+        issues.append(
+            "README.md references ome_zarr_native_cli, but the source file is missing."
         )
 
     for path in TEXT_FILES:

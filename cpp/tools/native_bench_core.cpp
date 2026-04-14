@@ -2,9 +2,12 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -37,6 +40,7 @@ struct Options {
     std::size_t rounds = 5;
     std::size_t iterations = 5000;
     std::string match;
+    std::string json_output;
     bool quick = false;
 };
 
@@ -81,9 +85,16 @@ Options parse_options(int argc, char** argv) {
             options.match = argv[++index];
             continue;
         }
+        if (arg == "--json-output") {
+            if (index + 1 >= argc) {
+                throw std::invalid_argument("Missing value after --json-output");
+            }
+            options.json_output = argv[++index];
+            continue;
+        }
         if (arg == "--help" || arg == "-h") {
             std::cout
-                << "Usage: ome_zarr_native_bench_core [--quick] [--rounds N] [--iterations N] [--match text]\n";
+                << "Usage: ome_zarr_native_bench_core [--quick] [--rounds N] [--iterations N] [--match text] [--json-output path]\n";
             std::exit(0);
         }
         throw std::invalid_argument("Unknown argument: " + std::string(arg));
@@ -133,6 +144,33 @@ struct CaseDefinition {
     std::size_t divisor;
     std::function<std::uint64_t(std::size_t)> callable;
 };
+
+std::string json_escape(std::string_view text) {
+    std::ostringstream output;
+    for (const char ch : text) {
+        switch (ch) {
+            case '\\':
+                output << "\\\\";
+                break;
+            case '"':
+                output << "\\\"";
+                break;
+            case '\n':
+                output << "\\n";
+                break;
+            case '\r':
+                output << "\\r";
+                break;
+            case '\t':
+                output << "\\t";
+                break;
+            default:
+                output << ch;
+                break;
+        }
+    }
+    return output.str();
+}
 
 std::uint64_t bench_axes_validate_types(std::size_t) {
     validate_axes_types({
@@ -206,6 +244,84 @@ std::uint64_t bench_format_matches(std::size_t iteration) {
     return format_matches("0.5", metadata) ? 1U : 0U;
 }
 
+std::uint64_t bench_format_dispatch(std::size_t iteration) {
+    const std::string version = format_versions()[iteration % format_versions().size()];
+    std::uint64_t total = 0U;
+    total += static_cast<std::uint64_t>(normalize_known_format_version(version).size());
+    total += static_cast<std::uint64_t>(format_zarr_format(version));
+    const auto encoding = format_chunk_key_encoding(version);
+    total += static_cast<std::uint64_t>(encoding.name.size() + encoding.separator.size());
+    total += static_cast<std::uint64_t>(format_class_name(version).size());
+
+    MetadataSummary metadata{};
+    switch (iteration % 5U) {
+        case 0:
+            break;
+        case 1:
+            metadata.has_multiscales_version = true;
+            metadata.multiscales_version_is_string = true;
+            metadata.multiscales_version = "0.5";
+            break;
+        case 2:
+            metadata.has_plate_version = true;
+            metadata.plate_version_is_string = true;
+            metadata.plate_version = "0.4";
+            break;
+        case 3:
+            metadata.has_well_version = true;
+            metadata.well_version_is_string = true;
+            metadata.well_version = "0.3";
+            break;
+        default:
+            metadata.has_image_label_version = true;
+            metadata.image_label_version_is_string = true;
+            metadata.image_label_version = "0.2";
+            break;
+    }
+    const auto detected = detect_format_version(metadata);
+    total += static_cast<std::uint64_t>(detected.has_value() ? detected->size() : 1U);
+    return total;
+}
+
+std::uint64_t bench_format_v01_init_store(std::size_t iteration) {
+    const auto local = format_init_store_plan(
+        "/tmp/native-bench-" + std::to_string(iteration % 8U) + ".zarr",
+        "w");
+    const auto remote = format_init_store_plan(
+        "https://example.invalid/image.zarr",
+        iteration % 2U == 0 ? "r" : "w");
+    std::uint64_t total = 0U;
+    total += local.use_fsspec ? 10U : 1U;
+    total += local.read_only ? 100U : 10U;
+    total += remote.use_fsspec ? 1000U : 100U;
+    total += remote.read_only ? 10000U : 1000U;
+    return total;
+}
+
+std::uint64_t bench_format_well_and_coord(std::size_t iteration) {
+    const std::vector<std::string> rows = {"A", "B", "C"};
+    const std::vector<std::string> columns = {"1", "2", "3"};
+    const std::array<std::string, 2> valid_paths = {"A/1", "B/3"};
+    const auto& valid_path = valid_paths[iteration % valid_paths.size()];
+    const auto generated = generate_well_v04(valid_path, rows, columns);
+    validate_well_v04(generated.path, generated.row_index, generated.column_index, rows, columns);
+
+    const auto coord = generate_coordinate_transformations(
+        {
+            {256.0, 256.0},
+            {128.0, 128.0},
+            {64.0, 64.0},
+        });
+    validate_coordinate_transformations(2, 3, coord);
+
+    return static_cast<std::uint64_t>(
+        generated.path.size() +
+        static_cast<std::size_t>(generated.row_index) +
+        static_cast<std::size_t>(generated.column_index) +
+        coord.size() +
+        coord.front().front().values.size());
+}
+
 std::uint64_t bench_io_subpath(std::size_t iteration) {
     const auto path = io_subpath(
         "http://example.org/data",
@@ -274,6 +390,47 @@ void print_results(const Options& options, const std::vector<CaseResult>& result
     }
 }
 
+void write_json_output(
+    const Options& options,
+    const std::vector<CaseResult>& results) {
+    if (options.json_output.empty()) {
+        return;
+    }
+
+    std::ofstream output(options.json_output);
+    if (!output) {
+        throw std::runtime_error(
+            "Failed to open JSON output path: " + options.json_output);
+    }
+
+    output << "{\n";
+    output << "  \"rounds\": " << options.rounds << ",\n";
+    output << "  \"iterations\": " << options.iterations << ",\n";
+    output << "  \"quick\": " << (options.quick ? "true" : "false") << ",\n";
+    output << "  \"match\": \"" << json_escape(options.match) << "\",\n";
+    output << "  \"results\": [\n";
+    for (std::size_t index = 0; index < results.size(); ++index) {
+        const auto& result = results[index];
+        const auto median = median_microseconds(result.round_microseconds);
+        const auto [min_it, max_it] = std::minmax_element(
+            result.round_microseconds.begin(), result.round_microseconds.end());
+        output << "    {\n";
+        output << "      \"name\": \"" << json_escape(result.name) << "\",\n";
+        output << "      \"iterations\": " << result.iterations << ",\n";
+        output << "      \"median_us_per_op\": " << std::fixed << std::setprecision(6)
+               << median << ",\n";
+        output << "      \"best_us_per_op\": " << *min_it << ",\n";
+        output << "      \"worst_us_per_op\": " << *max_it << "\n";
+        output << "    }";
+        if (index + 1 != results.size()) {
+            output << ",";
+        }
+        output << "\n";
+    }
+    output << "  ]\n";
+    output << "}\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -281,11 +438,29 @@ int main(int argc, char** argv) {
         const Options options = parse_options(argc, argv);
         std::vector<CaseDefinition> cases = {
             {"axes_validate_types", 1, bench_axes_validate_types},
+            {"cli.create_plan", 1, [](std::size_t iteration) {
+                 const auto& method = iteration % 2U == 0 ? std::string("coins") : std::string("astronaut");
+                 const auto plan = cli_create_plan(method);
+                 return static_cast<std::uint64_t>(plan.method_name.size() + plan.label_name.size());
+             }},
+            {"cli.scale_factors", 1, [](std::size_t iteration) {
+                 const auto factors = cli_scale_factors(
+                     iteration % 2U == 0 ? 2 : 3,
+                     iteration % 3U == 0 ? 4 : 3);
+                 std::uint64_t total = 0U;
+                 for (const auto factor : factors) {
+                     total += static_cast<std::uint64_t>(factor);
+                 }
+                 return total;
+             }},
             {"conversions_roundtrip", 1, bench_conversions_roundtrip},
             {"csv_props_by_id", 8, bench_csv_props},
             {"dask_zoom_plan", 1, bench_dask_zoom},
             {"data_circle_points", 16, bench_data_circle_points},
-            {"format_matches", 1, bench_format_matches},
+            {"format.dispatch", 1, bench_format_dispatch},
+            {"format.matches", 1, bench_format_matches},
+            {"format.v01_init_store", 1, bench_format_v01_init_store},
+            {"format.well_and_coord", 2, bench_format_well_and_coord},
             {"io_subpath", 1, bench_io_subpath},
             {"reader_plate_levels", 4, bench_reader_plate_levels},
             {"scale_build_pyramid", 8, bench_scale_build_pyramid},
@@ -313,6 +488,7 @@ int main(int argc, char** argv) {
         }
 
         print_results(options, results);
+        write_json_output(options, results);
         return 0;
     } catch (const std::exception& exc) {
         std::cerr << exc.what() << "\n";

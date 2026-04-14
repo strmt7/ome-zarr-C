@@ -8,6 +8,7 @@ the Python runtime.
 This path exercises `cpp/native/` directly:
 
 - native static library: `ome_zarr_native`
+- native CLI executable: `ome_zarr_native_cli`
 - native self-test executable: `ome_zarr_native_selftest`
 - native benchmark executables:
   - `ome_zarr_native_bench_format`
@@ -55,6 +56,7 @@ Run the standalone native self-test directly:
 
 ```bash
 ./build-cpp/ome_zarr_native_selftest
+./build-cpp/ome_zarr_native_cli --help
 ```
 
 Or through CTest:
@@ -73,6 +75,7 @@ Quick sanity pass:
 ```bash
 timeout 120s ./build-cpp/ome_zarr_native_bench_format --quick
 timeout 120s ./build-cpp/ome_zarr_native_bench_core --quick
+timeout 120s ./build-cpp/ome_zarr_native_bench_core --match format --quick
 ```
 
 Focused run for a specific hotspot:
@@ -82,6 +85,37 @@ timeout 120s ./build-cpp/ome_zarr_native_bench_core --match writer --quick
 timeout 120s ./build-cpp/ome_zarr_native_bench_core --match format --rounds 6 --iterations 5000
 ```
 
+## Native CLI
+
+The standalone native CLI currently exposes already-native helper and planning
+surfaces directly from `cpp/native/`.
+
+Examples:
+
+```bash
+./build-cpp/ome_zarr_native_cli cli create-plan --method astronaut
+./build-cpp/ome_zarr_native_cli cli scale-factors --downscale 2 --max-layer 4
+./build-cpp/ome_zarr_native_cli format detect --multiscales-version 0.5
+./build-cpp/ome_zarr_native_cli format matches --version 0.5 --multiscales-version 0.5
+./build-cpp/ome_zarr_native_cli format zarr-format --version 0.5
+./build-cpp/ome_zarr_native_cli format chunk-key-encoding --version 0.5
+./build-cpp/ome_zarr_native_cli format class-name --version 0.4
+./build-cpp/ome_zarr_native_cli format generate-well \
+  --path B/3 --rows A,B,C --columns 1,2,3
+./build-cpp/ome_zarr_native_cli format validate-well \
+  --path B/3 --row-index 1 --column-index 2 --rows A,B,C --columns 1,2,3
+```
+
+This does not yet replace the full historical Python CLI. It is the first real
+native runtime entrypoint for already-native surfaces, and it exists so the
+product path can keep moving away from the Python/pybind runtime.
+
 The native benchmark layer measures pure C++ semantic cost. Use the Python
 benchmark suite separately when you need end-to-end parity-harness timing or
 upstream-versus-port comparison on the same machine.
+
+For a fast iteration comparison on the touched `format` hotspot:
+
+```bash
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
+```

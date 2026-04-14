@@ -12,6 +12,7 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Newer stable dependency versions are allowed when they help performance or
   implementation quality, but they must be requalified with parity tests and
   benchmark validation before they are accepted.
+- Treat `origin/main` as the shared source of truth for repo state.
 - Python objects are not allowed in C++ semantic code unless the boundary is
   proven unavoidable and isolated to minimal binding glue.
 - Ruff is Python-only. Never target `cpp/` or C/C++ files with Ruff; use
@@ -20,6 +21,8 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Before pushing, perform a repo-consistency sweep over the touched code,
   tests, scripts, and docs so stale names, outdated references, and contract
   drift do not get published just because tests passed.
+- Load context selectively: start with the smallest sufficient set of docs,
+  code, tests, and skills, then widen only when evidence says it is necessary.
 - Differential tests are required for ported surfaces.
 - Benchmarks are required before claiming speedups.
 - Use repo-local skills under `.agents/skills/` when they fit the task.
