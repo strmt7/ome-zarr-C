@@ -9,6 +9,9 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Priority order:
   1. Match the frozen Python upstream exactly.
   2. Maximize measured performance only after parity is proven.
+- Newer stable dependency versions are allowed when they help performance or
+  implementation quality, but they must be requalified with parity tests and
+  benchmark validation before they are accepted.
 - Python objects are not allowed in C++ semantic code unless the boundary is
   proven unavoidable and isolated to minimal binding glue.
 - Differential tests are required for ported surfaces.

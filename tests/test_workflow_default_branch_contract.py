@@ -31,19 +31,41 @@ def _detect_default_branch() -> str:
     if env_value:
         return env_value
 
-    result = subprocess.run(
-        ["git", "-C", str(_repo_root()), "remote", "show", "origin"],
-        check=True,
+    repo_root = str(_repo_root())
+
+    symbolic_head = subprocess.run(
+        ["git", "-C", repo_root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        check=False,
         capture_output=True,
         text=True,
     )
-    marker = "HEAD branch:"
-    for line in result.stdout.splitlines():
-        if marker in line:
-            branch = line.split(marker, maxsplit=1)[1].strip()
-            if branch:
-                return branch
-    raise AssertionError("Could not detect the default branch from origin metadata.")
+    if symbolic_head.returncode == 0:
+        _, _, branch = symbolic_head.stdout.strip().partition("/")
+        if branch:
+            return branch
+
+    configured_merges = subprocess.run(
+        ["git", "-C", repo_root, "config", "--get-regexp", r"^branch\..*\.merge$"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if configured_merges.returncode == 0:
+        merge_branches = {
+            value.rsplit("/", maxsplit=1)[-1]
+            for line in configured_merges.stdout.splitlines()
+            if (parts := line.split(maxsplit=1)) and len(parts) == 2
+            for value in [parts[1].strip()]
+            if value.startswith("refs/heads/")
+        }
+        if len(merge_branches) == 1:
+            return next(iter(merge_branches))
+
+    raise AssertionError(
+        "Could not detect the default branch from local Git metadata. "
+        "Set WORKFLOW_DEFAULT_BRANCH explicitly if the local checkout does not "
+        "cache origin/HEAD or a unique branch.<name>.merge mapping."
+    )
 
 
 def _event_branches(relative_path: str, event_name: str) -> list[str]:
