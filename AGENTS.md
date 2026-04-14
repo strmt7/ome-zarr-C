@@ -145,14 +145,15 @@ benchmark comparison, but it is not the target runtime product.
 
 1. `docs/reference/architecture-first-porting.md`
 2. `docs/reference/standalone-cpp-target.md`
-3. `docs/reference/pure-native-cpp-policy.md`
-4. `docs/reference/ai-agent-context-routing.md`
-5. `docs/reference/porting-contract.md`
-6. `docs/reference/ai-agent-dos-and-donts.md`
-7. `docs/reference/immutable-parity-proof.md`
-8. `docs/reference/ai-agent-skills.md`
-9. the touched upstream implementation file under `source_code_v.0.15.0/`
-10. the matching wrapper, C++ file, and nearest test module
+3. `docs/reference/native-build-and-selftest.md`
+4. `docs/reference/pure-native-cpp-policy.md`
+5. `docs/reference/ai-agent-context-routing.md`
+6. `docs/reference/porting-contract.md`
+7. `docs/reference/ai-agent-dos-and-donts.md`
+8. `docs/reference/immutable-parity-proof.md`
+9. `docs/reference/ai-agent-skills.md`
+10. the touched upstream implementation file under `source_code_v.0.15.0/`
+11. the matching wrapper, C++ file, and nearest test module
 
 ## Repository map
 
@@ -186,6 +187,9 @@ timeout 180s .venv/bin/python -m pytest -q \
 .venv/bin/python scripts/check_repo_consistency.py
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
+cmake -S . -B /tmp/ome-zarr-c-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/ome-zarr-c-cmake -j2 --target ome_zarr_native_selftest
+ctest --test-dir /tmp/ome-zarr-c-cmake --output-on-failure
 ```
 
 Run only the narrowest relevant suites while iterating, but report exactly what

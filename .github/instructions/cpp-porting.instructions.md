@@ -46,6 +46,9 @@
 - When working on pure-native performance, also use the standalone native build
   and native benchmark tooling so Python-boundary overhead does not get
   confused with core semantic cost.
+- When a change affects `cpp/native/`, `cpp/tools/`, or `CMakeLists.txt`,
+  rebuild the standalone native targets and rerun the native self-test before
+  claiming the native path is healthy.
 - Ruff is for Python files only in this repo. Never run Ruff against `cpp/` or
   any C/C++ file extension. If linting a subset, pass only Python or
   Markdown-like paths explicitly.

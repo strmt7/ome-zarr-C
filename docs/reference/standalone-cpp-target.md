@@ -47,8 +47,21 @@ Target end state:
 ## Immediate migration priorities
 
 1. Keep `cpp/native/` buildable without Python headers or pybind.
-2. Add native build and benchmark tooling around `cpp/native/`.
+2. Grow native build, self-test, and benchmark tooling around `cpp/native/`.
 3. Reduce boundary-heavy slow paths in `cpp/bindings/` only when they still
    matter for parity-proof workflows.
 4. Move user-facing runtime claims away from the Python package shape and
    toward the standalone C++ target as native entrypoints become available.
+
+## Current native-only entrypoints
+
+Current `main` now ships these standalone-native CMake targets:
+
+- `ome_zarr_native`: static library built from `cpp/native/`
+- `ome_zarr_native_selftest`: native smoke and edge-case regression checks
+- `ome_zarr_native_bench_format`: focused format hotspot benchmark
+- `ome_zarr_native_bench_core`: broader bounded native benchmark suite
+
+These targets run without importing the Python runtime. Python remains in the
+repository separately for parity-proof workflows against the frozen upstream
+release.

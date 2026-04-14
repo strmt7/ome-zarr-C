@@ -5,6 +5,7 @@ project(ome_zarr_c_native LANGUAGES CXX)
 option(OME_ZARR_C_NATIVE_ENABLE_LTO "Enable link-time optimization for native targets." OFF)
 option(OME_ZARR_C_NATIVE_MARCH_NATIVE "Enable host-specific -march=native tuning for local native builds." OFF)
 option(OME_ZARR_C_NATIVE_BUILD_BENCHMARKS "Build native benchmark tools." ON)
+option(OME_ZARR_C_NATIVE_BUILD_TESTS "Build native self-tests." ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -53,4 +54,20 @@ if(OME_ZARR_C_NATIVE_BUILD_BENCHMARKS)
         cpp/tools/native_bench_format.cpp
     )
     target_link_libraries(ome_zarr_native_bench_format PRIVATE ome_zarr_native)
+
+    add_executable(
+        ome_zarr_native_bench_core
+        cpp/tools/native_bench_core.cpp
+    )
+    target_link_libraries(ome_zarr_native_bench_core PRIVATE ome_zarr_native)
+endif()
+
+if(OME_ZARR_C_NATIVE_BUILD_TESTS)
+    enable_testing()
+    add_executable(
+        ome_zarr_native_selftest
+        cpp/tools/native_selftest.cpp
+    )
+    target_link_libraries(ome_zarr_native_selftest PRIVATE ome_zarr_native)
+    add_test(NAME ome_zarr_native_selftest COMMAND ome_zarr_native_selftest)
 endif()
