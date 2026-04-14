@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 DEFAULT_BRANCH_GUARD = "github.ref_name == github.event.repository.default_branch"
 WORKFLOW_FILES = [
     ".github/workflows/native-cpp-guard.yml",
