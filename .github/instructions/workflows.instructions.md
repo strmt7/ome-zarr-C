@@ -2,7 +2,9 @@
 
 - Keep CI simple and directly tied to the current repo contract.
 - Protect the frozen snapshot from direct edits.
-- Run parity tests and lint checks on every push and pull request.
+- Keep the existing push, pull request, and manual triggers, but gate every job
+  with `github.ref_name == github.event.repository.default_branch` so non-
+  default refs do not consume runner minutes.
 - Use official stable GitHub Actions and current stable tool versions unless the
   repo deliberately pins otherwise.
 - Prefer narrow, trustworthy workflows over broad but noisy ones.
