@@ -332,9 +332,7 @@ def _write_pyramid_to_zarr(
         _core.writer_pyramid_plan(pyramid, int(fmt.zarr_format), axes, storage_options)
     )
     zarr_array_kwargs: dict[str, Any] = {}
-    zarr_format = int(runtime_plan["zarr_format"])
     options = _resolve_storage_options(storage_options, 0)
-    zarr_array_kwargs["zarr_format"] = zarr_format
 
     if bool(runtime_plan["use_v2_chunk_key_encoding"]):
         zarr_array_kwargs["chunk_key_encoding"] = {"name": "v2", "separator": "/"}
@@ -403,7 +401,7 @@ def _write_pyramid_to_zarr(
                     url=group.store,
                     component=component,
                     compute=False,
-                    **zarr_array_kwargs,
+                    zarr_array_kwargs=zarr_array_kwargs,
                 )
             )
         datasets.append({"path": str(level_plan["component"])})

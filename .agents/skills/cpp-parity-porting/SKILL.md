@@ -25,6 +25,9 @@ Use this skill when converting an upstream Python module or helper.
 7. If the observable output includes absolute paths and the surface is
    read-only, run the upstream and converted implementations against the same
    fixture path to avoid false stdout mismatches.
-8. Benchmark only after parity holds.
-9. Do not describe a surface as pure-native unless the semantics live in
+8. Do not keep Python-object semantics in C++ implementation code. If a Python
+   boundary is unavoidable, keep it minimal and local to `cpp/bindings/`.
+9. After parity holds, load `benchmark-first` and
+   `cpp-performance-optimization` before making performance changes.
+10. Do not describe a surface as pure-native unless the semantics live in
    `cpp/native/`.

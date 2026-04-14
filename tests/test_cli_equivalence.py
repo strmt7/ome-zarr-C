@@ -54,7 +54,28 @@ def _compat_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
         return _REAL_TO_ZARR(arr=arr, url=target, compute=compute)
     if "compressor" in kwargs and kwargs.get("zarr_format") != 2:
         kwargs["compressors"] = [kwargs.pop("compressor")]
-    return _REAL_TO_ZARR(*args, **kwargs)
+    direct_kwargs = {}
+    normalized_zarr_kwargs = {}
+    for key, value in kwargs.items():
+        if key in {
+            "arr",
+            "url",
+            "component",
+            "storage_options",
+            "region",
+            "compute",
+            "return_stored",
+            "zarr_format",
+            "zarr_read_kwargs",
+        }:
+            direct_kwargs[key] = value
+        else:
+            normalized_zarr_kwargs[key] = value
+    return _REAL_TO_ZARR(
+        *args,
+        zarr_array_kwargs=normalized_zarr_kwargs or None,
+        **direct_kwargs,
+    )
 
 
 def _snapshot_tree(root: Path):

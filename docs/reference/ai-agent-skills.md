@@ -18,6 +18,8 @@ Repo-local reusable skills live under `.agents/skills/`.
 - `python-testing`: pick Python-side parity and regression tests
 - `tdd-workflow`: drive features and fixes with tests first or tests alongside
 - `cpp-parity-porting`: port a single upstream surface to C++/pybind11
+- `cpp-performance-optimization`: optimize parity-proven native/binding hot
+  paths for real speedups without changing behavior
 - `benchmark-first`: benchmark before claiming speedups
 - `pybind11-runtime-parity`: preserve Python-visible behavior when C++ bindings
   call back into Python objects or expose iterator-style behavior

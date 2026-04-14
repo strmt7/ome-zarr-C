@@ -11,8 +11,10 @@ import tempfile
 import time
 import warnings
 from collections.abc import Callable
+from contextlib import ExitStack, nullcontext, redirect_stderr, redirect_stdout
 from dataclasses import dataclass, fields, is_dataclass
 from functools import lru_cache
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -129,8 +131,9 @@ def _make_timer(
     def timer(loops: int) -> float:
         _verify_once(case_id, verify)
         start = time.perf_counter()
-        for _ in range(loops):
-            func()
+        with _bench_stdio_context():
+            for _ in range(loops):
+                func()
         return time.perf_counter() - start
 
     return timer
@@ -139,8 +142,23 @@ def _make_timer(
 def _verify_once(case_id: str, verify: Callable[[], None]) -> None:
     if case_id in _VERIFIED_CASES:
         return
-    verify()
+    with _bench_stdio_context():
+        verify()
     _VERIFIED_CASES.add(case_id)
+
+
+def _bench_stdio_context():
+    if os.environ.get("OME_ZARR_BENCH_SUPPRESS_STDIO", "1").lower() in {
+        "0",
+        "false",
+        "no",
+    }:
+        return nullcontext()
+    sink = StringIO()
+    stack = ExitStack()
+    stack.enter_context(redirect_stdout(sink))
+    stack.enter_context(redirect_stderr(sink))
+    return stack
 
 
 def _compute_dask(array: da.Array) -> np.ndarray:

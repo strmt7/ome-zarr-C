@@ -6,7 +6,11 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 
 - Never edit `source_code_v.0.15.0/`.
 - Keep ports incremental and file-by-file.
-- Match upstream behavior before optimizing.
+- Priority order:
+  1. Match the frozen Python upstream exactly.
+  2. Maximize measured performance only after parity is proven.
+- Python objects are not allowed in C++ semantic code unless the boundary is
+  proven unavoidable and isolated to minimal binding glue.
 - Differential tests are required for ported surfaces.
 - Benchmarks are required before claiming speedups.
 - Use repo-local skills under `.agents/skills/` when they fit the task.

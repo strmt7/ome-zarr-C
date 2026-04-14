@@ -7,8 +7,8 @@ upstream Python snapshot.
 
 - Count only upstream surfaces that are routed through dedicated
   `cpp/bindings/` entrypoints, or thin Python orchestration that depends only
-  on split binding/native surfaces, instead of mixed exports left in
-  `cpp/core.cpp`.
+  on split binding/native surfaces, instead of mixed exports left in legacy
+  files outside those roots.
 - Require corresponding implementation files under `cpp/bindings/` and
   `cpp/native/`.
 - Use the frozen upstream source in `source_code_v.0.15.0/ome_zarr/` as the

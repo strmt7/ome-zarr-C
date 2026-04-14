@@ -12,7 +12,8 @@ This repository tracks a stricter `pure-native` percentage alongside the older
   native-owned.
 - Allow `cpp/bindings/` or thin Python wrappers only for boundary marshalling,
   object construction, or library calls that sit at the repository boundary.
-- Do not count mixed logic still left in `cpp/core.cpp`.
+- Do not count mixed logic that still lives outside `cpp/native/` and
+  `cpp/bindings/`.
 - Use the frozen upstream source in `source_code_v.0.15.0/ome_zarr/` as the
   immutable line-count basis.
 
@@ -62,5 +63,5 @@ That figure includes:
 - abstract contract stubs excluded from callable accounting and covered only
   through visible scaffold entries
 
-It does not include hidden automatic scaffold counting, mixed `cpp/core.cpp`
-logic, or unlisted Python-owned behavior.
+It does not include hidden automatic scaffold counting, mixed logic outside the
+allowed roots, or unlisted Python-owned behavior.

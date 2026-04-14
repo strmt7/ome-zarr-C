@@ -3,6 +3,11 @@
 This repository incrementally ports the frozen `ome/ome-zarr-py` `v0.15.0`
 snapshot to C++ without modifying the snapshot itself.
 
+## Primary goals
+
+1. Preserve exact behavioral parity with the frozen Python upstream.
+2. Maximize measurable performance gains once parity is already proven.
+
 ## Mandatory rules
 
 1. Never edit `source_code_v.0.15.0/`.
@@ -43,9 +48,9 @@ snapshot to C++ without modifying the snapshot itself.
 18. Do not normalize, simplify, or otherwise "improve" upstream behavior during
     a parity port. Identical behavior is the default requirement unless an
     intentional divergence is explicitly documented.
-19. When generating Python classes via `py::exec`, use a shared execution scope
-    when methods depend on runtime names. Otherwise class methods may compile
-    but fail later with missing-name errors.
+19. Do not introduce `py::exec`, `py::eval`, or raw embedded-Python source
+    blocks into `cpp/`. If historical embedded-Python debt is discovered,
+    remove or isolate it before claiming native completion.
 20. Security scanners in this repo must target repo-maintained code only.
     Frozen snapshot directories matching `source_code_v*/` must stay excluded
     from CodeQL and any future security scanning workflows.
@@ -85,6 +90,13 @@ snapshot to C++ without modifying the snapshot itself.
     `.venv/bin/python scripts/check_pure_native_cpp.py --enforce-pure-native-subtree --report-existing-debt`
     and treat any Python-integration tokens outside `cpp/bindings/` as a hard
     architectural problem to be removed, not documented away.
+33. Python objects are not allowed in C++ semantic code. The only acceptable
+    exception is a boundary shim in `cpp/bindings/` when it can be shown with
+    high confidence that no practical native alternative exists for preserving
+    the Python-visible contract.
+34. The rule against Python-object semantics applies retroactively to existing
+    converted code as well as new work. Existing violations are remediation
+    debt and must not be disguised as completed native conversion.
 
 ## Fast load order
 

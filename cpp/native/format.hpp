@@ -106,6 +106,11 @@ struct WellDictV04 {
     std::int64_t column_index;
 };
 
+struct WellPathParts {
+    std::string row;
+    std::string column;
+};
+
 enum class WellValidationErrorCode {
     path_group_count,
     row_missing,
@@ -197,6 +202,10 @@ void validate_well_v04(
     std::int64_t column_index,
     const std::vector<std::string>& rows,
     const std::vector<std::string>& columns);
+
+WellPathParts split_well_path_for_validation(const std::string& path);
+
+WellPathParts split_well_path_for_generation(const std::string& path);
 
 WellDictV04 generate_well_v04(
     const std::string& path,

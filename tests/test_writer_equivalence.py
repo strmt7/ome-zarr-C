@@ -63,6 +63,11 @@ def test_get_valid_axes_matches_upstream() -> None:
         {"name": "dz", "type": "space"},
         {"name": "WIDTH", "type": "space"},
     ]
+    unit_axes = [
+        {"name": "z", "type": "space", "unit": "micrometer"},
+        {"name": "y", "type": "space", "unit": "micrometer"},
+        {"name": "x", "type": "space", "unit": "micrometer"},
+    ]
 
     cases = [
         (_py_format.FormatV01(), _cpp_format.FormatV01(), 2, ["y", "x"]),
@@ -74,6 +79,7 @@ def test_get_valid_axes_matches_upstream() -> None:
         (_py_format.FormatV04(), _cpp_format.FormatV04(), 3, ["foo", "y", "x"]),
         (_py_format.FormatV04(), _cpp_format.FormatV04(), 3, ["x", "z", "y"]),
         (_py_format.FormatV04(), _cpp_format.FormatV04(), 4, strange_axes),
+        (_py_format.FormatV04(), _cpp_format.FormatV04(), 3, unit_axes),
         (_py_format.FormatV05(), _cpp_format.FormatV05(), 2, None),
     ]
 

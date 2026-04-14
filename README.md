@@ -114,7 +114,8 @@ architecture-first conversion floor:
 
 This `split-native` metric counts only upstream surfaces that are routed
 through dedicated `cpp/bindings/` entrypoints with corresponding native files,
-and excludes mixed exports still left in `cpp/core.cpp`.
+and excludes any residual mixed routing that has not yet been isolated to a
+dedicated binding-plus-native path.
 
 ## Pure-Native Coverage
 
@@ -192,6 +193,16 @@ OME_ZARR_C_ENABLE_LTO=1 OME_ZARR_C_MARCH_NATIVE=1 \
   .venv/bin/python -m pip install -e '.[dev,benchmark]' --no-build-isolation
 ```
 
+Benchmark runs disable package logging by default so timing is not polluted by
+warning and info I/O. Set `OME_ZARR_BENCH_DISABLE_LOGGING=0` when you explicitly
+want benchmark runs to include logging side effects.
+Benchmark runs also suppress Python warnings by default for the same reason.
+Set `OME_ZARR_BENCH_DISABLE_WARNINGS=0` when you intentionally want warning
+emission included in a measurement.
+Timed benchmark runs also suppress raw stdout and stderr by default.
+Set `OME_ZARR_BENCH_SUPPRESS_STDIO=0` only when output cost is intentionally
+part of the measurement.
+
 The host-tuned profile is intentionally opt-in because it is not portable across
 different CPU targets. The default profile is the one intended for reproducible
 CI and portable deployments.
@@ -261,36 +272,40 @@ available only when `OME_ZARR_BENCH_INCLUDE_LARGE=1`.
 See `docs/reference/benchmark-suite.md` for the methodology and
 `docs/reference/public-benchmark-fixtures.md` for fixture provenance.
 
-Latest completed broad snapshot on `2026-04-13` before the current `-O3`
-retime:
+Latest completed broad snapshot on `2026-04-14` on the current portable `-O3`
+build:
 
-- `core`: `29` cases, geometric mean `0.982x` (`python / cpp`)
-- `public-api`: `38` cases, geometric mean `0.993x`
-- `realdata`: `3` default public fixtures, geometric mean `0.995x`
+- `core`: `29` cases, geometric mean `1.139x` (`python / cpp`)
+- `public-api`: `38` cases, geometric mean `1.032x`
+- `realdata`: `3` default public fixtures, geometric mean `1.005x`
 - public API coverage checker: `89` documented callables, `8` abstract
   exclusions, `0` uncovered callables
 
-Latest targeted local reruns on the current portable `-O3` build:
+Notable wins in that completed snapshot:
 
-- `core` conversions micro-slice: geometric mean `2.032x`
-- `core` data-oriented micro-slice: geometric mean `1.503x`
-- `core` meso compute slice: geometric mean `1.059x`
-- strongest measured wins in those reruns:
-  - `conversions.rgba_to_int_batch`: `2.167x`
-  - `conversions.int_to_rgba_batch`: `1.906x`
-  - `data.rgb_to_5d_batch`: `2.451x`
-  - `data.make_circle_batch`: `2.100x`
-  - `dask_utils.resize_2d`: `1.321x`
-  - `scale.build_pyramid_local_mean`: `1.108x`
-- still-slower paths in the same reruns:
-  - `writer.validate_datasets_batch`: `0.960x`
-  - `writer.get_valid_axes_batch`: `0.843x`
-  - `format.matches`: `0.798x`
-  - `format.well_and_coord`: `0.631x`
+- `conversions.rgba_to_int_batch`: `2.198x`
+- `conversions.int_to_rgba_batch`: `1.904x`
+- `data.rgb_to_5d_batch`: `2.467x`
+- `data.make_circle_batch`: `2.087x`
+- `format.detect_format_batch`: `1.413x`
+- `scale.scaler_methods`: `4.533x`
+
+Still-slower paths in the same completed snapshot:
+
+- `format.matches`: `0.824x`
+- `format.well_and_coord`: `0.705x`
+- `utils.find_multiscales`: `0.879x`
+- `writer.resolve_storage_options_batch`: `0.901x`
+- `scaler.nearest_rgb`: `0.944x`
 
 For read-only surfaces that print absolute paths, parity tests should run the
 upstream and converted implementations against the same fixture path so the
 comparison measures behavior rather than path differences.
+
+The remaining local test warnings are upstream-compatibility warnings, not
+evidence of stale C++ dependencies. They come from deprecated upstream
+`Scaler` APIs that remain intentionally covered because the converted package
+must keep matching `ome-zarr-py v0.15.0`.
 
 ## Security and Scan Scope
 

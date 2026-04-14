@@ -16,11 +16,14 @@ code, not only future additions.
 
 - Code in `cpp/native/` must not contain `py::`, `pybind11` headers,
   Python C-API calls, or Python attribute dispatch.
-- Python interop is allowed only in `cpp/bindings/`, and only when there is no
-  pragmatic way to avoid a boundary shim.
+- Python objects are forbidden in C++ semantic code. Python interop is allowed
+  only in `cpp/bindings/`, and only when it can be justified as the smallest
+  unavoidable boundary required to preserve the Python-visible contract.
 - A mixed file that combines binding glue and business logic does not count as
   pure-native, even if it compiles and passes parity tests.
 - Existing mixed files are subject to the same rule. They are debt, not exempt.
+- Performance work does not relax the rule. Faster code still has to preserve
+  exact parity and keep the semantics native.
 
 ## Coverage language
 
@@ -44,3 +47,9 @@ code, not only future additions.
 Until a surface has been split so that only the boundary glue lives in
 `cpp/bindings/` and the semantics live in `cpp/native/`, that surface remains
 in remediation and should not be counted as pure-native conversion progress.
+
+## Priority order
+
+1. Match the frozen Python upstream exactly.
+2. Increase performance only after parity is proven and without moving
+   semantics back toward Python objects.

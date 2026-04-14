@@ -126,6 +126,25 @@ inline py::tuple output_slices_for_shape(const py::handle& shape) {
     return slices;
 }
 
+inline std::vector<std::string> sequence_to_string_vector(const py::sequence& values) {
+    PyObject* fast = PySequence_Fast(values.ptr(), "expected a sequence");
+    if (fast == nullptr) {
+        throw py::error_already_set();
+    }
+
+    py::object fast_holder = py::reinterpret_steal<py::object>(fast);
+    const auto size = static_cast<std::size_t>(PySequence_Fast_GET_SIZE(fast_holder.ptr()));
+    PyObject** items = PySequence_Fast_ITEMS(fast_holder.ptr());
+
+    std::vector<std::string> result;
+    result.reserve(size);
+    for (std::size_t index = 0; index < size; ++index) {
+        result.push_back(py::cast<std::string>(
+            py::reinterpret_borrow<py::object>(items[index])));
+    }
+    return result;
+}
+
 inline std::vector<ome_zarr_c::native_code::AxisRecord> axis_records_from_sequence(
     const py::sequence& axes) {
     std::vector<ome_zarr_c::native_code::AxisRecord> records;
@@ -133,7 +152,7 @@ inline std::vector<ome_zarr_c::native_code::AxisRecord> axis_records_from_sequen
 
     for (const py::handle& axis_handle : axes) {
         ome_zarr_c::native_code::AxisRecord record{};
-        if (py::isinstance<py::str>(axis_handle)) {
+        if (PyUnicode_Check(axis_handle.ptr())) {
             record.has_name = true;
             record.name = py::cast<std::string>(axis_handle);
             record.has_type = false;
@@ -142,11 +161,16 @@ inline std::vector<ome_zarr_c::native_code::AxisRecord> axis_records_from_sequen
             record.type_repr = "None";
         } else {
             py::dict axis = py::cast<py::dict>(axis_handle);
-            record.has_name = axis.contains("name");
+            record.has_name = PyDict_GetItemString(axis.ptr(), "name") != nullptr;
             if (record.has_name) {
-                record.name = py::cast<std::string>(axis["name"]);
+                record.name = py::cast<std::string>(
+                    py::reinterpret_borrow<py::object>(
+                        PyDict_GetItemString(axis.ptr(), "name")));
             }
-            py::object axis_type = axis.attr("get")("type");
+            PyObject* axis_type_obj = PyDict_GetItemString(axis.ptr(), "type");
+            py::object axis_type = axis_type_obj == nullptr
+                ? py::none()
+                : py::reinterpret_borrow<py::object>(axis_type_obj);
             record.has_type = !axis_type.is_none();
             if (record.has_type) {
                 record.type = py::cast<std::string>(axis_type);
@@ -158,6 +182,52 @@ inline std::vector<ome_zarr_c::native_code::AxisRecord> axis_records_from_sequen
     }
 
     return records;
+}
+
+inline py::list axis_records_to_dict_list(
+    const std::vector<ome_zarr_c::native_code::AxisRecord>& records) {
+    py::list result;
+    for (const auto& record : records) {
+        py::dict axis_dict;
+        axis_dict["name"] = py::str(record.name);
+        if (record.has_type) {
+            axis_dict["type"] = py::str(record.type);
+        }
+        result.append(std::move(axis_dict));
+    }
+    return result;
+}
+
+inline py::list axis_records_to_dict_list_preserving_original_dicts(
+    const std::vector<ome_zarr_c::native_code::AxisRecord>& records,
+    const py::sequence& original_axes) {
+    py::list result;
+    const auto original_size = static_cast<std::size_t>(py::len(original_axes));
+    if (records.size() != original_size) {
+        throw std::runtime_error("axis record count mismatch");
+    }
+
+    for (std::size_t index = 0; index < records.size(); ++index) {
+        const auto& record = records[index];
+        py::handle original_axis = original_axes[py::int_(index)];
+        if (PyUnicode_Check(original_axis.ptr())) {
+            py::dict axis_dict;
+            axis_dict["name"] = py::str(record.name);
+            if (record.has_type) {
+                axis_dict["type"] = py::str(record.type);
+            }
+            result.append(std::move(axis_dict));
+            continue;
+        }
+
+        PyObject* copied = PyDict_Copy(original_axis.ptr());
+        if (copied == nullptr) {
+            throw py::error_already_set();
+        }
+        result.append(py::reinterpret_steal<py::dict>(copied));
+    }
+
+    return result;
 }
 
 }  // namespace ome_zarr_c::bindings
