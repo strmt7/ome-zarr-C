@@ -47,15 +47,21 @@ struct CoordinateTransformation {
 
 using CoordinateTransformations = std::vector<CoordinateTransformation>;
 
+enum class CoordinateTransformationKind {
+    other,
+    scale,
+    translation,
+};
+
 struct CoordinateTransformationValidationInput {
     bool has_type;
-    std::string type;
+    CoordinateTransformationKind kind;
     bool has_scale;
     std::size_t scale_length;
-    std::vector<bool> scale_numeric;
+    bool scale_all_numeric;
     bool has_translation;
     std::size_t translation_length;
-    std::vector<bool> translation_numeric;
+    bool translation_all_numeric;
 };
 
 struct CoordinateTransformationsValidationInput {

@@ -1,6 +1,6 @@
 # ome-zarr-C
 
-`ome-zarr-C` is a release-anchored C++/pybind11 porting workspace for
+`ome-zarr-C` is a release-anchored C++ porting workspace for
 [`ome/ome-zarr-py`](https://github.com/ome/ome-zarr-py).
 
 The project preserves the exact upstream `v0.15.0` release snapshot under
@@ -10,12 +10,19 @@ snapshot in native-backed modules. Under the stricter current architecture,
 files outside those roots remain remediation debt. The working rule for
 converted code is behavioral parity first, performance claims second.
 
+Current `main` is still a transitional parity workspace with Python-oracle
+support. The target end-state product is standalone C++ only: Python remains
+in this repo today for parity tests, fixture generation, and benchmark
+comparison, but it is not the intended runtime delivery shape.
+
 ## Goals
 
-- port upstream Python surfaces incrementally to C++ with `pybind11`
+- port upstream Python surfaces incrementally to C++
 - preserve upstream public behavior, including edge cases and observable quirks
 - prove parity with differential tests against the frozen release snapshot
 - benchmark converted surfaces with representative data before claiming gains
+- migrate toward a standalone C++ product while keeping the Python oracle only
+  as development-time proof infrastructure
 
 ## Upstream Provenance
 
@@ -31,8 +38,10 @@ directory.
 ## Repository Layout
 
 - `source_code_v.0.15.0/`: frozen upstream release snapshot
-- `cpp/`: C++ implementations exposed through `pybind11`
-- `ome_zarr_c/`: Python compatibility layer for converted surfaces
+- `cpp/`: C++ implementations
+- `cpp/native/`: pure-native semantic implementation
+- `cpp/bindings/`: transitional Python boundary glue for parity-proof workflows
+- `ome_zarr_c/`: transitional Python compatibility/oracle layer
 - `tests/`: differential and regression tests
 - `docs/`: project references, design notes, and benchmark material
 
@@ -149,7 +158,14 @@ benchmark qualification before making any performance or compatibility claim.
 
 ## Deployment
 
-Host prerequisites:
+## Transitional Python-Oriented Dev Harness
+
+The current parity and benchmark harness still uses Python because it compares
+the converted behavior directly against the frozen upstream package on the same
+machine. That harness is for development-time proof, not the intended final
+product shape.
+
+Python dev-harness prerequisites:
 
 - Python `3.12`
 - a working C++17 toolchain for building the `pybind11` extension
@@ -160,7 +176,7 @@ Typical Linux package examples:
 - Debian or Ubuntu: `build-essential python3.12-dev`
 - Fedora: `gcc-c++ python3.12-devel`
 
-Create a local environment and install the editable package:
+Create a local environment and install the editable package for parity work:
 
 ```bash
 python3 -m venv .venv
@@ -207,6 +223,39 @@ The host-tuned profile is intentionally opt-in because it is not portable across
 different CPU targets. The default profile is the one intended for reproducible
 CI and portable deployments.
 
+## Standalone Native Build
+
+The repository now also carries a native-only CMake build for `cpp/native/`
+plus a native format benchmark tool. This is the direct path for measuring
+pure-native semantic cost without Python boundary overhead.
+
+Configure and build:
+
+```bash
+cmake -S . -B build-cpp -DCMAKE_BUILD_TYPE=Release
+cmake --build build-cpp -j
+```
+
+Optional host-tuned native build:
+
+```bash
+cmake -S . -B build-cpp \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DOME_ZARR_C_NATIVE_ENABLE_LTO=ON \
+  -DOME_ZARR_C_NATIVE_MARCH_NATIVE=ON
+cmake --build build-cpp -j
+```
+
+Run the native format benchmark:
+
+```bash
+./build-cpp/ome_zarr_native_bench_format --quick
+```
+
+This native benchmark is intentionally bounded and does not run for many
+minutes. Use it to separate core semantic cost from Python-boundary overhead
+before deciding where further optimization work belongs.
+
 Run the current proven-safe local verification lane:
 
 ```bash
@@ -247,6 +296,11 @@ The repository ships a paired `pyperf` benchmark suite under `benchmarks/`.
 It compares the frozen upstream Python implementation and the native-backed
 implementation on the same benchmark inputs and aborts if the timed input loses
 parity.
+
+For standalone-C++ performance work, also use the native-only CMake benchmark
+tooling. The `pyperf` suite measures Python-visible public behavior, while the
+native benchmark measures pure-native semantic cost without pybind/Python
+boundary overhead.
 
 Common benchmark commands:
 

@@ -24,6 +24,8 @@ porting work.
   parity tests.
 - Document blockers explicitly when the runtime cannot prove a live surface.
 - Keep README and reference docs synchronized with what is actually verified.
+- Keep the current transitional Python-harness state and the target standalone
+  C++ product state clearly separated in docs.
 - Prefer `--no-build-isolation` in offline or sandboxed rebuilds once local
   build dependencies are already installed.
 - Treat existing mixed C++ files as debt. New work should move semantics toward
@@ -34,6 +36,9 @@ porting work.
 - Prefer newer stable dependency versions when they enable better native
   implementation techniques or measurable speedups, but only keep the upgrade
   after rerunning parity and benchmark validation on the upgraded stack.
+- Use the standalone native build and native benchmark tools when you need to
+  measure pure-native semantic cost separately from Python-visible boundary
+  overhead.
 - Use Ruff only for Python or Markdown-like files. If linting a subset, pass
   those paths explicitly and keep `cpp/` out of the Ruff target list.
 - Do run a smart consistency sweep before pushing so docs, file names, function
@@ -49,6 +54,8 @@ porting work.
   semantics in C++ implementation code unless no practical native alternative
   can be demonstrated.
 - Do not present mixed pybind-heavy code as pure-native C++.
+- Do not present the transitional Python package layout as the intended final
+  product. The target delivery shape is standalone C++.
 - Do not add new semantic logic to a binding-heavy file just because the file
   already exists.
 - Do not count a surface as complete if the public path is still blocked by the

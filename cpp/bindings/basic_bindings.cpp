@@ -159,31 +159,43 @@ coordinate_transformations_validation_input(py::handle transformations_handle) {
     py::list transformations = py::cast<py::list>(transformations_handle);
     ome_zarr_c::native_code::CoordinateTransformationsValidationInput native_group;
     native_group.transformations.reserve(py::len(transformations));
+    py::str scale_text("scale");
+    py::str translation_text("translation");
 
     for (const py::handle& transformation_handle : transformations) {
         py::dict transformation = py::cast<py::dict>(transformation_handle);
         ome_zarr_c::native_code::CoordinateTransformationValidationInput
             native_transformation;
         native_transformation.has_type = false;
+        native_transformation.kind =
+            ome_zarr_c::native_code::CoordinateTransformationKind::other;
         native_transformation.has_scale = false;
         native_transformation.scale_length = 0;
+        native_transformation.scale_all_numeric = true;
         native_transformation.has_translation = false;
         native_transformation.translation_length = 0;
+        native_transformation.translation_all_numeric = true;
 
         py::object type = transformation.attr("get")("type", py::none());
         if (!type.is_none()) {
             native_transformation.has_type = true;
-            native_transformation.type = py::cast<std::string>(type);
+            native_transformation.kind = ome_zarr_c::native_code::CoordinateTransformationKind::other;
+            if (ome_zarr_c::bindings::objects_equal(type, scale_text)) {
+                native_transformation.kind =
+                    ome_zarr_c::native_code::CoordinateTransformationKind::scale;
+            } else if (ome_zarr_c::bindings::objects_equal(type, translation_text)) {
+                native_transformation.kind =
+                    ome_zarr_c::native_code::CoordinateTransformationKind::translation;
+            }
         }
 
         if (transformation.contains("scale")) {
             native_transformation.has_scale = true;
             py::sequence scale_values = py::cast<py::sequence>(transformation["scale"]);
             native_transformation.scale_length = py::len(scale_values);
-            native_transformation.scale_numeric.reserve(
-                native_transformation.scale_length);
             for (const py::handle& value : scale_values) {
-                native_transformation.scale_numeric.push_back(is_number_like(value));
+                native_transformation.scale_all_numeric =
+                    native_transformation.scale_all_numeric && is_number_like(value);
             }
         }
 
@@ -192,11 +204,10 @@ coordinate_transformations_validation_input(py::handle transformations_handle) {
             py::sequence translation_values =
                 py::cast<py::sequence>(transformation["translation"]);
             native_transformation.translation_length = py::len(translation_values);
-            native_transformation.translation_numeric.reserve(
-                native_transformation.translation_length);
             for (const py::handle& value : translation_values) {
-                native_transformation.translation_numeric.push_back(
-                    is_number_like(value));
+                native_transformation.translation_all_numeric =
+                    native_transformation.translation_all_numeric &&
+                    is_number_like(value);
             }
         }
 
