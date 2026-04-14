@@ -106,8 +106,9 @@ waits while still preserving a real `pyperf` measurement path.
 - `benchmarks/report.py`: turns a `pyperf` JSON file into a markdown summary
 - `scripts/check_public_api_benchmark_coverage.py`: enforces benchmark
   coverage for documented upstream public callables
-- `CMakeLists.txt` plus `cpp/tools/native_bench_format.cpp`: native-only build
-  and benchmark entrypoint for direct `cpp/native` timing
+- `CMakeLists.txt` plus `cpp/tools/native_bench_format.cpp` and
+  `cpp/tools/native_bench_core.cpp`: native-only build and benchmark entrypoints
+  for direct `cpp/native` timing
 
 Each paired case benchmarks the Python upstream function and the converted
 native-backed function on the same exact benchmark input. Before timing begins,
@@ -190,25 +191,34 @@ requested profile.
 For standalone native benchmarking without Python boundary overhead:
 
 ```bash
-cmake -S . -B build-cpp -DCMAKE_BUILD_TYPE=Release
-cmake --build build-cpp -j
+cmake -S . -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-cpp -j2
+./build-cpp/ome_zarr_native_selftest
 ./build-cpp/ome_zarr_native_bench_format --quick
+./build-cpp/ome_zarr_native_bench_core --quick
 ```
 
 Optional host-tuned native build:
 
 ```bash
-cmake -S . -B build-cpp \
+cmake -S . -B build-cpp -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DOME_ZARR_C_NATIVE_ENABLE_LTO=ON \
   -DOME_ZARR_C_NATIVE_MARCH_NATIVE=ON
-cmake --build build-cpp -j
+cmake --build build-cpp -j2
+./build-cpp/ome_zarr_native_selftest
 ./build-cpp/ome_zarr_native_bench_format --quick
+./build-cpp/ome_zarr_native_bench_core --quick
 ```
 
-The native benchmark is intentionally small and bounded. Use it during local
+The native benchmark layer is intentionally bounded. Use it during local
 optimization loops when the broader Python-visible suite would be too slow for
-the question at hand.
+the question at hand, and use `--match` to focus on a hotspot:
+
+```bash
+timeout 120s ./build-cpp/ome_zarr_native_bench_core --match format --quick
+timeout 120s ./build-cpp/ome_zarr_native_bench_core --match writer --quick
+```
 
 List the available cases across all suites:
 

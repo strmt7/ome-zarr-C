@@ -26,10 +26,20 @@ def main() -> int:
     issues: list[str] = []
 
     standalone_doc = ROOT / "docs/reference/standalone-cpp-target.md"
+    native_dev_doc = ROOT / "docs/reference/native-build-and-selftest.md"
     native_bench = ROOT / "cpp/tools/native_bench_format.cpp"
+    native_bench_core = ROOT / "cpp/tools/native_bench_core.cpp"
+    native_selftest = ROOT / "cpp/tools/native_selftest.cpp"
     cmake_file = ROOT / "CMakeLists.txt"
 
-    for required in (standalone_doc, native_bench, cmake_file):
+    for required in (
+        standalone_doc,
+        native_dev_doc,
+        native_bench,
+        native_bench_core,
+        native_selftest,
+        cmake_file,
+    ):
         if not required.exists():
             issues.append(f"Missing required file: {required.relative_to(ROOT)}")
 
@@ -41,17 +51,37 @@ def main() -> int:
         issues.append(
             "AGENTS.md is missing the standalone C++ target doc in fast-load guidance."
         )
+    if "docs/reference/native-build-and-selftest.md" not in agents_text:
+        issues.append(
+            "AGENTS.md is missing the native build/self-test doc in fast-load guidance."
+        )
     if "docs/reference/standalone-cpp-target.md" not in docs_index_text:
         issues.append("docs/index.md is missing the standalone C++ target doc.")
+    if "docs/reference/native-build-and-selftest.md" not in docs_index_text:
+        issues.append("docs/index.md is missing the native build/self-test doc.")
     if "transitional parity workspace" not in readme_text:
         issues.append(
             "README.md no longer states the current transitional workspace status."
         )
     if "standalone C++ only" not in readme_text:
         issues.append("README.md no longer states the standalone C++ target.")
+    if "ome_zarr_native_selftest" not in readme_text:
+        issues.append("README.md is missing the native self-test command.")
+    if "ome_zarr_native_bench_core" not in readme_text:
+        issues.append("README.md is missing the native core benchmark command.")
     if "ome_zarr_native_bench_format" in readme_text and not native_bench.exists():
         issues.append(
             "README.md references ome_zarr_native_bench_format, "
+            "but the source file is missing."
+        )
+    if "ome_zarr_native_bench_core" in readme_text and not native_bench_core.exists():
+        issues.append(
+            "README.md references ome_zarr_native_bench_core, "
+            "but the source file is missing."
+        )
+    if "ome_zarr_native_selftest" in readme_text and not native_selftest.exists():
+        issues.append(
+            "README.md references ome_zarr_native_selftest, "
             "but the source file is missing."
         )
 

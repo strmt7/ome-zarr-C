@@ -41,6 +41,7 @@ directory.
 - `cpp/`: C++ implementations
 - `cpp/native/`: pure-native semantic implementation
 - `cpp/bindings/`: transitional Python boundary glue for parity-proof workflows
+- `cpp/tools/`: standalone native self-test and benchmark executables
 - `ome_zarr_c/`: transitional Python compatibility/oracle layer
 - `tests/`: differential and regression tests
 - `docs/`: project references, design notes, and benchmark material
@@ -226,35 +227,52 @@ CI and portable deployments.
 ## Standalone Native Build
 
 The repository now also carries a native-only CMake build for `cpp/native/`
-plus a native format benchmark tool. This is the direct path for measuring
-pure-native semantic cost without Python boundary overhead.
+plus standalone native validation and benchmark tools. This is the direct path
+for measuring pure-native semantic cost without Python boundary overhead.
+
+Typical host prerequisites on Ubuntu or Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake ninja-build
+```
 
 Configure and build:
 
 ```bash
-cmake -S . -B build-cpp -DCMAKE_BUILD_TYPE=Release
-cmake --build build-cpp -j
+cmake -S . -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-cpp -j2
 ```
 
 Optional host-tuned native build:
 
 ```bash
-cmake -S . -B build-cpp \
+cmake -S . -B build-cpp -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DOME_ZARR_C_NATIVE_ENABLE_LTO=ON \
   -DOME_ZARR_C_NATIVE_MARCH_NATIVE=ON
-cmake --build build-cpp -j
+cmake --build build-cpp -j2
 ```
 
-Run the native format benchmark:
+Run the standalone native verification path:
+
+```bash
+./build-cpp/ome_zarr_native_selftest
+ctest --test-dir build-cpp --output-on-failure
+```
+
+Run the bounded native benchmarks:
 
 ```bash
 ./build-cpp/ome_zarr_native_bench_format --quick
+./build-cpp/ome_zarr_native_bench_core --quick
 ```
 
-This native benchmark is intentionally bounded and does not run for many
-minutes. Use it to separate core semantic cost from Python-boundary overhead
-before deciding where further optimization work belongs.
+These native tools are intentionally bounded and do not run for many minutes.
+Use them to separate core semantic cost from Python-boundary overhead before
+deciding where further optimization work belongs. See
+`docs/reference/native-build-and-selftest.md` for the standalone-native
+workflow details and focused `--match` examples.
 
 Run the current proven-safe local verification lane:
 
