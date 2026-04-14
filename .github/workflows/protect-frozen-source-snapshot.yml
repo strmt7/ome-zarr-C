@@ -8,6 +8,10 @@ on:
     branches:
       - main_v.0.15.0
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   protect-frozen-source:
     name: Protect Frozen Source Snapshot
