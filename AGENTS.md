@@ -16,7 +16,9 @@ snapshot to C++ without modifying the snapshot itself.
    divergence is explicitly documented.
 4. Do not claim performance gains without benchmark data.
 5. Use repo-local tooling in `.venv/` unless there is a hard blocker.
-6. Use latest stable tool versions unless the repo pins something stricter.
+6. Use the latest stable tool and dependency versions when the repo does not
+   pin something stricter, but only keep an upgrade if exact parity is still
+   proven on the upgraded stack.
 7. Do not use background agents or subagents unless the user explicitly asks.
 8. Before making any claim about branches, default branch, remotes, tags, or
    GitHub repo state, verify both local Git state and remote GitHub state.
@@ -58,43 +60,47 @@ snapshot to C++ without modifying the snapshot itself.
     update the scanner exclusions in the same change before pushing.
 22. Before claiming a workflow action or tooling pin is "latest stable", verify
     it against the official release or package index source instead of memory.
-23. If repo-local skill coverage is missing for pybind11 runtime-parity work or
+23. Newer stable dependency versions are allowed and often desirable when they
+    unlock better implementation techniques or performance, but every such
+    upgrade must be followed by parity revalidation on the real runtime before
+    it is treated as acceptable.
+24. If repo-local skill coverage is missing for pybind11 runtime-parity work or
     workflow/dependency-governance work, add or update a repo-local skill with
     official references before relying on ad-hoc process notes.
-24. Treat tests as first-class repo code. If CodeQL, lint, or security findings
+25. Treat tests as first-class repo code. If CodeQL, lint, or security findings
     land in `tests/`, fix the underlying structure or logic instead of muting
     the finding because the code lives under `tests/`.
-25. If multiple test modules share helpers, keep those helpers importable in
+26. If multiple test modules share helpers, keep those helpers importable in
     both narrow invocations and whole-suite collection. Prefer an explicit
     `tests` package over fragile path-dependent imports.
-26. If a parity surface prints or serializes absolute paths, run the upstream
+27. If a parity surface prints or serializes absolute paths, run the upstream
     and converted implementations against the same fixture path whenever the
     surface is read-only so path text does not create false mismatches.
-27. Keep `README.md` strictly user-facing. Agent instructions, workflow rules,
+28. Keep `README.md` strictly user-facing. Agent instructions, workflow rules,
     and AI operating contracts belong in `AGENTS.md`, `.github/instructions/`,
     and repo-local skills only.
-28. Before making or repeating a frozen-snapshot immutability claim, verify the
+29. Before making or repeating a frozen-snapshot immutability claim, verify the
     committed SHA256 manifest with
     `.venv/bin/python scripts/frozen_source_manifest.py --verify`.
-29. If a change touches `cpp/`, scan it with
+30. If a change touches `cpp/`, scan it with
     `.venv/bin/python scripts/check_native_cpp.py --all` and treat any
     embedded-Python execution pattern in `cpp/` as native-debt rather than
     fully converted C++ coverage.
-30. The pure-native C++ policy applies to the whole repository, including
+31. The pure-native C++ policy applies to the whole repository, including
     existing converted code. `cpp/native/` is for real C++ semantics only,
     `cpp/bindings/` is for minimal boundary glue only, and mixed files
     elsewhere under `cpp/` are remediation debt.
-31. Do not count any converted surface as pure-native unless its semantics live
+32. Do not count any converted surface as pure-native unless its semantics live
     in `cpp/native/`. "Native-backed" and "pure-native" are different claims.
-32. If a change touches `cpp/`, run
+33. If a change touches `cpp/`, run
     `.venv/bin/python scripts/check_pure_native_cpp.py --enforce-pure-native-subtree --report-existing-debt`
     and treat any Python-integration tokens outside `cpp/bindings/` as a hard
     architectural problem to be removed, not documented away.
-33. Python objects are not allowed in C++ semantic code. The only acceptable
+34. Python objects are not allowed in C++ semantic code. The only acceptable
     exception is a boundary shim in `cpp/bindings/` when it can be shown with
     high confidence that no practical native alternative exists for preserving
     the Python-visible contract.
-34. The rule against Python-object semantics applies retroactively to existing
+35. The rule against Python-object semantics applies retroactively to existing
     converted code as well as new work. Existing violations are remediation
     debt and must not be disguised as completed native conversion.
 

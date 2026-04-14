@@ -31,6 +31,9 @@ porting work.
 - Prove a Python-object boundary is unavoidable before letting any `py::object`
   or similar Python runtime type participate in C++ code, and confine that
   boundary to `cpp/bindings/`.
+- Prefer newer stable dependency versions when they enable better native
+  implementation techniques or measurable speedups, but only keep the upgrade
+  after rerunning parity and benchmark validation on the upgraded stack.
 
 ## Don't
 
@@ -50,3 +53,5 @@ porting work.
 - Do not trust a stale extension binary after editing `cpp/`.
 - Do not claim full-suite green if the verified lane excluded known blockers.
 - Do not leave repo docs overstating coverage or verification.
+- Do not freeze old dependency versions out of convenience if a newer stable
+  version would help parity-safe performance work and can be fully requalified.

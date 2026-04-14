@@ -8,6 +8,9 @@
 - Keep Python wrappers as thin compatibility layers.
 - Keep real semantics in `cpp/native/` and limit Python binding glue to
   `cpp/bindings/` when there is no pragmatic alternative.
+- Prefer newer stable dependency versions when they unlock stronger native
+  techniques or performance gains, but treat the upgrade as provisional until
+  parity and benchmark validation are rerun successfully on that exact stack.
 - Do not put Python objects, Python attribute dispatch, or Python C-API-driven
   semantics into C++ implementation code unless the boundary can be proven
   unavoidable for the Python-visible contract.
