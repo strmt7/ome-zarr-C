@@ -258,6 +258,7 @@ Run the standalone native verification path:
 
 ```bash
 ./build-cpp/ome_zarr_native_selftest
+./build-cpp/ome_zarr_native_cli --help
 ctest --test-dir build-cpp --output-on-failure
 ```
 
@@ -266,6 +267,7 @@ Run the bounded native benchmarks:
 ```bash
 ./build-cpp/ome_zarr_native_bench_format --quick
 ./build-cpp/ome_zarr_native_bench_core --quick
+./build-cpp/ome_zarr_native_bench_core --match format --quick
 ```
 
 These native tools are intentionally bounded and do not run for many minutes.
@@ -273,6 +275,25 @@ Use them to separate core semantic cost from Python-boundary overhead before
 deciding where further optimization work belongs. See
 `docs/reference/native-build-and-selftest.md` for the standalone-native
 workflow details and focused `--match` examples.
+
+For a bounded iteration comparison on a touched hotspot, run the paired helper:
+
+```bash
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
+```
+
+That helper emits one table with the Python-visible `pyperf` numbers and the
+matching standalone-native benchmark numbers for the same touched surface.
+
+Example native CLI calls against already-native surfaces:
+
+```bash
+./build-cpp/ome_zarr_native_cli cli create-plan --method coins
+./build-cpp/ome_zarr_native_cli cli scale-factors --downscale 2 --max-layer 4
+./build-cpp/ome_zarr_native_cli format detect --multiscales-version 0.5
+./build-cpp/ome_zarr_native_cli format generate-well \
+  --path B/3 --rows A,B,C --columns 1,2,3
+```
 
 Run the current proven-safe local verification lane:
 
@@ -290,6 +311,11 @@ timeout 180s .venv/bin/python -m pytest -q \
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```
+
+Current full-suite pytest warnings come from the frozen upstream `v0.15.0`
+oracle surfaces still exercising the deprecated `Scaler` API during parity
+tests. They are upstream-behavior warnings, not evidence that the standalone
+native build path is pinned to stale host packages.
 
 After editing native code under `cpp/`, rebuild the editable install before
 re-running tests so the suite exercises the current extension binary:

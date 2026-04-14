@@ -1,5 +1,6 @@
 .venv/
 build/
+build-cpp/
 dist/
 *.so
 *.egg-info/

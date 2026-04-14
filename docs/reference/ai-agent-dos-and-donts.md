@@ -26,6 +26,8 @@ porting work.
 - Keep README and reference docs synchronized with what is actually verified.
 - Keep the current transitional Python-harness state and the target standalone
   C++ product state clearly separated in docs.
+- Treat GitHub `main` as the shared source of truth and reconcile local state
+  against `origin/main` before trusting it.
 - Prefer `--no-build-isolation` in offline or sandboxed rebuilds once local
   build dependencies are already installed.
 - Treat existing mixed C++ files as debt. New work should move semantics toward
@@ -41,6 +43,8 @@ porting work.
   overhead.
 - Use Ruff only for Python or Markdown-like files. If linting a subset, pass
   those paths explicitly and keep `cpp/` out of the Ruff target list.
+- Start with the smallest sufficient context slice and broaden only when the
+  evidence says the first pass is not enough.
 - Do run a smart consistency sweep before pushing so docs, file names, function
   names, benchmark claims, and structural references still match the actual
   repo state.
