@@ -3,10 +3,10 @@ name: native-cpp-guard
 on:
   pull_request:
     branches:
-      - main_v.0.15.0
+      - main
   push:
     branches:
-      - main_v.0.15.0
+      - main
 
 permissions:
   contents: read
