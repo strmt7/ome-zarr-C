@@ -3,6 +3,11 @@
 This repository incrementally ports the frozen `ome/ome-zarr-py` `v0.15.0`
 snapshot to C++ without modifying the snapshot itself.
 
+Current `main` is still a transitional parity workspace with Python-oracle
+support. The intended end-state product is a standalone C++ implementation:
+Python may remain in this repo for parity tests, fixture generation, and
+benchmark comparison, but it is not the target runtime product.
+
 ## Primary goals
 
 1. Preserve exact behavioral parity with the frozen Python upstream.
@@ -124,18 +129,30 @@ snapshot to C++ without modifying the snapshot itself.
     then broaden only when evidence says the first pass is not enough. Saving
     tokens is not the goal by itself; the goal is to keep context high-signal
     without making assumptions.
+40. Treat GitHub `main` as the repository source of truth for shared state.
+    Local branches and local artifacts are disposable until their content is
+    reconciled with `origin/main`.
+41. Do not expand the Python runtime footprint of the shipped product. Python
+    wrappers, pybind bindings, and Python package metadata are transitional
+    development harnesses only and must not be mistaken for the intended final
+    delivery shape.
+42. When working on performance-sensitive native code, separate boundary
+    overhead from core semantics. Measure Python-visible paths with the repo
+    benchmark suite, and measure pure-native kernels with native-only tooling
+    before drawing optimization conclusions.
 
 ## Fast load order
 
 1. `docs/reference/architecture-first-porting.md`
-2. `docs/reference/pure-native-cpp-policy.md`
-3. `docs/reference/ai-agent-context-routing.md`
-4. `docs/reference/porting-contract.md`
-5. `docs/reference/ai-agent-dos-and-donts.md`
-6. `docs/reference/immutable-parity-proof.md`
-7. `docs/reference/ai-agent-skills.md`
-8. the touched upstream implementation file under `source_code_v.0.15.0/`
-9. the matching wrapper, C++ file, and nearest test module
+2. `docs/reference/standalone-cpp-target.md`
+3. `docs/reference/pure-native-cpp-policy.md`
+4. `docs/reference/ai-agent-context-routing.md`
+5. `docs/reference/porting-contract.md`
+6. `docs/reference/ai-agent-dos-and-donts.md`
+7. `docs/reference/immutable-parity-proof.md`
+8. `docs/reference/ai-agent-skills.md`
+9. the touched upstream implementation file under `source_code_v.0.15.0/`
+10. the matching wrapper, C++ file, and nearest test module
 
 ## Repository map
 
@@ -143,7 +160,7 @@ snapshot to C++ without modifying the snapshot itself.
 - `cpp/`: C++ implementations
 - `cpp/native/`: pure-native semantics only
 - `cpp/bindings/`: minimal Python boundary glue only
-- `ome_zarr_c/`: Python compatibility wrappers
+- `ome_zarr_c/`: transitional Python compatibility/oracle wrappers
 - `tests/`: parity and regression tests
 - `docs/`: repo rules, routing, and benchmarks
 - `.agents/skills/`: reusable repo-local workflows
@@ -166,6 +183,7 @@ timeout 180s .venv/bin/python -m pytest -q \
   tests/test_writer_equivalence.py
 .venv/bin/python scripts/check_native_cpp.py --all
 .venv/bin/python scripts/check_pure_native_cpp.py --enforce-pure-native-subtree --report-existing-debt
+.venv/bin/python scripts/check_repo_consistency.py
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ```

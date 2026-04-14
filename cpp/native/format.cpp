@@ -11,11 +11,6 @@ namespace {
 
 const std::array<std::string, 5> kFormatVersions = {"0.5", "0.4", "0.3", "0.2", "0.1"};
 
-template <typename T>
-bool any_false(const T& values) {
-    return std::any_of(values.begin(), values.end(), [](bool value) { return !value; });
-}
-
 std::optional<std::size_t> find_string_index(
     const std::vector<std::string>& values,
     std::string_view target) {
@@ -344,9 +339,9 @@ void validate_coordinate_transformations(
         int translation_index = -1;
         for (std::size_t index = 0; index < group.transformations.size(); ++index) {
             const auto& transformation = group.transformations[index];
-            if (transformation.type == "scale") {
+            if (transformation.kind == CoordinateTransformationKind::scale) {
                 scale_count += 1;
-            } else if (transformation.type == "translation") {
+            } else if (transformation.kind == CoordinateTransformationKind::translation) {
                 translation_count += 1;
                 translation_index = static_cast<int>(index);
             }
@@ -357,7 +352,7 @@ void validate_coordinate_transformations(
                 CoordinateTransformationsValidationErrorCode::invalid_scale_count,
                 group_index);
         }
-        if (group.transformations.front().type != "scale") {
+        if (group.transformations.front().kind != CoordinateTransformationKind::scale) {
             throw CoordinateTransformationsValidationError(
                 CoordinateTransformationsValidationErrorCode::first_not_scale,
                 group_index);
@@ -376,7 +371,7 @@ void validate_coordinate_transformations(
                 group_index,
                 0);
         }
-        if (any_false(first.scale_numeric)) {
+        if (!first.scale_all_numeric) {
             throw CoordinateTransformationsValidationError(
                 CoordinateTransformationsValidationErrorCode::scale_non_numeric,
                 group_index,
@@ -402,7 +397,7 @@ void validate_coordinate_transformations(
                     group_index,
                     static_cast<std::size_t>(translation_index));
             }
-            if (any_false(translation.translation_numeric)) {
+            if (!translation.translation_all_numeric) {
                 throw CoordinateTransformationsValidationError(
                     CoordinateTransformationsValidationErrorCode::translation_non_numeric,
                     group_index,

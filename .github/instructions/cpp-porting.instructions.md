@@ -5,9 +5,13 @@
   2. Maximize measured performance only after parity is already proven.
 - Do not modify the frozen upstream snapshot under `source_code_v.0.15.0/`.
 - Port one small upstream surface at a time.
-- Keep Python wrappers as thin compatibility layers.
+- Keep Python wrappers as thin transitional compatibility/oracle layers.
 - Keep real semantics in `cpp/native/` and limit Python binding glue to
   `cpp/bindings/` when there is no pragmatic alternative.
+- The target shipped product is standalone C++, not a Python adapter. Pybind
+  and Python package layers may remain temporarily for parity proof, but they
+  are transitional scaffolding and should not be expanded unless required to
+  validate behavior against the frozen upstream.
 - Prefer newer stable dependency versions when they unlock stronger native
   techniques or performance gains, but treat the upgrade as provisional until
   parity and benchmark validation are rerun successfully on that exact stack.
@@ -39,6 +43,9 @@
   to the smallest possible boundary instead of extending it.
 - After changing native code or extension build surfaces, rebuild the editable
   install before rerunning parity tests.
+- When working on pure-native performance, also use the standalone native build
+  and native benchmark tooling so Python-boundary overhead does not get
+  confused with core semantic cost.
 - Ruff is for Python files only in this repo. Never run Ruff against `cpp/` or
   any C/C++ file extension. If linting a subset, pass only Python or
   Markdown-like paths explicitly.
