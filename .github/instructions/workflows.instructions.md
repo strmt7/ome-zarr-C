@@ -2,9 +2,19 @@
 
 - Keep CI simple and directly tied to the current repo contract.
 - Protect the frozen snapshot from direct edits.
-- Keep the existing push, pull request, and manual triggers, but gate every job
-  with `github.ref_name == github.event.repository.default_branch` so non-
-  default refs do not consume runner minutes.
+- Keep the existing push, pull request, and manual triggers, but make every
+  push and pull-request workflow follow the same branch-gating pattern used in
+  `ZMB-UZH/omero-docker-extended`:
+  1. `on.push.branches` and `on.pull_request.branches` must both be pinned to
+     the repository's current default branch name.
+  2. every job must also keep
+     `github.ref_name == github.event.repository.default_branch`.
+- GitHub allows contexts and expressions in `jobs.<job_id>.if`, but branch
+  filters accept branch-name patterns, so the runtime default-branch check must
+  stay in the job guard while the trigger branch remains a literal branch name.
+- All workflows are included in this rule set with no exceptions.
+- If the repository default branch changes, update all workflow branch filters
+  in the same change and rerun the workflow contract test before pushing.
 - Use official stable GitHub Actions and current stable tool versions unless the
   repo deliberately pins otherwise.
 - Prefer narrow, trustworthy workflows over broad but noisy ones.
