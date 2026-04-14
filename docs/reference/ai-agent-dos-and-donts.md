@@ -34,6 +34,11 @@ porting work.
 - Prefer newer stable dependency versions when they enable better native
   implementation techniques or measurable speedups, but only keep the upgrade
   after rerunning parity and benchmark validation on the upgraded stack.
+- Use Ruff only for Python or Markdown-like files. If linting a subset, pass
+  those paths explicitly and keep `cpp/` out of the Ruff target list.
+- Do run a smart consistency sweep before pushing so docs, file names, function
+  names, benchmark claims, and structural references still match the actual
+  repo state.
 
 ## Don't
 
@@ -55,3 +60,8 @@ porting work.
 - Do not leave repo docs overstating coverage or verification.
 - Do not freeze old dependency versions out of convenience if a newer stable
   version would help parity-safe performance work and can be fully requalified.
+- Do not point Ruff at `cpp/` or any C/C++ file extension. Ruff is not a C++
+  linter in this repo.
+- Do not assume passing tests are enough to prove the repo is internally
+  consistent. Scan for stale names, removed files still mentioned in docs, and
+  other contract drift before pushing.

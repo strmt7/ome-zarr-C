@@ -68,7 +68,8 @@ Port in this order unless there is a compelling reason not to:
 - Treat runtime blockers as a stop sign for parity claims.
 - Update the docs whenever the proof boundary changes.
 - Move mixed legacy code toward `cpp/native/` plus `cpp/bindings/`, not toward
-  a larger monolithic `core.cpp`.
+  a larger monolithic mixed-export file like the historical `core.cpp`
+  pattern.
 
 ## Architectural don'ts
 

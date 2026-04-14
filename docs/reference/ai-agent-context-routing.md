@@ -3,12 +3,18 @@
 Use the smallest correct context for the task. Do not load the whole repo by
 default.
 
+That rule is about signal quality, not speed at all costs: load enough context
+to avoid assumptions, but do it deliberately instead of bulk-loading unrelated
+files.
+
 ## First-pass cap
 
 - Open at most 1 doc, 1 upstream implementation file, 1 local implementation
   file, 1 nearest test file, and 1 matching skill before broadening scope.
 - If the edit target and verification lane are still unclear after that first
   pass, summarize and add at most 3 more files.
+- If uncertainty remains after the first pass, broaden context before making a
+  claim. Narrow context is never an excuse to guess.
 
 ## Task routes
 

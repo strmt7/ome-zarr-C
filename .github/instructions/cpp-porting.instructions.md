@@ -39,5 +39,12 @@
   to the smallest possible boundary instead of extending it.
 - After changing native code or extension build surfaces, rebuild the editable
   install before rerunning parity tests.
+- Ruff is for Python files only in this repo. Never run Ruff against `cpp/` or
+  any C/C++ file extension. If linting a subset, pass only Python or
+  Markdown-like paths explicitly.
+- Before pushing, scan the touched implementation, tests, scripts, and docs for
+  stale or conflicting references such as removed file names, mismatched
+  function names, outdated benchmark/coverage claims, and contract drift
+  between code and documentation.
 - Add differential tests against the frozen snapshot before claiming parity.
 - Benchmark before claiming any performance improvement.

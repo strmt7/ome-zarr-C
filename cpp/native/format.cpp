@@ -422,38 +422,37 @@ void validate_well_v04(
     const auto row_index_found = find_string_index(rows, parts.row);
     if (!row_index_found.has_value()) {
         throw WellValidationError(
-            WellValidationErrorCode::row_missing, parts.row);
+            WellValidationErrorCode::row_missing, std::string(parts.row));
     }
     if (row_index != static_cast<std::int64_t>(row_index_found.value())) {
         throw WellValidationError(
-            WellValidationErrorCode::row_index_mismatch, parts.row);
+            WellValidationErrorCode::row_index_mismatch, std::string(parts.row));
     }
 
     const auto column_index_found = find_string_index(columns, parts.column);
     if (!column_index_found.has_value()) {
         throw WellValidationError(
-            WellValidationErrorCode::column_missing, parts.column);
+            WellValidationErrorCode::column_missing, std::string(parts.column));
     }
     if (column_index != static_cast<std::int64_t>(column_index_found.value())) {
         throw WellValidationError(
-            WellValidationErrorCode::column_index_mismatch, parts.column);
+            WellValidationErrorCode::column_index_mismatch, std::string(parts.column));
     }
 }
 
-WellPathParts split_well_path_for_validation(const std::string& path) {
+WellPathPartsView split_well_path_for_validation(std::string_view path) {
     const auto slash_index = path.find('/');
     if (slash_index == std::string::npos ||
         path.find('/', slash_index + 1) != std::string::npos ||
         slash_index == 0 ||
         slash_index == path.size() - 1) {
         throw WellValidationError(
-            WellValidationErrorCode::path_group_count, path);
+            WellValidationErrorCode::path_group_count, std::string(path));
     }
 
-    const std::string_view path_view(path);
-    return WellPathParts{
-        std::string(path_view.substr(0, slash_index)),
-        std::string(path_view.substr(slash_index + 1)),
+    return WellPathPartsView{
+        path.substr(0, slash_index),
+        path.substr(slash_index + 1),
     };
 }
 
@@ -465,13 +464,13 @@ WellDictV04 generate_well_v04(
     const auto row_index_found = find_string_index(rows, parts.row);
     if (!row_index_found.has_value()) {
         throw WellGenerationError(
-            WellGenerationErrorCode::row_missing, parts.row);
+            WellGenerationErrorCode::row_missing, std::string(parts.row));
     }
 
     const auto column_index_found = find_string_index(columns, parts.column);
     if (!column_index_found.has_value()) {
         throw WellGenerationError(
-            WellGenerationErrorCode::column_missing, parts.column);
+            WellGenerationErrorCode::column_missing, std::string(parts.column));
     }
 
     return WellDictV04{
@@ -481,7 +480,7 @@ WellDictV04 generate_well_v04(
     };
 }
 
-WellPathParts split_well_path_for_generation(const std::string& path) {
+WellPathPartsView split_well_path_for_generation(std::string_view path) {
     const auto slash_index = path.find('/');
     if (slash_index == std::string::npos) {
         throw WellGenerationError(
@@ -494,10 +493,9 @@ WellPathParts split_well_path_for_generation(const std::string& path) {
             "too many values to unpack (expected 2)");
     }
 
-    const std::string_view path_view(path);
-    return WellPathParts{
-        std::string(path_view.substr(0, slash_index)),
-        std::string(path_view.substr(slash_index + 1)),
+    return WellPathPartsView{
+        path.substr(0, slash_index),
+        path.substr(slash_index + 1),
     };
 }
 

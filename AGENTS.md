@@ -103,6 +103,27 @@ snapshot to C++ without modifying the snapshot itself.
 35. The rule against Python-object semantics applies retroactively to existing
     converted code as well as new work. Existing violations are remediation
     debt and must not be disguised as completed native conversion.
+36. Ruff is Python-only in this repository. Never point Ruff at `cpp/` or any
+    C/C++ file extension such as `*.cpp`, `*.hpp`, `*.cc`, `*.cxx`, or `*.h`.
+    If linting a subset, pass only Python or Markdown-like paths explicitly.
+    Use native checks, compiler/test validation, and C++-appropriate tooling
+    for C++ files instead.
+37. During local performance work, benchmark only the touched surface first by
+    using narrow `--suite`, `--group`, and `--match` filters together with
+    `--fast`, and keep exploratory runs under an explicit timeout. Do not kick
+    off broad multi-minute benchmark reruns unless they are needed for the
+    final performance claim or a deliberate benchmark artifact refresh.
+38. Before any push, perform a smart repo-wide consistency scan over the
+    touched surface and adjacent contract files. That scan must look for stale
+    or conflicting docs, mismatched file/function/module names, outdated
+    references to removed structures, benchmark or coverage claims that no
+    longer match committed artifacts, and similar internal drift. Do not treat
+    passing tests alone as proof that the repo text and structure are aligned.
+39. Use selective context loading on purpose. Start with the smallest
+    sufficient set of docs, code, tests, and skills needed to avoid guessing,
+    then broaden only when evidence says the first pass is not enough. Saving
+    tokens is not the goal by itself; the goal is to keep context high-signal
+    without making assumptions.
 
 ## Fast load order
 
@@ -150,4 +171,6 @@ timeout 180s .venv/bin/python -m pytest -q \
 ```
 
 Run only the narrowest relevant suites while iterating, but report exactly what
-was verified. Do not claim blocked store-backed lanes are green by implication.
+was verified. If running Ruff on a subset, pass only Python or Markdown-like
+paths explicitly and never include C++ files. Do not claim blocked
+store-backed lanes are green by implication.

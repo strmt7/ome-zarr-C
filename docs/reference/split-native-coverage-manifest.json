@@ -1,6 +1,6 @@
 {
   "metric_name": "split_native_coverage",
-  "description": "Count only upstream surfaces that are either routed through dedicated cpp/bindings entrypoints or implemented as thin Python orchestration over split binding/native surfaces, instead of mixed cpp/core.cpp exports.",
+  "description": "Count only upstream surfaces that are either routed through dedicated cpp/bindings entrypoints or implemented as thin Python orchestration over split binding/native surfaces, instead of the former mixed monolithic export pattern.",
   "upstream_root": "source_code_v.0.15.0/ome_zarr",
   "entries": [
     {"upstream_file": "axes.py", "qualname": "Axes.__init__", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/axes.cpp"]},
