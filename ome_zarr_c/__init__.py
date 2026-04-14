@@ -1,5 +1,10 @@
 """Native C++ conversion workspace for ome-zarr-py."""
 
+try:
+    from ._version import version as __version__
+except ImportError:
+    __version__ = "0+unknown"
+
 from .axes import KNOWN_AXES, Axes
 from .conversions import int_to_rgba, int_to_rgba_255, rgba_to_int
 from .csv import COLUMN_TYPES, csv_to_zarr, dict_to_zarr, parse_csv_value
@@ -49,6 +54,7 @@ __all__ = [
     "Reader",
     "Spec",
     "Well",
+    "__version__",
     "detect_format",
     "dict_to_zarr",
     "find_multiscales",

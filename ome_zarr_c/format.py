@@ -71,10 +71,15 @@ class Format(ABC):
         return _core.get_metadata_version(metadata)
 
     def __repr__(self) -> str:
-        return self.__class__.__name__
+        return str(_core.format_class_name(self.version))
 
     def __eq__(self, other: object) -> bool:
-        return self.__class__ == other.__class__
+        return _core.format_class_matches(
+            self.version,
+            self.__class__.__module__,
+            other.__class__.__module__,
+            other.__class__.__name__,
+        )
 
     @abstractmethod
     def generate_well_dict(

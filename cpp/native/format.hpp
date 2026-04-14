@@ -167,6 +167,13 @@ int format_zarr_format(const std::string& version);
 
 ChunkKeyEncoding format_chunk_key_encoding(const std::string& version);
 
+std::string format_class_name(const std::string& version);
+bool format_class_matches(
+    const std::string& version,
+    const std::string& self_module,
+    const std::string& other_module,
+    const std::string& other_name);
+
 FormatInitStorePlan format_init_store_plan(
     const std::string& path,
     const std::string& mode);

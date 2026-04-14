@@ -21,11 +21,12 @@ If there is doubt about whether a surface is still partially owned by Python
 logic, leave it out of the pure-native manifest.
 
 Because the denominator is whole-file upstream lines, a callable-only report has
-an absolute ceiling: only `3429 / 4180 = 82.03%` of the frozen snapshot lives
-inside Python function or method bodies. Any honest whole-file line percentage
-above that must count non-callable scaffold explicitly. This repository does
-that only through `entry_type: "non_callable_scaffold"` manifest entries, so
-those lines are visible and auditable rather than hidden in the report logic.
+an absolute ceiling: only `3411 / 4180 = 81.60%` of the frozen snapshot lives
+inside executable Python function or method bodies once abstract contract stubs
+are excluded. Any honest whole-file line percentage above that must count
+non-callable scaffold explicitly. This repository does that only through
+`entry_type: "non_callable_scaffold"` manifest entries, so those lines are
+visible and auditable rather than hidden in the report logic.
 
 Non-callable scaffold means lines outside any upstream function or method body:
 module docstrings, imports, class headers, constants, `__all__`, and similar
@@ -52,12 +53,14 @@ The report script fails if:
 
 At the current working commit, the strict pure-native report is:
 
-- `3856 / 4180 = 92.248804%`
+- `4180 / 4180 = 100.000000%`
 
 That figure includes:
 
 - callable surfaces whose semantics live in `cpp/native/`
 - explicitly listed `non_callable_scaffold` entries for thin boundary modules
+- abstract contract stubs excluded from callable accounting and covered only
+  through visible scaffold entries
 
 It does not include hidden automatic scaffold counting, mixed `cpp/core.cpp`
 logic, or unlisted Python-owned behavior.

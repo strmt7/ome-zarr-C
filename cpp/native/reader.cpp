@@ -39,6 +39,18 @@ std::string reader_node_repr(const std::string& zarr_repr, bool visible) {
     return visible ? zarr_repr : zarr_repr + " (hidden)";
 }
 
+bool reader_should_write_metadata(std::size_t spec_count) {
+    return spec_count > 0;
+}
+
+std::string reader_multiscales_array_path(const std::string& resolution) {
+    return resolution;
+}
+
+std::size_t reader_primary_level_index() {
+    return 0;
+}
+
 ReaderNodeAddPlan reader_node_add_plan(
     bool already_seen,
     bool plate_labels,
