@@ -185,6 +185,32 @@ ChunkKeyEncoding format_chunk_key_encoding(const std::string& version) {
     return {"v2", "/"};
 }
 
+std::string format_class_name(const std::string& version) {
+    const std::string normalized = normalize_known_format_version(version);
+    if (normalized == "0.1") {
+        return "FormatV01";
+    }
+    if (normalized == "0.2") {
+        return "FormatV02";
+    }
+    if (normalized == "0.3") {
+        return "FormatV03";
+    }
+    if (normalized == "0.4") {
+        return "FormatV04";
+    }
+    return "FormatV05";
+}
+
+bool format_class_matches(
+    const std::string& version,
+    const std::string& self_module,
+    const std::string& other_module,
+    const std::string& other_name) {
+    return self_module == other_module &&
+           other_name == format_class_name(version);
+}
+
 FormatInitStorePlan format_init_store_plan(
     const std::string& path,
     const std::string& mode) {

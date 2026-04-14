@@ -121,8 +121,7 @@ class Node:
         return node
 
     def write_metadata(self, metadata: JSONDict) -> None:
-        for _spec in self.specs:
-            metadata.update(self.zarr.root_attrs)
+        _core.reader_write_metadata(metadata, self.zarr.root_attrs, len(self.specs))
 
     def __repr__(self) -> str:
         return str(_core.reader_node_repr(self.zarr, self.visible))
@@ -235,7 +234,7 @@ class Multiscales(Spec):
             node.add(child_zarr, visibility=False)
 
     def array(self, resolution: str) -> da.core.Array:
-        return self.zarr.load(resolution)
+        return _core.reader_multiscales_array(self.zarr, resolution)
 
 
 class OMERO(Spec):
@@ -409,7 +408,7 @@ class Plate(Spec):
         node.metadata.update({"metadata": {"plate": self.plate_data}})
 
     def get_numpy_type(self, image_node: Node) -> np.dtype:
-        return image_node.data[0].dtype
+        return _core.reader_primary_level_dtype(image_node.data)
 
     def get_tile_path(self, level: int, row: int, col: int) -> str:
         return str(

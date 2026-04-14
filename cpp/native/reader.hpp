@@ -23,6 +23,12 @@ std::vector<std::string> reader_labels_names(const std::vector<std::string>& lab
 
 std::string reader_node_repr(const std::string& zarr_repr, bool visible);
 
+bool reader_should_write_metadata(std::size_t spec_count);
+
+std::string reader_multiscales_array_path(const std::string& resolution);
+
+std::size_t reader_primary_level_index();
+
 struct ReaderNodeAddPlan {
     bool should_add;
     bool visibility;

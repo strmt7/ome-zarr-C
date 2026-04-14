@@ -21,24 +21,51 @@ class Span:
         return self.end - self.start + 1
 
 
-def build_qualname_spans(source: str) -> dict[str, Span]:
+def is_contract_stub(node: ast.AST) -> bool:
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return False
+    if any(
+        isinstance(decorator, ast.Name) and decorator.id == "abstractmethod"
+        for decorator in node.decorator_list
+    ):
+        return True
+    body = list(node.body)
+    if len(body) != 1:
+        return False
+    stmt = body[0]
+    if not isinstance(stmt, ast.Raise):
+        return False
+    exc = stmt.exc
+    if isinstance(exc, ast.Call):
+        exc = exc.func
+    return isinstance(exc, ast.Name) and exc.id == "NotImplementedError"
+
+
+def build_qualname_spans(source: str) -> tuple[dict[str, Span], dict[str, bool]]:
     tree = ast.parse(source)
     spans: dict[str, Span] = {}
+    executable: dict[str, bool] = {}
 
     def walk(node: ast.AST, prefix: str = "") -> None:
         for child in ast.iter_child_nodes(node):
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 spans[prefix + child.name] = Span(child.lineno, child.end_lineno)
+                executable[prefix + child.name] = not is_contract_stub(child)
             elif isinstance(child, ast.ClassDef):
                 walk(child, prefix=f"{prefix}{child.name}.")
 
     walk(tree)
-    return spans
+    return spans, executable
 
 
-def callable_line_numbers(spans: dict[str, Span]) -> set[int]:
+def callable_line_numbers(
+    spans: dict[str, Span],
+    executable: dict[str, bool],
+) -> set[int]:
     line_numbers: set[int] = set()
-    for span in spans.values():
+    for qualname, span in spans.items():
+        if not executable.get(qualname, True):
+            continue
         line_numbers.update(range(span.start, span.end + 1))
     return line_numbers
 
@@ -78,7 +105,7 @@ def main() -> int:
     upstream_root = repo_root / manifest["upstream_root"]
     entries = manifest["entries"]
 
-    cache: dict[str, dict[str, Span]] = {}
+    cache: dict[str, tuple[dict[str, Span], dict[str, bool]]] = {}
     resolved_entries: list[dict[str, Any]] = []
     total_converted = 0
 
@@ -97,18 +124,21 @@ def main() -> int:
             entry["upstream_file"],
             build_qualname_spans(upstream_file.read_text()),
         )
+        qualname_spans, executable = spans
         if entry_type == "qualname":
             qualname = entry["qualname"]
-            if qualname not in spans:
+            if qualname not in qualname_spans:
                 upstream_file_name = entry["upstream_file"]
                 raise SystemExit(
                     "missing qualname "
                     f"{qualname!r} in upstream file {upstream_file_name}"
                 )
-            line_count = spans[qualname].line_count
+            line_count = qualname_spans[qualname].line_count
         elif entry_type == "non_callable_scaffold":
             total_lines = len(upstream_file.read_text().splitlines())
-            line_count = total_lines - len(callable_line_numbers(spans))
+            line_count = total_lines - len(
+                callable_line_numbers(qualname_spans, executable)
+            )
             if line_count < 0:
                 raise SystemExit(
                     f"negative non-callable scaffold count for {entry['upstream_file']}"

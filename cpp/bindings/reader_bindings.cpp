@@ -87,6 +87,28 @@ py::str reader_node_repr(const py::object& zarr, bool visible) {
         visible));
 }
 
+void reader_write_metadata(
+    py::dict metadata,
+    const py::dict& root_attrs,
+    std::size_t spec_count) {
+    if (ome_zarr_c::native_code::reader_should_write_metadata(spec_count)) {
+        metadata.attr("update")(root_attrs);
+    }
+}
+
+py::object reader_multiscales_array(
+    const py::object& zarr,
+    const std::string& resolution) {
+    return zarr.attr("load")(
+        py::str(ome_zarr_c::native_code::reader_multiscales_array_path(resolution)));
+}
+
+py::object reader_primary_level_dtype(const py::sequence& data) {
+    const auto index = ome_zarr_c::native_code::reader_primary_level_index();
+    py::object level = py::reinterpret_borrow<py::object>(data[py::int_(index)]);
+    return level.attr("dtype");
+}
+
 py::dict reader_node_add_payload(
     bool already_seen,
     bool plate_labels,
@@ -603,6 +625,18 @@ void register_reader_bindings(py::module_& m) {
     m.def("reader_matches_well", &reader_matches_well, py::arg("zarr"));
     m.def("reader_labels_names", &reader_labels_names, py::arg("root_attrs"));
     m.def("reader_node_repr", &reader_node_repr, py::arg("zarr"), py::arg("visible"));
+    m.def("reader_write_metadata",
+          &reader_write_metadata,
+          py::arg("metadata"),
+          py::arg("root_attrs"),
+          py::arg("spec_count"));
+    m.def("reader_multiscales_array",
+          &reader_multiscales_array,
+          py::arg("zarr"),
+          py::arg("resolution"));
+    m.def("reader_primary_level_dtype",
+          &reader_primary_level_dtype,
+          py::arg("data"));
     m.def("reader_node_add_payload",
           &reader_node_add_payload,
           py::arg("already_seen"),

@@ -277,6 +277,22 @@ py::dict format_chunk_key_encoding(const std::string& version) {
     return encoding;
 }
 
+py::str format_class_name(const std::string& version) {
+    return py::str(ome_zarr_c::native_code::format_class_name(version));
+}
+
+bool format_class_matches(
+    const std::string& version,
+    const std::string& self_module,
+    const std::string& other_module,
+    const std::string& other_name) {
+    return ome_zarr_c::native_code::format_class_matches(
+        version,
+        self_module,
+        other_module,
+        other_name);
+}
+
 py::object format_init_store(const std::string& path, const std::string& mode = "r") {
     const auto plan = ome_zarr_c::native_code::format_init_store_plan(path, mode);
     if (plan.use_fsspec) {
@@ -571,6 +587,13 @@ void register_format_bindings(py::module_& m) {
     m.def("format_matches", &format_matches, py::arg("version"), py::arg("metadata"));
     m.def("format_zarr_format", &format_zarr_format, py::arg("version"));
     m.def("format_chunk_key_encoding", &format_chunk_key_encoding, py::arg("version"));
+    m.def("format_class_name", &format_class_name, py::arg("version"));
+    m.def("format_class_matches",
+          &format_class_matches,
+          py::arg("version"),
+          py::arg("self_module"),
+          py::arg("other_module"),
+          py::arg("other_name"));
     m.def("format_init_store", &format_init_store, py::arg("path"), py::arg("mode") = "r");
     m.def("generate_well_dict_v04", &generate_well_dict_v04);
     m.def("validate_well_dict_v01", &validate_well_dict_v01);

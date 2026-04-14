@@ -190,6 +190,12 @@ def _call(func, *args, **kwargs):
         return err(exc)
 
 
+def _assert_result_match(py_func, cpp_func, *args, **kwargs) -> None:
+    expected = _call(py_func, *args, **kwargs)
+    actual = _call(cpp_func, *args, **kwargs)
+    assert expected == actual
+
+
 def _build_image_tree() -> FakeHierarchy:
     hierarchy = FakeHierarchy()
     image0 = da.from_array(
@@ -429,3 +435,50 @@ def test_reader_matches_upstream_for_raw_zarray_and_ignored_nodes() -> None:
     expected_ignored = _call(_reader_signature, _py_reader, ignored)
     actual_ignored = _call(_reader_signature, _cpp_reader, ignored)
     assert expected_ignored == actual_ignored
+
+
+def test_reader_methods_match_upstream_for_metadata_array_and_dtype() -> None:
+    image_hierarchy = _build_image_tree()
+    image_zarr = image_hierarchy.nodes["/dataset"]
+    py_image_node = _py_reader.Node(image_zarr, [])
+    cpp_image_node = _cpp_reader.Node(image_zarr, [])
+
+    py_metadata = {"existing": "value"}
+    cpp_metadata = {"existing": "value"}
+    py_image_node.write_metadata(py_metadata)
+    cpp_image_node.write_metadata(cpp_metadata)
+    assert _normalize(py_metadata) == _normalize(cpp_metadata)
+
+    py_multiscales = py_image_node.first(_py_reader.Multiscales)
+    cpp_multiscales = cpp_image_node.first(_cpp_reader.Multiscales)
+    assert py_multiscales is not None
+    assert cpp_multiscales is not None
+    for resolution in ("0", "1"):
+        assert _array_signature(py_multiscales.array(resolution)) == _array_signature(
+            cpp_multiscales.array(resolution)
+        )
+    _assert_result_match(py_multiscales.array, cpp_multiscales.array, "missing")
+
+    _, raw, _ = _build_raw_and_ignored_tree()
+    py_raw_node = _py_reader.Node(raw, [])
+    cpp_raw_node = _cpp_reader.Node(raw, [])
+    py_raw_metadata = {"existing": "value"}
+    cpp_raw_metadata = {"existing": "value"}
+    py_raw_node.write_metadata(py_raw_metadata)
+    cpp_raw_node.write_metadata(cpp_raw_metadata)
+    assert _normalize(py_raw_metadata) == _normalize(cpp_raw_metadata)
+
+    hcs_hierarchy = _build_hcs_tree()
+    plate_zarr = hcs_hierarchy.nodes["/plate"]
+    image_zarr = hcs_hierarchy.nodes["/plate/A/1/0"]
+    py_plate_node = _py_reader.Node(plate_zarr, [])
+    cpp_plate_node = _cpp_reader.Node(plate_zarr, [])
+    py_image_node = _py_reader.Node(image_zarr, [])
+    cpp_image_node = _cpp_reader.Node(image_zarr, [])
+    py_plate = py_plate_node.first(_py_reader.Plate)
+    cpp_plate = cpp_plate_node.first(_cpp_reader.Plate)
+    assert py_plate is not None
+    assert cpp_plate is not None
+    assert py_plate.get_numpy_type(py_image_node) == cpp_plate.get_numpy_type(
+        cpp_image_node
+    )

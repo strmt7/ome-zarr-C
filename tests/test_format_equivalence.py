@@ -299,3 +299,16 @@ def test_validate_coordinate_transformations_match_upstream() -> None:
                 nlevels,
                 payload,
             )
+
+
+def test_format_repr_and_equality_match_upstream() -> None:
+    for py_cls, cpp_cls in zip(PY_FORMAT_TYPES, CPP_FORMAT_TYPES, strict=True):
+        py_fmt = py_cls()
+        cpp_fmt = cpp_cls()
+        assert repr(py_fmt) == repr(cpp_fmt)
+        assert (py_fmt == py_cls()) == (cpp_fmt == cpp_cls())
+        assert (py_fmt == object()) == (cpp_fmt == object())
+
+    for py_left, cpp_left in zip(PY_FORMAT_TYPES, CPP_FORMAT_TYPES, strict=True):
+        for py_right, cpp_right in zip(PY_FORMAT_TYPES, CPP_FORMAT_TYPES, strict=True):
+            assert (py_left() == py_right()) == (cpp_left() == cpp_right())

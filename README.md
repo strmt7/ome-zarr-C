@@ -130,7 +130,7 @@ for claims about real native semantic ownership.
 
 Current committed manifest:
 
-- `3856 / 4180 = 92.248804%` pure-native coverage
+- `4180 / 4180 = 100.000000%` pure-native coverage
 
 ## Dependency-Sensitive Surfaces
 
