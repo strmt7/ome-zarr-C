@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   native-cpp-guard:
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
