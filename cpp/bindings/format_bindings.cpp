@@ -125,6 +125,170 @@ py::object mapping_version_or_none(const py::object& mapping_like) {
     return mapping_like.attr("get")(py::str("version"), py::none());
 }
 
+bool is_number_like(const py::handle& value) {
+    return PyFloat_Check(value.ptr()) || PyLong_Check(value.ptr());
+}
+
+std::vector<ome_zarr_c::native_code::CoordinateTransformationsValidationInput>
+build_validation_inputs_slow(const py::list& coordinate_transformations) {
+    std::vector<ome_zarr_c::native_code::CoordinateTransformationsValidationInput>
+        native_groups;
+    native_groups.reserve(py::len(coordinate_transformations));
+
+    for (const py::handle& transformations_handle : coordinate_transformations) {
+        py::list transformations = py::cast<py::list>(transformations_handle);
+        ome_zarr_c::native_code::CoordinateTransformationsValidationInput native_group;
+        native_group.transformations.reserve(py::len(transformations));
+
+        for (const py::handle& transformation_handle : transformations) {
+            py::dict transformation = py::cast<py::dict>(transformation_handle);
+            ome_zarr_c::native_code::CoordinateTransformationValidationInput
+                native_transformation;
+            native_transformation.has_type = false;
+            native_transformation.has_scale = false;
+            native_transformation.scale_length = 0;
+            native_transformation.has_translation = false;
+            native_transformation.translation_length = 0;
+
+            py::object type = dict_get_item_or_none(transformation, "type");
+            if (!type.is_none()) {
+                native_transformation.has_type = true;
+                native_transformation.type = py::cast<std::string>(type);
+            }
+
+            PyObject* scale_obj = PyDict_GetItemString(transformation.ptr(), "scale");
+            if (scale_obj != nullptr) {
+                native_transformation.has_scale = true;
+                py::object scale_holder =
+                    py::reinterpret_borrow<py::object>(scale_obj);
+                py::sequence scale_values = py::cast<py::sequence>(scale_holder);
+                native_transformation.scale_length = py::len(scale_values);
+                native_transformation.scale_numeric.reserve(native_transformation.scale_length);
+                for (const py::handle& value : scale_values) {
+                    native_transformation.scale_numeric.push_back(is_number_like(value));
+                }
+            }
+
+            PyObject* translation_obj =
+                PyDict_GetItemString(transformation.ptr(), "translation");
+            if (translation_obj != nullptr) {
+                native_transformation.has_translation = true;
+                py::object translation_holder =
+                    py::reinterpret_borrow<py::object>(translation_obj);
+                py::sequence translation_values =
+                    py::cast<py::sequence>(translation_holder);
+                native_transformation.translation_length = py::len(translation_values);
+                native_transformation.translation_numeric.reserve(
+                    native_transformation.translation_length);
+                for (const py::handle& value : translation_values) {
+                    native_transformation.translation_numeric.push_back(
+                        is_number_like(value));
+                }
+            }
+
+            native_group.transformations.push_back(std::move(native_transformation));
+        }
+
+        native_groups.push_back(std::move(native_group));
+    }
+
+    return native_groups;
+}
+
+std::optional<
+    std::vector<ome_zarr_c::native_code::CoordinateTransformationsValidationInput>>
+build_validation_inputs_fast(const py::list& coordinate_transformations) {
+    std::vector<ome_zarr_c::native_code::CoordinateTransformationsValidationInput>
+        native_groups;
+    native_groups.reserve(static_cast<std::size_t>(PyList_GET_SIZE(coordinate_transformations.ptr())));
+
+    PyObject* groups_obj = coordinate_transformations.ptr();
+    const auto group_count = static_cast<std::size_t>(PyList_GET_SIZE(groups_obj));
+    for (std::size_t group_index = 0; group_index < group_count; ++group_index) {
+        PyObject* transformations_obj =
+            PyList_GET_ITEM(groups_obj, static_cast<Py_ssize_t>(group_index));
+        if (!PyList_Check(transformations_obj)) {
+            return std::nullopt;
+        }
+
+        ome_zarr_c::native_code::CoordinateTransformationsValidationInput native_group;
+        const auto transformation_count =
+            static_cast<std::size_t>(PyList_GET_SIZE(transformations_obj));
+        native_group.transformations.reserve(transformation_count);
+
+        for (std::size_t index = 0; index < transformation_count; ++index) {
+            PyObject* transformation_obj =
+                PyList_GET_ITEM(transformations_obj, static_cast<Py_ssize_t>(index));
+            if (!PyDict_Check(transformation_obj)) {
+                return std::nullopt;
+            }
+
+            ome_zarr_c::native_code::CoordinateTransformationValidationInput
+                native_transformation;
+            native_transformation.has_type = false;
+            native_transformation.has_scale = false;
+            native_transformation.scale_length = 0;
+            native_transformation.has_translation = false;
+            native_transformation.translation_length = 0;
+
+            PyObject* type_obj = PyDict_GetItemString(transformation_obj, "type");
+            if (type_obj != nullptr && type_obj != Py_None) {
+                native_transformation.has_type = true;
+                if (PyUnicode_Check(type_obj)) {
+                    Py_ssize_t type_size = 0;
+                    const char* type_text = PyUnicode_AsUTF8AndSize(type_obj, &type_size);
+                    if (type_text == nullptr) {
+                        throw py::error_already_set();
+                    }
+                    native_transformation.type.assign(
+                        type_text, static_cast<std::size_t>(type_size));
+                } else {
+                    py::object type_holder = py::reinterpret_borrow<py::object>(type_obj);
+                    native_transformation.type = py::cast<std::string>(type_holder);
+                }
+            }
+
+            for (const auto& [key, has_field, length_field, numeric_field] :
+                 std::initializer_list<std::tuple<const char*,
+                                                  bool&,
+                                                  std::size_t&,
+                                                  std::vector<bool>&>>{
+                     {"scale",
+                      native_transformation.has_scale,
+                      native_transformation.scale_length,
+                      native_transformation.scale_numeric},
+                     {"translation",
+                      native_transformation.has_translation,
+                      native_transformation.translation_length,
+                      native_transformation.translation_numeric}}) {
+                PyObject* value_obj = PyDict_GetItemString(transformation_obj, key);
+                if (value_obj == nullptr) {
+                    continue;
+                }
+                PyObject* fast = PySequence_Fast(value_obj, "expected a sequence");
+                if (fast == nullptr) {
+                    PyErr_Clear();
+                    return std::nullopt;
+                }
+                py::object fast_holder = py::reinterpret_steal<py::object>(fast);
+                has_field = true;
+                length_field = static_cast<std::size_t>(PySequence_Fast_GET_SIZE(fast_holder.ptr()));
+                numeric_field.reserve(length_field);
+                PyObject** items = PySequence_Fast_ITEMS(fast_holder.ptr());
+                for (std::size_t value_index = 0; value_index < length_field; ++value_index) {
+                    numeric_field.push_back(is_number_like(py::handle(items[value_index])));
+                }
+            }
+
+            native_group.transformations.push_back(std::move(native_transformation));
+        }
+
+        native_groups.push_back(std::move(native_group));
+    }
+
+    return native_groups;
+}
+
 py::object get_metadata_version_object(py::dict metadata) {
     py::object multiscales = dict_get_item_or_none(metadata, "multiscales");
     if (!multiscales.is_none() && ome_zarr_c::bindings::object_truthy(multiscales)) {
@@ -211,10 +375,6 @@ ome_zarr_c::native_code::MetadataSummary metadata_summary_from_dict(
     }
 
     return summary;
-}
-
-bool is_number_like(const py::handle& value) {
-    return PyFloat_Check(value.ptr()) || PyLong_Check(value.ptr());
 }
 
 [[noreturn]] void raise_coordinate_transformations_validation_error(
@@ -607,65 +767,9 @@ void validate_coordinate_transformations(
     }
 
     py::list coordinate_transformations = py::cast<py::list>(coordinate_transformations_obj);
-    std::vector<ome_zarr_c::native_code::CoordinateTransformationsValidationInput>
-        native_groups;
-    native_groups.reserve(py::len(coordinate_transformations));
-
-    for (const py::handle& transformations_handle : coordinate_transformations) {
-        py::list transformations = py::cast<py::list>(transformations_handle);
-        ome_zarr_c::native_code::CoordinateTransformationsValidationInput native_group;
-        native_group.transformations.reserve(py::len(transformations));
-
-        for (const py::handle& transformation_handle : transformations) {
-            py::dict transformation = py::cast<py::dict>(transformation_handle);
-            ome_zarr_c::native_code::CoordinateTransformationValidationInput
-                native_transformation;
-            native_transformation.has_type = false;
-            native_transformation.has_scale = false;
-            native_transformation.scale_length = 0;
-            native_transformation.has_translation = false;
-            native_transformation.translation_length = 0;
-
-            py::object type = dict_get_item_or_none(transformation, "type");
-            if (!type.is_none()) {
-                native_transformation.has_type = true;
-                native_transformation.type = py::cast<std::string>(type);
-            }
-
-            PyObject* scale_obj = PyDict_GetItemString(transformation.ptr(), "scale");
-            if (scale_obj != nullptr) {
-                native_transformation.has_scale = true;
-                py::object scale_holder =
-                    py::reinterpret_borrow<py::object>(scale_obj);
-                py::sequence scale_values = py::cast<py::sequence>(scale_holder);
-                native_transformation.scale_length = py::len(scale_values);
-                native_transformation.scale_numeric.reserve(native_transformation.scale_length);
-                for (const py::handle& value : scale_values) {
-                    native_transformation.scale_numeric.push_back(is_number_like(value));
-                }
-            }
-
-            PyObject* translation_obj = PyDict_GetItemString(transformation.ptr(), "translation");
-            if (translation_obj != nullptr) {
-                native_transformation.has_translation = true;
-                py::object translation_holder =
-                    py::reinterpret_borrow<py::object>(translation_obj);
-                py::sequence translation_values =
-                    py::cast<py::sequence>(translation_holder);
-                native_transformation.translation_length = py::len(translation_values);
-                native_transformation.translation_numeric.reserve(
-                    native_transformation.translation_length);
-                for (const py::handle& value : translation_values) {
-                    native_transformation.translation_numeric.push_back(
-                        is_number_like(value));
-                }
-            }
-
-            native_group.transformations.push_back(std::move(native_transformation));
-        }
-
-        native_groups.push_back(std::move(native_group));
-    }
+    auto native_groups =
+        build_validation_inputs_fast(coordinate_transformations).value_or(
+            build_validation_inputs_slow(coordinate_transformations));
 
     try {
         ome_zarr_c::native_code::validate_coordinate_transformations(

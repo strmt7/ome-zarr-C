@@ -14,6 +14,12 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
   benchmark validation before they are accepted.
 - Python objects are not allowed in C++ semantic code unless the boundary is
   proven unavoidable and isolated to minimal binding glue.
+- Ruff is Python-only. Never target `cpp/` or C/C++ files with Ruff; use
+  native checks, compiler/test validation, and C++-appropriate tooling
+  instead.
+- Before pushing, perform a repo-consistency sweep over the touched code,
+  tests, scripts, and docs so stale names, outdated references, and contract
+  drift do not get published just because tests passed.
 - Differential tests are required for ported surfaces.
 - Benchmarks are required before claiming speedups.
 - Use repo-local skills under `.agents/skills/` when they fit the task.

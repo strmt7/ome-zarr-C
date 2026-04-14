@@ -34,3 +34,12 @@ Use the nearest matching skill before inventing a workflow from scratch. For
 pushes made by an AI agent, `verification-loop` includes waiting for the remote
 workflow set on the pushed commit, and it assumes exact failing run logs are
 inspected before a CI fix is attempted.
+
+The expected balance is:
+
+- use `context-budget` to avoid bulk-loading irrelevant files
+- use `search-first` and `source-audit` to replace guessing with targeted evidence
+- use `verification-loop` before claiming completion
+
+Selective loading is required, but it must never be used as an excuse to make
+assumptions that a slightly broader targeted read would have resolved.

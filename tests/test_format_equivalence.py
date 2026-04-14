@@ -131,6 +131,36 @@ def test_format_properties_and_matches_align() -> None:
             assert py_fmt.matches(metadata) == cpp_fmt.matches(metadata)
 
 
+def test_format_matches_logging_matches_upstream(monkeypatch) -> None:
+    metadata_cases = [
+        {"multiscales": [{"version": "0.4"}]},
+        {"multiscales": [{"version": 0.4}]},
+        {"plate": {}},
+    ]
+
+    for py_cls, cpp_cls in zip(PY_FORMAT_TYPES, CPP_FORMAT_TYPES, strict=True):
+        for metadata in metadata_cases:
+            py_calls: list[tuple[object, ...]] = []
+            cpp_calls: list[tuple[object, ...]] = []
+
+            monkeypatch.setattr(
+                _py_format.LOGGER,
+                "debug",
+                lambda *args, py_calls=py_calls: py_calls.append(args),
+            )
+            monkeypatch.setattr(
+                _cpp_format.LOGGER,
+                "debug",
+                lambda *args, cpp_calls=cpp_calls: cpp_calls.append(args),
+            )
+
+            py_result = py_cls().matches(metadata)
+            cpp_result = cpp_cls().matches(metadata)
+
+            assert py_result == cpp_result
+            assert py_calls == cpp_calls
+
+
 def test_generate_well_dict_matches_upstream() -> None:
     py_fmt = _py_format.FormatV04()
     cpp_fmt = _cpp_format.FormatV04()

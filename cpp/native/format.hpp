@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ome_zarr_c::native_code {
@@ -111,6 +112,11 @@ struct WellPathParts {
     std::string column;
 };
 
+struct WellPathPartsView {
+    std::string_view row;
+    std::string_view column;
+};
+
 enum class WellValidationErrorCode {
     path_group_count,
     row_missing,
@@ -203,9 +209,9 @@ void validate_well_v04(
     const std::vector<std::string>& rows,
     const std::vector<std::string>& columns);
 
-WellPathParts split_well_path_for_validation(const std::string& path);
+WellPathPartsView split_well_path_for_validation(std::string_view path);
 
-WellPathParts split_well_path_for_generation(const std::string& path);
+WellPathPartsView split_well_path_for_generation(std::string_view path);
 
 WellDictV04 generate_well_v04(
     const std::string& path,

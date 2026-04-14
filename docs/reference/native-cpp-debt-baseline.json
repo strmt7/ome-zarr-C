@@ -1,11 +1,4 @@
 {
-  "allowed_files": [
-    "cpp/core.cpp"
-  ],
-  "max_counts": {
-    "py-namespace": 941,
-    "pybind-include": 1,
-    "python-attr-dispatch": 272,
-    "python-c-api": 20
-  }
+  "allowed_files": [],
+  "max_counts": {}
 }

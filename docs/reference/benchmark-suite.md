@@ -71,6 +71,19 @@ In simple terms, those abstract members are excluded because there is no direct
 implementation to time. The suite benchmarks the concrete methods that users
 actually execute instead.
 
+## Fast Iteration Policy
+
+Use short, focused runs while iterating on a specific hotspot:
+
+- restrict the run with `--suite`, `--group`, and/or `--match`
+- use `--fast` for exploratory measurement
+- wrap exploratory local runs in an explicit timeout such as `timeout 180s`
+- only rerun a broad suite when you need a final repo artifact or a broader
+  claim than the touched surface justifies
+
+This keeps routine performance debugging from turning into repeated multi-minute
+waits while still preserving a real `pyperf` measurement path.
+
 ## Benchmark Layout
 
 - `benchmarks/catalog.py`: suite registry for `core`, `public-api`, and `realdata`
@@ -258,6 +271,16 @@ Run the public-API suite:
   --output /tmp/ome-zarr-c-bench-public-api.json
 ```
 
+Run only the format cases in the public API suite during iteration:
+
+```bash
+timeout 180s .venv/bin/python -m benchmarks.run \
+  --suite public-api \
+  --match format \
+  --fast \
+  --output /tmp/ome-zarr-c-bench-public-api-format.json
+```
+
 Run the default real-data suite:
 
 ```bash
@@ -279,9 +302,10 @@ Render the paired summary:
   --markdown-out /tmp/ome-zarr-c-bench.md
 ```
 
-Generated JSON and markdown benchmark outputs are local artifacts under
-`benchmarks/results/`. That directory stays gitignored because the numbers are
-machine-dependent.
+Generated JSON and markdown benchmark outputs are typically written under
+`benchmarks/results/`. This repository keeps selected benchmark snapshots there
+as tracked reference artifacts, while temporary exploratory outputs may still
+live under `/tmp/` or another local scratch path.
 
 ## Current Snapshot
 
@@ -318,6 +342,19 @@ Interpretation:
 - The strongest gains are in arithmetic-heavy conversion and array-shaping
   kernels.
 - The meso compute slice is modestly faster overall on the current machine.
+
+Latest focused format-only fast slice on `2026-04-14`:
+
+- artifact: `benchmarks/results/format-slice-v4-report.md`
+- `4` paired cases, geometric-mean speedup `0.887x`
+- `dispatch`: `1.059x`
+- `matches`: `0.876x`
+- `v01_init_store`: `0.970x`
+- `well_and_coord`: `0.688x`
+
+That focused slice is better than the earlier committed format slices, but the
+format path is still not a net win overall on this machine and remains the
+highest-value optimization target.
 - The broad suite-level picture was still near-flat in the last completed
   all-suite run, so targeted wins should not be overstated as package-wide wins.
 - Boundary-heavy helper and format paths are still the main performance drag.

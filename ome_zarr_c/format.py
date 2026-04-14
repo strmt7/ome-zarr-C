@@ -126,9 +126,9 @@ class _VersionedFormat(Format):
         return dict(self._CHUNK_KEY_ENCODING)
 
     def matches(self, metadata: dict) -> bool:
-        version, matched = _core.format_match_details(self.version, metadata)
+        version = _core.get_metadata_version(metadata)
         LOGGER.debug("%s matches %s?", self.version, version)
-        return bool(matched)
+        return version == self.version
 
 
 class FormatV01(_VersionedFormat):
