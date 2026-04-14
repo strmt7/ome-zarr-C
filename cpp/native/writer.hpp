@@ -69,12 +69,34 @@ std::vector<std::string> validate_plate_rows_columns(
 
 struct DatasetInput {
     bool is_dict;
-    std::string repr;
     bool path_truthy;
     bool has_transformation;
 };
 
-std::vector<std::size_t> validate_datasets(const std::vector<DatasetInput>& datasets);
+enum class DatasetValidationErrorCode {
+    empty_datasets,
+    unrecognized_type,
+    missing_path,
+};
+
+class DatasetValidationError final : public std::exception {
+  public:
+    DatasetValidationError(
+        DatasetValidationErrorCode code,
+        std::size_t dataset_index = 0);
+
+    const char* what() const noexcept override;
+
+    DatasetValidationErrorCode code() const noexcept;
+
+    std::size_t dataset_index() const noexcept;
+
+  private:
+    DatasetValidationErrorCode code_;
+    std::size_t dataset_index_;
+};
+
+void validate_datasets(const std::vector<DatasetInput>& datasets);
 
 struct WriterFormatPlan {
     std::string resolved_version;

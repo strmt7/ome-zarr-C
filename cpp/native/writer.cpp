@@ -143,27 +143,41 @@ std::vector<std::string> validate_plate_rows_columns(
     return rows_or_columns;
 }
 
-std::vector<std::size_t> validate_datasets(const std::vector<DatasetInput>& datasets) {
+DatasetValidationError::DatasetValidationError(
+    DatasetValidationErrorCode code,
+    std::size_t dataset_index)
+    : code_(code), dataset_index_(dataset_index) {}
+
+const char* DatasetValidationError::what() const noexcept {
+    return "DatasetValidationError";
+}
+
+DatasetValidationErrorCode DatasetValidationError::code() const noexcept {
+    return code_;
+}
+
+std::size_t DatasetValidationError::dataset_index() const noexcept {
+    return dataset_index_;
+}
+
+void validate_datasets(const std::vector<DatasetInput>& datasets) {
     if (datasets.empty()) {
-        throw std::invalid_argument("Empty datasets list");
+        throw DatasetValidationError(DatasetValidationErrorCode::empty_datasets);
     }
 
-    std::vector<std::size_t> transformation_indices;
     for (std::size_t index = 0; index < datasets.size(); ++index) {
         const auto& dataset = datasets[index];
         if (!dataset.is_dict) {
-            throw std::invalid_argument(
-                "Unrecognized type for " + dataset.repr);
+            throw DatasetValidationError(
+                DatasetValidationErrorCode::unrecognized_type,
+                index);
         }
         if (!dataset.path_truthy) {
-            throw std::invalid_argument("no 'path' in dataset");
-        }
-        if (dataset.has_transformation) {
-            transformation_indices.push_back(index);
+            throw DatasetValidationError(
+                DatasetValidationErrorCode::missing_path,
+                index);
         }
     }
-
-    return transformation_indices;
 }
 
 WriterFormatPlan resolve_writer_format(

@@ -42,7 +42,7 @@ def _get_valid_axes(
     axes: AxesType = None,
     fmt: Format = _DEFAULT_FORMAT,
 ) -> list[str] | list[dict[str, str]] | None:
-    return _core._get_valid_axes(ndim, axes, fmt)
+    return _core._get_valid_axes(ndim, axes, fmt.version)
 
 
 def _extract_dims_from_axes(
@@ -81,7 +81,7 @@ def _validate_datasets(
     dims: int,
     fmt: Format = _DEFAULT_FORMAT,
 ) -> list[dict]:
-    return _core._validate_datasets(datasets, dims, fmt)
+    return _core._validate_datasets(datasets, dims, fmt.version)
 
 
 def _validate_plate_wells(

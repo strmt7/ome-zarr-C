@@ -110,6 +110,13 @@ bool is_number_like(const py::handle& value) {
     return PyFloat_Check(value.ptr()) || PyLong_Check(value.ptr());
 }
 
+std::string format_version_string(const py::object& fmt_or_version) {
+    if (py::isinstance<py::str>(fmt_or_version)) {
+        return py::cast<std::string>(fmt_or_version);
+    }
+    return py::cast<std::string>(fmt_or_version.attr("version"));
+}
+
 bool objects_equal(const py::handle& left, const py::handle& right) {
     const int result = PyObject_RichCompareBool(left.ptr(), right.ptr(), Py_EQ);
     if (result < 0) {
@@ -231,6 +238,27 @@ py::tuple output_slices_for_shape(const py::handle& shape) {
             py::int_(1));
     }
     return slices;
+}
+
+[[noreturn]] void raise_dataset_validation_error(
+    const ome_zarr_c::native_code::DatasetValidationError& error,
+    const py::object& datasets) {
+    switch (error.code()) {
+        case ome_zarr_c::native_code::DatasetValidationErrorCode::empty_datasets:
+            throw py::value_error("Empty datasets list");
+        case ome_zarr_c::native_code::DatasetValidationErrorCode::unrecognized_type:
+            {
+                py::sequence sequence = py::cast<py::sequence>(datasets);
+                py::object dataset = sequence[py::int_(error.dataset_index())];
+                throw py::value_error(
+                    "Unrecognized type for " +
+                    py::cast<std::string>(py::str(dataset)));
+            }
+        case ome_zarr_c::native_code::DatasetValidationErrorCode::missing_path:
+            throw py::value_error("no 'path' in dataset");
+    }
+
+    throw py::value_error("Unknown dataset validation error");
 }
 
 }  // namespace
@@ -939,7 +967,7 @@ py::object get_valid_axes(
     py::object logger = py::module_::import("logging").attr("getLogger")(
         py::str("ome_zarr.writer"));
 
-    const std::string version = py::cast<std::string>(fmt.attr("version"));
+    const std::string version = format_version_string(fmt);
     std::optional<std::int64_t> native_ndim;
     if (!ndim.is_none()) {
         native_ndim = py::cast<std::int64_t>(ndim);
@@ -1207,37 +1235,35 @@ py::object validate_datasets(
     py::object dims,
     py::object fmt = py::none()) {
     std::vector<ome_zarr_c::native_code::DatasetInput> native_datasets;
+    py::list transformations;
     if (!datasets.is_none()) {
         native_datasets.reserve(py::len(datasets));
         for (const py::handle& dataset_handle : py::iterable(datasets)) {
             py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
             ome_zarr_c::native_code::DatasetInput input{};
             input.is_dict = py::isinstance<py::dict>(dataset);
-            input.repr = py::cast<std::string>(py::str(dataset));
             if (input.is_dict) {
                 py::dict dataset_dict = py::cast<py::dict>(dataset);
                 py::object path = dataset_dict.attr("get")("path");
                 input.path_truthy = object_truthy(path);
-                input.has_transformation =
-                    !dataset_dict.attr("get")("coordinateTransformations").is_none();
+                py::object transformation =
+                    dataset_dict.attr("get")("coordinateTransformations");
+                input.has_transformation = !transformation.is_none();
+                if (input.has_transformation) {
+                    transformations.append(transformation);
+                }
             }
             native_datasets.push_back(std::move(input));
         }
     }
 
     try {
-        const auto transformation_indices =
-            ome_zarr_c::native_code::validate_datasets(native_datasets);
-        py::list transformations;
-        for (const auto index : transformation_indices) {
-            py::object dataset = datasets.attr("__getitem__")(py::int_(index));
-            transformations.append(
-                dataset.attr("get")(py::str("coordinateTransformations")));
-        }
-
+        ome_zarr_c::native_code::validate_datasets(native_datasets);
         fmt.attr("validate_coordinate_transformations")(
             dims, py::len(datasets), transformations);
         return datasets;
+    } catch (const ome_zarr_c::native_code::DatasetValidationError& exc) {
+        raise_dataset_validation_error(exc, datasets);
     } catch (const std::invalid_argument& exc) {
         throw py::value_error(exc.what());
     }

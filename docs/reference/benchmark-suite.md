@@ -275,7 +275,8 @@ Latest completed targeted reruns on the current portable `-O3` build:
   - `dask_utils.resize_2d`: `1.321x`
   - `scale.build_pyramid_local_mean`: `1.108x`
 - notable slower paths in the same reruns:
-  - `writer.validate_datasets_batch`: `0.829x`
+  - `writer.validate_datasets_batch`: `0.960x`
+  - `writer.get_valid_axes_batch`: `0.843x`
   - `format.matches`: `0.798x`
   - `format.well_and_coord`: `0.631x`
 

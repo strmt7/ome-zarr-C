@@ -31,6 +31,13 @@ bool is_number_like(const py::handle& value) {
     return PyFloat_Check(value.ptr()) || PyLong_Check(value.ptr());
 }
 
+std::string format_version_string(const py::object& fmt_or_version) {
+    if (py::isinstance<py::str>(fmt_or_version)) {
+        return py::cast<std::string>(fmt_or_version);
+    }
+    return py::cast<std::string>(fmt_or_version.attr("version"));
+}
+
 [[noreturn]] void raise_coordinate_transformations_validation_error(
     const ome_zarr_c::native_code::CoordinateTransformationsValidationError& error,
     int ndim,
@@ -126,65 +133,77 @@ bool is_number_like(const py::handle& value) {
     throw py::value_error("Unknown coordinate transformation validation error");
 }
 
-std::vector<ome_zarr_c::native_code::CoordinateTransformationsValidationInput>
-coordinate_transformations_validation_inputs(py::handle coordinate_transformations_handle) {
-    py::list coordinate_transformations = py::cast<py::list>(coordinate_transformations_handle);
-    std::vector<ome_zarr_c::native_code::CoordinateTransformationsValidationInput>
-        native_groups;
-    native_groups.reserve(py::len(coordinate_transformations));
-
-    for (const py::handle& transformations_handle : coordinate_transformations) {
-        py::list transformations = py::cast<py::list>(transformations_handle);
-        ome_zarr_c::native_code::CoordinateTransformationsValidationInput native_group;
-        native_group.transformations.reserve(py::len(transformations));
-
-        for (const py::handle& transformation_handle : transformations) {
-            py::dict transformation = py::cast<py::dict>(transformation_handle);
-            ome_zarr_c::native_code::CoordinateTransformationValidationInput
-                native_transformation;
-            native_transformation.has_type = false;
-            native_transformation.has_scale = false;
-            native_transformation.scale_length = 0;
-            native_transformation.has_translation = false;
-            native_transformation.translation_length = 0;
-
-            py::object type = transformation.attr("get")("type", py::none());
-            if (!type.is_none()) {
-                native_transformation.has_type = true;
-                native_transformation.type = py::cast<std::string>(type);
+[[noreturn]] void raise_dataset_validation_error(
+    const ome_zarr_c::native_code::DatasetValidationError& error,
+    const py::object& datasets) {
+    switch (error.code()) {
+        case ome_zarr_c::native_code::DatasetValidationErrorCode::empty_datasets:
+            throw py::value_error("Empty datasets list");
+        case ome_zarr_c::native_code::DatasetValidationErrorCode::unrecognized_type:
+            {
+                py::sequence sequence = py::cast<py::sequence>(datasets);
+                py::object dataset = sequence[py::int_(error.dataset_index())];
+                throw py::value_error(
+                    "Unrecognized type for " +
+                    py::cast<std::string>(py::str(dataset)));
             }
-
-            if (transformation.contains("scale")) {
-                native_transformation.has_scale = true;
-                py::sequence scale_values = py::cast<py::sequence>(transformation["scale"]);
-                native_transformation.scale_length = py::len(scale_values);
-                native_transformation.scale_numeric.reserve(
-                    native_transformation.scale_length);
-                for (const py::handle& value : scale_values) {
-                    native_transformation.scale_numeric.push_back(is_number_like(value));
-                }
-            }
-
-            if (transformation.contains("translation")) {
-                native_transformation.has_translation = true;
-                py::sequence translation_values =
-                    py::cast<py::sequence>(transformation["translation"]);
-                native_transformation.translation_length = py::len(translation_values);
-                native_transformation.translation_numeric.reserve(
-                    native_transformation.translation_length);
-                for (const py::handle& value : translation_values) {
-                    native_transformation.translation_numeric.push_back(
-                        is_number_like(value));
-                }
-            }
-
-            native_group.transformations.push_back(std::move(native_transformation));
-        }
-
-        native_groups.push_back(std::move(native_group));
+        case ome_zarr_c::native_code::DatasetValidationErrorCode::missing_path:
+            throw py::value_error("no 'path' in dataset");
     }
 
-    return native_groups;
+    throw py::value_error("Unknown dataset validation error");
+}
+
+ome_zarr_c::native_code::CoordinateTransformationsValidationInput
+coordinate_transformations_validation_input(py::handle transformations_handle) {
+    py::list transformations = py::cast<py::list>(transformations_handle);
+    ome_zarr_c::native_code::CoordinateTransformationsValidationInput native_group;
+    native_group.transformations.reserve(py::len(transformations));
+
+    for (const py::handle& transformation_handle : transformations) {
+        py::dict transformation = py::cast<py::dict>(transformation_handle);
+        ome_zarr_c::native_code::CoordinateTransformationValidationInput
+            native_transformation;
+        native_transformation.has_type = false;
+        native_transformation.has_scale = false;
+        native_transformation.scale_length = 0;
+        native_transformation.has_translation = false;
+        native_transformation.translation_length = 0;
+
+        py::object type = transformation.attr("get")("type", py::none());
+        if (!type.is_none()) {
+            native_transformation.has_type = true;
+            native_transformation.type = py::cast<std::string>(type);
+        }
+
+        if (transformation.contains("scale")) {
+            native_transformation.has_scale = true;
+            py::sequence scale_values = py::cast<py::sequence>(transformation["scale"]);
+            native_transformation.scale_length = py::len(scale_values);
+            native_transformation.scale_numeric.reserve(
+                native_transformation.scale_length);
+            for (const py::handle& value : scale_values) {
+                native_transformation.scale_numeric.push_back(is_number_like(value));
+            }
+        }
+
+        if (transformation.contains("translation")) {
+            native_transformation.has_translation = true;
+            py::sequence translation_values =
+                py::cast<py::sequence>(transformation["translation"]);
+            native_transformation.translation_length = py::len(translation_values);
+            native_transformation.translation_numeric.reserve(
+                native_transformation.translation_length);
+            for (const py::handle& value : translation_values) {
+                native_transformation.translation_numeric.push_back(
+                    is_number_like(value));
+            }
+        }
+
+        native_group.transformations.push_back(std::move(native_transformation));
+    }
+
+    return native_group;
 }
 
 py::list axes_to_dicts(const py::sequence& axes) {
@@ -358,7 +377,7 @@ py::object get_valid_axes(
     static py::object logger =
         py::module_::import("logging").attr("getLogger")(py::str("ome_zarr.writer"));
 
-    const std::string version = py::cast<std::string>(fmt.attr("version"));
+    const std::string version = format_version_string(fmt);
     std::optional<std::int64_t> native_ndim;
     if (!ndim.is_none()) {
         native_ndim = py::cast<std::int64_t>(ndim);
@@ -649,15 +668,19 @@ py::object validate_datasets(
     py::object fmt = py::none()) {
     std::vector<ome_zarr_c::native_code::DatasetInput> native_datasets;
     py::list transformations;
-    const std::string version = py::cast<std::string>(py::str(fmt.attr("version")));
+    std::vector<ome_zarr_c::native_code::CoordinateTransformationsValidationInput>
+        native_groups;
+    const std::string version = format_version_string(fmt);
     const bool validate_transformations = version == "0.4" || version == "0.5";
     if (!datasets.is_none()) {
         native_datasets.reserve(py::len(datasets));
+        if (validate_transformations) {
+            native_groups.reserve(py::len(datasets));
+        }
         for (const py::handle& dataset_handle : py::iterable(datasets)) {
             py::object dataset = py::reinterpret_borrow<py::object>(dataset_handle);
             ome_zarr_c::native_code::DatasetInput input{};
             input.is_dict = py::isinstance<py::dict>(dataset);
-            input.repr = py::cast<std::string>(py::str(dataset));
             if (input.is_dict) {
                 py::dict dataset_dict = py::cast<py::dict>(dataset);
                 py::object path = dataset_dict.attr("get")("path");
@@ -667,6 +690,8 @@ py::object validate_datasets(
                 input.has_transformation = !transformation.is_none();
                 if (validate_transformations && input.has_transformation) {
                     transformations.append(transformation);
+                    native_groups.push_back(
+                        coordinate_transformations_validation_input(transformation));
                 }
             }
             native_datasets.push_back(std::move(input));
@@ -676,12 +701,12 @@ py::object validate_datasets(
     try {
         ome_zarr_c::native_code::validate_datasets(native_datasets);
         if (validate_transformations) {
-            const auto native_groups =
-                coordinate_transformations_validation_inputs(transformations);
             ome_zarr_c::native_code::validate_coordinate_transformations(
                 py::cast<int>(dims), py::len(datasets), native_groups);
         }
         return datasets;
+    } catch (const ome_zarr_c::native_code::DatasetValidationError& exc) {
+        raise_dataset_validation_error(exc, datasets);
     } catch (const ome_zarr_c::native_code::CoordinateTransformationsValidationError& exc) {
         raise_coordinate_transformations_validation_error(
             exc, py::cast<int>(dims), py::len(datasets), transformations);
