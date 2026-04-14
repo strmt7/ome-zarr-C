@@ -91,6 +91,17 @@ Each paired case benchmarks the Python upstream function and the converted
 native-backed function on the same exact benchmark input. Before timing begins,
 the case verifies parity on that benchmark input and aborts if parity fails.
 
+The benchmark runner disables package logging and Python warnings by default via
+`OME_ZARR_BENCH_DISABLE_LOGGING=1` and
+`OME_ZARR_BENCH_DISABLE_WARNINGS=1`. This keeps benchmark results focused on
+code execution instead of warning/info I/O. Override with
+`OME_ZARR_BENCH_DISABLE_LOGGING=0` and/or `OME_ZARR_BENCH_DISABLE_WARNINGS=0`
+if you intentionally want those side effects included in a measurement.
+Timed runs also suppress raw stdout/stderr by default via
+`OME_ZARR_BENCH_SUPPRESS_STDIO=1` so command output does not pollute the timing
+process. Set `OME_ZARR_BENCH_SUPPRESS_STDIO=0` only when output cost is the
+measurement target.
+
 ## Fixture Provenance
 
 The `realdata` suite downloads public fixtures on demand into the repo-local
@@ -180,6 +191,29 @@ Verify benchmark parity inputs without timing:
 .venv/bin/python -m benchmarks.run --suite realdata --verify-only
 ```
 
+Include logging side effects in a benchmark run only when you explicitly want
+to study them:
+
+```bash
+OME_ZARR_BENCH_DISABLE_LOGGING=0 \
+  .venv/bin/python -m benchmarks.run --suite core --fast
+```
+
+Include warnings as well only when that is the measurement target:
+
+```bash
+OME_ZARR_BENCH_DISABLE_LOGGING=0 \
+OME_ZARR_BENCH_DISABLE_WARNINGS=0 \
+  .venv/bin/python -m benchmarks.run --suite core --fast
+```
+
+Include raw stdout/stderr only when that is the measurement target:
+
+```bash
+OME_ZARR_BENCH_SUPPRESS_STDIO=0 \
+  .venv/bin/python -m benchmarks.run --suite public-api --fast
+```
+
 Enforce benchmark coverage for documented upstream public callables:
 
 ```bash
@@ -251,34 +285,33 @@ machine-dependent.
 
 ## Current Snapshot
 
-Latest completed broad snapshot on `2026-04-13` before the current `-O3`
-retime:
+Latest completed broad snapshot on `2026-04-14` on the current portable `-O3`
+build:
 
-- `core`: `29` paired cases, geometric-mean speedup `0.982x` (`python / cpp`)
-- `public-api`: `38` paired cases, geometric-mean speedup `0.993x`
-- `realdata`: `3` paired cases, geometric-mean speedup `0.995x`
+- `core`: `29` paired cases, geometric-mean speedup `1.139x` (`python / cpp`)
+- `public-api`: `38` paired cases, geometric-mean speedup `1.032x`
+- `realdata`: `3` paired cases, geometric-mean speedup `1.005x`
 - public API benchmark coverage:
   - `89` documented callables discovered from upstream modules
   - `8` abstract exclusions
   - `0` uncovered callable entrypoints
 
-Latest completed targeted reruns on the current portable `-O3` build:
+Notable wins in that completed snapshot:
 
-- `core` conversions micro-slice: geometric-mean speedup `2.032x`
-- `core` data-oriented micro-slice: geometric-mean speedup `1.503x`
-- `core` meso compute slice: geometric-mean speedup `1.059x`
-- strongest current wins in those reruns:
-  - `conversions.rgba_to_int_batch`: `2.167x`
-  - `conversions.int_to_rgba_batch`: `1.906x`
-  - `data.rgb_to_5d_batch`: `2.451x`
-  - `data.make_circle_batch`: `2.100x`
-  - `dask_utils.resize_2d`: `1.321x`
-  - `scale.build_pyramid_local_mean`: `1.108x`
-- notable slower paths in the same reruns:
-  - `writer.validate_datasets_batch`: `0.960x`
-  - `writer.get_valid_axes_batch`: `0.843x`
-  - `format.matches`: `0.798x`
-  - `format.well_and_coord`: `0.631x`
+- `conversions.rgba_to_int_batch`: `2.198x`
+- `conversions.int_to_rgba_batch`: `1.904x`
+- `data.rgb_to_5d_batch`: `2.467x`
+- `data.make_circle_batch`: `2.087x`
+- `format.detect_format_batch`: `1.413x`
+- `scale.scaler_methods`: `4.533x`
+
+Still-slower paths in the same completed snapshot:
+
+- `format.matches`: `0.824x`
+- `format.well_and_coord`: `0.705x`
+- `utils.find_multiscales`: `0.879x`
+- `writer.resolve_storage_options_batch`: `0.901x`
+- `scaler.nearest_rgb`: `0.944x`
 
 Interpretation:
 

@@ -1,8 +1,10 @@
 #include <pybind11/pybind11.h>
 
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "../native/format.hpp"
@@ -22,6 +24,91 @@ py::object dict_get_item_or_none(const py::dict& mapping, const char* key) {
         return py::none();
     }
     return py::reinterpret_borrow<py::object>(value);
+}
+
+std::optional<std::size_t> sequence_index_of_string(
+    const py::sequence& values,
+    std::string_view target) {
+    PyObject* fast = PySequence_Fast(values.ptr(), "expected a sequence");
+    if (fast == nullptr) {
+        throw py::error_already_set();
+    }
+    py::object fast_holder = py::reinterpret_steal<py::object>(fast);
+    const auto size = static_cast<std::size_t>(PySequence_Fast_GET_SIZE(fast_holder.ptr()));
+    PyObject** items = PySequence_Fast_ITEMS(fast_holder.ptr());
+
+    py::object target_obj = py::none();
+    for (std::size_t index = 0; index < size; ++index) {
+        PyObject* item = items[index];
+        if (PyUnicode_Check(item)) {
+            Py_ssize_t item_size = 0;
+            const char* item_text = PyUnicode_AsUTF8AndSize(item, &item_size);
+            if (item_text == nullptr) {
+                throw py::error_already_set();
+            }
+            if (item_size == static_cast<Py_ssize_t>(target.size()) &&
+                std::string_view(item_text, static_cast<std::size_t>(item_size)) == target) {
+                return index;
+            }
+            continue;
+        }
+
+        if (target_obj.is_none()) {
+            PyObject* target_unicode = PyUnicode_FromStringAndSize(
+                target.data(),
+                static_cast<Py_ssize_t>(target.size()));
+            if (target_unicode == nullptr) {
+                throw py::error_already_set();
+            }
+            target_obj = py::reinterpret_steal<py::object>(target_unicode);
+        }
+
+        const int equal = PyObject_RichCompareBool(item, target_obj.ptr(), Py_EQ);
+        if (equal < 0) {
+            throw py::error_already_set();
+        }
+        if (equal == 1) {
+            return index;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::vector<std::vector<double>> shape_matrix_from_sequence(const py::sequence& shapes) {
+    PyObject* shapes_fast = PySequence_Fast(shapes.ptr(), "expected a sequence");
+    if (shapes_fast == nullptr) {
+        throw py::error_already_set();
+    }
+    py::object shapes_holder = py::reinterpret_steal<py::object>(shapes_fast);
+    const auto shape_count =
+        static_cast<std::size_t>(PySequence_Fast_GET_SIZE(shapes_holder.ptr()));
+    PyObject** shape_items = PySequence_Fast_ITEMS(shapes_holder.ptr());
+
+    std::vector<std::vector<double>> native_shapes;
+    native_shapes.reserve(shape_count);
+    for (std::size_t shape_index = 0; shape_index < shape_count; ++shape_index) {
+        PyObject* shape_fast =
+            PySequence_Fast(shape_items[shape_index], "expected a sequence");
+        if (shape_fast == nullptr) {
+            throw py::error_already_set();
+        }
+        py::object shape_holder = py::reinterpret_steal<py::object>(shape_fast);
+        const auto dimension_count =
+            static_cast<std::size_t>(PySequence_Fast_GET_SIZE(shape_holder.ptr()));
+        PyObject** dimension_items = PySequence_Fast_ITEMS(shape_holder.ptr());
+
+        std::vector<double> native_shape(dimension_count);
+        for (std::size_t dimension_index = 0; dimension_index < dimension_count; ++dimension_index) {
+            native_shape[dimension_index] = PyFloat_AsDouble(dimension_items[dimension_index]);
+            if (PyErr_Occurred() != nullptr) {
+                throw py::error_already_set();
+            }
+        }
+        native_shapes.push_back(std::move(native_shape));
+    }
+
+    return native_shapes;
 }
 
 py::object mapping_version_or_none(const py::object& mapping_like) {
@@ -64,12 +151,12 @@ py::object get_metadata_version_object(py::dict metadata) {
 }
 
 std::string metadata_version_from_key(const py::dict& metadata, const char* key) {
-    py::object obj = metadata.attr("get")(py::str(key));
+    py::object obj = dict_get_item_or_none(metadata, key);
     if (obj.is_none()) {
         return "";
     }
     py::dict value = py::cast<py::dict>(obj);
-    py::object version = value.attr("get")(py::str("version"), py::none());
+    py::object version = dict_get_item_or_none(value, "version");
     if (version.is_none()) {
         return "";
     }
@@ -81,14 +168,17 @@ ome_zarr_c::native_code::MetadataSummary metadata_summary_from_dict(
     ome_zarr_c::native_code::MetadataSummary summary{};
     summary.is_empty = py::len(metadata) == 0;
 
-    py::list multiscales =
-        py::cast<py::list>(metadata.attr("get")("multiscales", py::list()));
-    if (py::len(multiscales) > 0) {
-        py::dict dataset = py::cast<py::dict>(multiscales[0]);
-        py::object version = dataset.attr("get")("version", py::none());
+    py::object multiscales = dict_get_item_or_none(metadata, "multiscales");
+    if (!multiscales.is_none() && ome_zarr_c::bindings::object_truthy(multiscales)) {
+        PyObject* first = PySequence_GetItem(multiscales.ptr(), 0);
+        if (first == nullptr) {
+            throw py::error_already_set();
+        }
+        py::dict dataset = py::cast<py::dict>(py::reinterpret_steal<py::object>(first));
+        py::object version = dict_get_item_or_none(dataset, "version");
         if (!version.is_none()) {
             summary.has_multiscales_version = true;
-            summary.multiscales_version_is_string = py::isinstance<py::str>(version);
+            summary.multiscales_version_is_string = PyUnicode_Check(version.ptr());
             summary.multiscales_version = py::cast<std::string>(py::str(version));
         }
     }
@@ -96,27 +186,27 @@ ome_zarr_c::native_code::MetadataSummary metadata_summary_from_dict(
     const std::string plate_version = metadata_version_from_key(metadata, "plate");
     if (!plate_version.empty()) {
         summary.has_plate_version = true;
+        py::dict plate = py::cast<py::dict>(dict_get_item_or_none(metadata, "plate"));
         summary.plate_version_is_string =
-            py::isinstance<py::str>(
-                py::cast<py::dict>(metadata.attr("get")("plate")).attr("get")("version"));
+            PyUnicode_Check(dict_get_item_or_none(plate, "version").ptr());
         summary.plate_version = plate_version;
     }
     const std::string well_version = metadata_version_from_key(metadata, "well");
     if (!well_version.empty()) {
         summary.has_well_version = true;
+        py::dict well = py::cast<py::dict>(dict_get_item_or_none(metadata, "well"));
         summary.well_version_is_string =
-            py::isinstance<py::str>(
-                py::cast<py::dict>(metadata.attr("get")("well")).attr("get")("version"));
+            PyUnicode_Check(dict_get_item_or_none(well, "version").ptr());
         summary.well_version = well_version;
     }
     const std::string image_label_version =
         metadata_version_from_key(metadata, "image-label");
     if (!image_label_version.empty()) {
         summary.has_image_label_version = true;
+        py::dict image_label =
+            py::cast<py::dict>(dict_get_item_or_none(metadata, "image-label"));
         summary.image_label_version_is_string =
-            py::isinstance<py::str>(
-                py::cast<py::dict>(metadata.attr("get")("image-label"))
-                    .attr("get")("version"));
+            PyUnicode_Check(dict_get_item_or_none(image_label, "version").ptr());
         summary.image_label_version = image_label_version;
     }
 
@@ -245,23 +335,28 @@ py::object get_metadata_version(py::dict metadata) {
 }
 
 py::object detect_format_version(py::dict metadata) {
-    py::object version = get_metadata_version_object(metadata);
-    if (version.is_none() || !py::isinstance<py::str>(version)) {
+    const auto detected =
+        ome_zarr_c::native_code::detect_format_version(metadata_summary_from_dict(metadata));
+    if (!detected.has_value()) {
         return py::none();
     }
-    const std::string version_string = py::cast<std::string>(version);
-    if (!ome_zarr_c::native_code::is_known_format_version_string(version_string)) {
-        return py::none();
+    return py::str(detected.value());
+}
+
+py::tuple format_match_details(const std::string& version, py::dict metadata) {
+    py::object metadata_version = get_metadata_version_object(metadata);
+    py::bool_ matched = py::bool_(false);
+    if (!metadata_version.is_none()) {
+        matched = py::bool_(
+            ome_zarr_c::bindings::objects_equal(metadata_version, py::str(version)));
     }
-    return version;
+    return py::make_tuple(std::move(metadata_version), matched);
 }
 
 bool format_matches(const std::string& version, py::dict metadata) {
-    py::object metadata_version = get_metadata_version_object(metadata);
-    if (metadata_version.is_none()) {
-        return false;
-    }
-    return ome_zarr_c::bindings::objects_equal(metadata_version, py::str(version));
+    return ome_zarr_c::native_code::format_matches(
+        version,
+        metadata_summary_from_dict(metadata));
 }
 
 int format_zarr_format(const std::string& version) {
@@ -330,24 +425,27 @@ py::dict generate_well_dict_v04(
     const std::string& well,
     const py::sequence& rows,
     const py::sequence& columns) {
-    std::vector<std::string> native_rows;
-    std::vector<std::string> native_columns;
-    native_rows.reserve(py::len(rows));
-    native_columns.reserve(py::len(columns));
-    for (const py::handle& row : rows) {
-        native_rows.push_back(py::cast<std::string>(row));
-    }
-    for (const py::handle& column : columns) {
-        native_columns.push_back(py::cast<std::string>(column));
-    }
-
     try {
-        const auto generated = ome_zarr_c::native_code::generate_well_v04(
-            well, native_rows, native_columns);
+        const auto parts =
+            ome_zarr_c::native_code::split_well_path_for_generation(well);
+        const auto row_index = sequence_index_of_string(rows, parts.row);
+        if (!row_index.has_value()) {
+            py::tuple args(2);
+            args[0] = py::str("%s is not defined in the list of rows");
+            args[1] = py::str(parts.row);
+            raise_value_error_args(args);
+        }
+        const auto column_index = sequence_index_of_string(columns, parts.column);
+        if (!column_index.has_value()) {
+            py::tuple args(2);
+            args[0] = py::str("%s is not defined in the list of columns");
+            args[1] = py::str(parts.column);
+            raise_value_error_args(args);
+        }
         py::dict result;
-        result["path"] = py::str(generated.path);
-        result["rowIndex"] = py::int_(generated.row_index);
-        result["columnIndex"] = py::int_(generated.column_index);
+        result["path"] = py::str(well);
+        result["rowIndex"] = py::int_(row_index.value());
+        result["columnIndex"] = py::int_(column_index.value());
         return result;
     } catch (const ome_zarr_c::native_code::WellGenerationError& error) {
         switch (error.code()) {
@@ -364,18 +462,9 @@ py::dict generate_well_dict_v04(
                 throw py::value_error("too many values to unpack (expected 2)");
 #endif
             }
-            case ome_zarr_c::native_code::WellGenerationErrorCode::row_missing: {
-                py::tuple args(2);
-                args[0] = py::str("%s is not defined in the list of rows");
-                args[1] = py::str(error.detail());
-                raise_value_error_args(args);
-            }
-            case ome_zarr_c::native_code::WellGenerationErrorCode::column_missing: {
-                py::tuple args(2);
-                args[0] = py::str("%s is not defined in the list of columns");
-                args[1] = py::str(error.detail());
-                raise_value_error_args(args);
-            }
+            case ome_zarr_c::native_code::WellGenerationErrorCode::row_missing:
+            case ome_zarr_c::native_code::WellGenerationErrorCode::column_missing:
+                break;
         }
     }
     throw py::value_error("unhandled well generation error");
@@ -418,24 +507,39 @@ void validate_well_dict_v04(py::dict well,
     }
 
     const std::string path = py::cast<std::string>(well["path"]);
-    std::vector<std::string> native_rows;
-    std::vector<std::string> native_columns;
-    native_rows.reserve(py::len(rows));
-    native_columns.reserve(py::len(columns));
-    for (const py::handle& row : rows) {
-        native_rows.push_back(py::cast<std::string>(row));
-    }
-    for (const py::handle& column : columns) {
-        native_columns.push_back(py::cast<std::string>(column));
-    }
+    const std::int64_t row_index = py::cast<std::int64_t>(well["rowIndex"]);
+    const std::int64_t column_index = py::cast<std::int64_t>(well["columnIndex"]);
 
     try {
-        ome_zarr_c::native_code::validate_well_v04(
-            path,
-            py::cast<std::int64_t>(well["rowIndex"]),
-            py::cast<std::int64_t>(well["columnIndex"]),
-            native_rows,
-            native_columns);
+        const auto parts =
+            ome_zarr_c::native_code::split_well_path_for_validation(path);
+        const auto actual_row_index = sequence_index_of_string(rows, parts.row);
+        if (!actual_row_index.has_value()) {
+            py::tuple args(2);
+            args[0] = py::str("%s is not defined in the plate rows");
+            args[1] = py::str(parts.row);
+            raise_value_error_args(args);
+        }
+        if (row_index != static_cast<std::int64_t>(actual_row_index.value())) {
+            py::tuple args(2);
+            args[0] = py::str("Mismatching row index for %s");
+            args[1] = well;
+            raise_value_error_args(args);
+        }
+
+        const auto actual_column_index = sequence_index_of_string(columns, parts.column);
+        if (!actual_column_index.has_value()) {
+            py::tuple args(2);
+            args[0] = py::str("%s is not defined in the plate columns");
+            args[1] = py::str(parts.column);
+            raise_value_error_args(args);
+        }
+        if (column_index != static_cast<std::int64_t>(actual_column_index.value())) {
+            py::tuple args(2);
+            args[0] = py::str("Mismatching column index for %s");
+            args[1] = well;
+            raise_value_error_args(args);
+        }
     } catch (const ome_zarr_c::native_code::WellValidationError& error) {
         py::tuple args(2);
         switch (error.code()) {
@@ -465,36 +569,27 @@ void validate_well_dict_v04(py::dict well,
 }
 
 py::list generate_coordinate_transformations(py::sequence shapes) {
-    py::list shapes_list = py::list(shapes);
-    std::vector<std::vector<double>> native_shapes;
-    native_shapes.reserve(py::len(shapes_list));
-    for (const py::handle& shape_handle : shapes_list) {
-        py::sequence shape = py::cast<py::sequence>(shape_handle);
-        std::vector<double> native_shape;
-        native_shape.reserve(py::len(shape));
-        for (const py::handle& value : shape) {
-            native_shape.push_back(py::cast<double>(value));
-        }
-        native_shapes.push_back(std::move(native_shape));
-    }
-
     py::list coordinate_transformations;
     try {
-        const auto native_transformations =
-            ome_zarr_c::native_code::generate_coordinate_transformations(native_shapes);
+        const auto native_transformations = ome_zarr_c::native_code::generate_coordinate_transformations(
+            shape_matrix_from_sequence(shapes));
+        coordinate_transformations = py::list(native_transformations.size());
+        py::size_t group_index = 0;
         for (const auto& transformations : native_transformations) {
-            py::list level_transforms;
+            py::list level_transforms(transformations.size());
+            py::size_t transform_index = 0;
             for (const auto& transformation : transformations) {
                 py::dict transform;
                 transform["type"] = py::str(transformation.type);
-                py::list values;
+                py::list values(transformation.values.size());
+                py::size_t value_index = 0;
                 for (const double value : transformation.values) {
-                    values.append(py::float_(value));
+                    values[value_index++] = py::float_(value);
                 }
                 transform[py::str(transformation.type)] = values;
-                level_transforms.append(transform);
+                level_transforms[transform_index++] = std::move(transform);
             }
-            coordinate_transformations.append(level_transforms);
+            coordinate_transformations[group_index++] = std::move(level_transforms);
         }
     } catch (const std::invalid_argument& exc) {
         throw py::value_error(exc.what());
@@ -531,15 +626,18 @@ void validate_coordinate_transformations(
             native_transformation.has_translation = false;
             native_transformation.translation_length = 0;
 
-            py::object type = transformation.attr("get")("type", py::none());
+            py::object type = dict_get_item_or_none(transformation, "type");
             if (!type.is_none()) {
                 native_transformation.has_type = true;
                 native_transformation.type = py::cast<std::string>(type);
             }
 
-            if (transformation.contains("scale")) {
+            PyObject* scale_obj = PyDict_GetItemString(transformation.ptr(), "scale");
+            if (scale_obj != nullptr) {
                 native_transformation.has_scale = true;
-                py::sequence scale_values = py::cast<py::sequence>(transformation["scale"]);
+                py::object scale_holder =
+                    py::reinterpret_borrow<py::object>(scale_obj);
+                py::sequence scale_values = py::cast<py::sequence>(scale_holder);
                 native_transformation.scale_length = py::len(scale_values);
                 native_transformation.scale_numeric.reserve(native_transformation.scale_length);
                 for (const py::handle& value : scale_values) {
@@ -547,10 +645,13 @@ void validate_coordinate_transformations(
                 }
             }
 
-            if (transformation.contains("translation")) {
+            PyObject* translation_obj = PyDict_GetItemString(transformation.ptr(), "translation");
+            if (translation_obj != nullptr) {
                 native_transformation.has_translation = true;
+                py::object translation_holder =
+                    py::reinterpret_borrow<py::object>(translation_obj);
                 py::sequence translation_values =
-                    py::cast<py::sequence>(transformation["translation"]);
+                    py::cast<py::sequence>(translation_holder);
                 native_transformation.translation_length = py::len(translation_values);
                 native_transformation.translation_numeric.reserve(
                     native_transformation.translation_length);
@@ -584,6 +685,7 @@ void register_format_bindings(py::module_& m) {
     m.def("resolve_format_version", &resolve_format_version, py::arg("version"));
     m.def("get_metadata_version", &get_metadata_version);
     m.def("detect_format_version", &detect_format_version);
+    m.def("format_match_details", &format_match_details, py::arg("version"), py::arg("metadata"));
     m.def("format_matches", &format_matches, py::arg("version"), py::arg("metadata"));
     m.def("format_zarr_format", &format_zarr_format, py::arg("version"));
     m.def("format_chunk_key_encoding", &format_chunk_key_encoding, py::arg("version"));

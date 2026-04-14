@@ -72,10 +72,10 @@ incrementally while keeping the imported upstream snapshot intact.
   If a read-only surface prints or serializes absolute paths, run the upstream
   and converted implementations against the same fixture path so parity checks
   compare behavior rather than differing temporary-directory roots.
-- `py::exec`-generated classes:
-  If a port defines Python classes through `py::exec` and their methods depend
-  on runtime names, execute them in a shared scope so those names remain
-  visible when the methods run.
+- Embedded Python in C++:
+  Do not introduce `py::exec`, `py::eval`, or raw embedded-Python source into
+  `cpp/`. If historical embedded-Python debt is found, remove or quarantine it
+  before claiming native completion for that surface.
 - Performance:
   Use the same inputs, same machine class, same environment, and repeated runs.
   Report medians and version details.

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
+import warnings
 from pathlib import Path
 
 import pyperf
@@ -18,6 +20,9 @@ for env_var in (
     "NUMEXPR_NUM_THREADS",
 ):
     os.environ.setdefault(env_var, "1")
+os.environ.setdefault("OME_ZARR_BENCH_DISABLE_LOGGING", "1")
+os.environ.setdefault("OME_ZARR_BENCH_DISABLE_WARNINGS", "1")
+os.environ.setdefault("OME_ZARR_BENCH_SUPPRESS_STDIO", "1")
 
 
 def _parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
@@ -67,6 +72,19 @@ def main(argv: list[str] | None = None) -> int:
     parsed, pyperf_argv = _parse_args(argv or sys.argv[1:])
     sys.argv = [sys.argv[0], *pyperf_argv]
     groups, match, suites = _resolve_selection(parsed)
+
+    if os.environ.get("OME_ZARR_BENCH_DISABLE_LOGGING", "1").lower() not in {
+        "0",
+        "false",
+        "no",
+    }:
+        logging.disable(logging.CRITICAL)
+    if os.environ.get("OME_ZARR_BENCH_DISABLE_WARNINGS", "1").lower() not in {
+        "0",
+        "false",
+        "no",
+    }:
+        warnings.simplefilter("ignore")
 
     cases = iter_cases(match=match, groups=groups, suites=suites)
     if not cases:

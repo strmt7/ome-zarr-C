@@ -16,6 +16,17 @@ bool any_false(const T& values) {
     return std::any_of(values.begin(), values.end(), [](bool value) { return !value; });
 }
 
+std::optional<std::size_t> find_string_index(
+    const std::vector<std::string>& values,
+    std::string_view target) {
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        if (values[index] == target) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
+
 }  // namespace
 
 WellValidationError::WellValidationError(
@@ -236,9 +247,9 @@ std::vector<CoordinateTransformations> generate_coordinate_transformations(
         }
         CoordinateTransformation transform;
         transform.type = "scale";
-        transform.values.reserve(shape.size());
+        transform.values.resize(shape.size());
         for (std::size_t index = 0; index < shape.size(); ++index) {
-            transform.values.push_back(data_shape[index] / shape[index]);
+            transform.values[index] = data_shape[index] / shape[index];
         }
         result.push_back(CoordinateTransformations{transform});
     }
@@ -407,69 +418,86 @@ void validate_well_v04(
     std::int64_t column_index,
     const std::vector<std::string>& rows,
     const std::vector<std::string>& columns) {
+    const auto parts = split_well_path_for_validation(path);
+    const auto row_index_found = find_string_index(rows, parts.row);
+    if (!row_index_found.has_value()) {
+        throw WellValidationError(
+            WellValidationErrorCode::row_missing, parts.row);
+    }
+    if (row_index != static_cast<std::int64_t>(row_index_found.value())) {
+        throw WellValidationError(
+            WellValidationErrorCode::row_index_mismatch, parts.row);
+    }
+
+    const auto column_index_found = find_string_index(columns, parts.column);
+    if (!column_index_found.has_value()) {
+        throw WellValidationError(
+            WellValidationErrorCode::column_missing, parts.column);
+    }
+    if (column_index != static_cast<std::int64_t>(column_index_found.value())) {
+        throw WellValidationError(
+            WellValidationErrorCode::column_index_mismatch, parts.column);
+    }
+}
+
+WellPathParts split_well_path_for_validation(const std::string& path) {
     const auto slash_index = path.find('/');
     if (slash_index == std::string::npos ||
-        slash_index != path.rfind('/') ||
+        path.find('/', slash_index + 1) != std::string::npos ||
         slash_index == 0 ||
         slash_index == path.size() - 1) {
         throw WellValidationError(
             WellValidationErrorCode::path_group_count, path);
     }
 
-    const std::string row = path.substr(0, slash_index);
-    const std::string column = path.substr(slash_index + 1);
-    const auto row_it = std::find(rows.begin(), rows.end(), row);
-    if (row_it == rows.end()) {
-        throw WellValidationError(WellValidationErrorCode::row_missing, row);
-    }
-    if (row_index != std::distance(rows.begin(), row_it)) {
-        throw WellValidationError(
-            WellValidationErrorCode::row_index_mismatch, row);
-    }
-
-    const auto column_it = std::find(columns.begin(), columns.end(), column);
-    if (column_it == columns.end()) {
-        throw WellValidationError(WellValidationErrorCode::column_missing, column);
-    }
-    if (column_index != std::distance(columns.begin(), column_it)) {
-        throw WellValidationError(
-            WellValidationErrorCode::column_index_mismatch, column);
-    }
+    const std::string_view path_view(path);
+    return WellPathParts{
+        std::string(path_view.substr(0, slash_index)),
+        std::string(path_view.substr(slash_index + 1)),
+    };
 }
 
 WellDictV04 generate_well_v04(
     const std::string& path,
     const std::vector<std::string>& rows,
     const std::vector<std::string>& columns) {
+    const auto parts = split_well_path_for_generation(path);
+    const auto row_index_found = find_string_index(rows, parts.row);
+    if (!row_index_found.has_value()) {
+        throw WellGenerationError(
+            WellGenerationErrorCode::row_missing, parts.row);
+    }
+
+    const auto column_index_found = find_string_index(columns, parts.column);
+    if (!column_index_found.has_value()) {
+        throw WellGenerationError(
+            WellGenerationErrorCode::column_missing, parts.column);
+    }
+
+    return WellDictV04{
+        path,
+        static_cast<std::int64_t>(row_index_found.value()),
+        static_cast<std::int64_t>(column_index_found.value()),
+    };
+}
+
+WellPathParts split_well_path_for_generation(const std::string& path) {
     const auto slash_index = path.find('/');
     if (slash_index == std::string::npos) {
         throw WellGenerationError(
             WellGenerationErrorCode::path_not_enough_groups,
             "not enough values to unpack (expected 2, got 1)");
     }
-    if (slash_index != path.rfind('/')) {
+    if (path.find('/', slash_index + 1) != std::string::npos) {
         throw WellGenerationError(
             WellGenerationErrorCode::path_too_many_groups,
             "too many values to unpack (expected 2)");
     }
 
-    const std::string row = path.substr(0, slash_index);
-    const std::string column = path.substr(slash_index + 1);
-
-    const auto row_it = std::find(rows.begin(), rows.end(), row);
-    if (row_it == rows.end()) {
-        throw WellGenerationError(WellGenerationErrorCode::row_missing, row);
-    }
-
-    const auto column_it = std::find(columns.begin(), columns.end(), column);
-    if (column_it == columns.end()) {
-        throw WellGenerationError(WellGenerationErrorCode::column_missing, column);
-    }
-
-    return WellDictV04{
-        path,
-        std::distance(rows.begin(), row_it),
-        std::distance(columns.begin(), column_it),
+    const std::string_view path_view(path);
+    return WellPathParts{
+        std::string(path_view.substr(0, slash_index)),
+        std::string(path_view.substr(slash_index + 1)),
     };
 }
 

@@ -32,11 +32,9 @@ def format_implementations() -> Iterator[Format]:
 
 def detect_format(metadata: dict, default: Format) -> Format:
     if metadata:
-        detected = _core.get_metadata_version(metadata)
-        if isinstance(detected, str):
-            cls = _FORMAT_CLASS_BY_VERSION.get(detected)
-            if cls is not None:
-                return cls()
+        detected = _core.detect_format_version(metadata)
+        if detected is not None:
+            return _format_class_for_version(str(detected))()
     return default
 
 
@@ -71,7 +69,7 @@ class Format(ABC):
         return _core.get_metadata_version(metadata)
 
     def __repr__(self) -> str:
-        return str(_core.format_class_name(self.version))
+        return str(self.__class__._CLASS_NAME)
 
     def __eq__(self, other: object) -> bool:
         return _core.format_class_matches(
@@ -111,6 +109,9 @@ class Format(ABC):
 
 class _VersionedFormat(Format):
     _VERSION: str
+    _ZARR_FORMAT: int
+    _CHUNK_KEY_ENCODING: dict[str, str]
+    _CLASS_NAME: str
 
     @property
     def version(self) -> str:
@@ -118,16 +119,16 @@ class _VersionedFormat(Format):
 
     @property
     def zarr_format(self) -> int:
-        return int(_core.format_zarr_format(self._VERSION))
+        return self._ZARR_FORMAT
 
     @property
     def chunk_key_encoding(self) -> dict[str, str]:
-        return dict(_core.format_chunk_key_encoding(self._VERSION))
+        return dict(self._CHUNK_KEY_ENCODING)
 
     def matches(self, metadata: dict) -> bool:
-        version = self._get_metadata_version(metadata)
+        version, matched = _core.format_match_details(self.version, metadata)
         LOGGER.debug("%s matches %s?", self.version, version)
-        return version == self.version
+        return bool(matched)
 
 
 class FormatV01(_VersionedFormat):
@@ -215,6 +216,13 @@ def _format_class_for_version(version: str) -> type[Format]:
     return _FORMAT_CLASS_BY_VERSION[version]
 
 
+def _initialize_format_class_metadata() -> None:
+    for cls in (FormatV01, FormatV02, FormatV03, FormatV04, FormatV05):
+        cls._ZARR_FORMAT = int(_core.format_zarr_format(cls._VERSION))
+        cls._CHUNK_KEY_ENCODING = dict(_core.format_chunk_key_encoding(cls._VERSION))
+        cls._CLASS_NAME = str(_core.format_class_name(cls._VERSION))
+
+
 _FORMAT_CLASS_BY_VERSION.update(
     {
         "0.1": FormatV01,
@@ -224,6 +232,8 @@ _FORMAT_CLASS_BY_VERSION.update(
         "0.5": FormatV05,
     }
 )
+
+_initialize_format_class_metadata()
 
 
 CurrentFormat = FormatV05

@@ -207,24 +207,11 @@ coordinate_transformations_validation_input(py::handle transformations_handle) {
 }
 
 py::list axes_to_dicts(const py::sequence& axes) {
-    py::list result;
-
-    for (const py::handle& axis_handle : axes) {
-        if (py::isinstance<py::str>(axis_handle)) {
-            const std::string axis = py::cast<std::string>(axis_handle);
-            py::dict axis_dict;
-            axis_dict["name"] = axis;
-            const auto it = kKnownAxes.find(axis);
-            if (it != kKnownAxes.end()) {
-                axis_dict["type"] = it->second;
-            }
-            result.append(axis_dict);
-        } else {
-            result.append(py::reinterpret_borrow<py::object>(axis_handle));
-        }
-    }
-
-    return result;
+    const auto records =
+        ome_zarr_c::bindings::axis_records_from_sequence(axes);
+    return ome_zarr_c::bindings::axis_records_to_dict_list_preserving_original_dicts(
+        ome_zarr_c::native_code::axes_to_dicts(records),
+        axes);
 }
 
 py::list get_names(const py::sequence& axes) {
@@ -410,28 +397,32 @@ py::object get_valid_axes(
         throw py::value_error(exc.what());
     }
 
-    if (py::isinstance<py::str>(axes)) {
-        py::list split_axes;
+    std::vector<ome_zarr_c::native_code::AxisRecord> records;
+    if (PyUnicode_Check(axes.ptr())) {
         const std::string axis_string = py::cast<std::string>(axes);
+        records.reserve(axis_string.size());
         for (const char axis : axis_string) {
-            split_axes.append(py::str(std::string(1, axis)));
+            ome_zarr_c::native_code::AxisRecord record{};
+            record.has_name = true;
+            record.name = std::string(1, axis);
+            record.has_type = false;
+            record.type = "";
+            record.axis_repr = "";
+            record.type_repr = "None";
+            records.push_back(std::move(record));
         }
-        axes = split_axes;
+    } else {
+        records = ome_zarr_c::bindings::axis_records_from_sequence(
+            py::cast<py::sequence>(axes));
     }
 
     if (native_ndim.has_value()) {
         try {
-            ome_zarr_c::native_code::validate_axes_length(
-                static_cast<std::size_t>(py::len(axes)),
-                native_ndim.value());
+            ome_zarr_c::native_code::validate_axes_length(records.size(), native_ndim.value());
         } catch (const std::invalid_argument& exc) {
             throw py::value_error(exc.what());
         }
     }
-
-    py::list normalized = axes_to_dicts(py::cast<py::sequence>(axes));
-    const auto records =
-        ome_zarr_c::bindings::axis_records_from_sequence(normalized);
 
     try {
         if (version == "0.3") {
@@ -444,8 +435,12 @@ py::object get_valid_axes(
             return name_list;
         }
 
-        ome_zarr_c::native_code::validate_axes_types(records);
-        return normalized;
+        const auto normalized_records =
+            ome_zarr_c::native_code::axes_to_dicts(records);
+        ome_zarr_c::native_code::validate_axes_types(normalized_records);
+        return ome_zarr_c::bindings::axis_records_to_dict_list_preserving_original_dicts(
+            normalized_records,
+            py::cast<py::sequence>(axes));
     } catch (const std::invalid_argument& exc) {
         throw py::value_error(exc.what());
     }

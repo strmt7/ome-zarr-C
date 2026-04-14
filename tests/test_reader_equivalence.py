@@ -333,6 +333,41 @@ def _build_hcs_tree() -> FakeHierarchy:
     return hierarchy
 
 
+def _build_v04_units_tree() -> FakeHierarchy:
+    hierarchy = FakeHierarchy()
+    image0 = da.from_array(
+        np.arange(8, dtype=np.uint16).reshape(2, 2, 2),
+        chunks=(1, 2, 2),
+    )
+
+    hierarchy.add(
+        "/units-image",
+        root_attrs={
+            "multiscales": [
+                {
+                    "version": "0.4",
+                    "axes": [
+                        {"name": "z", "type": "space", "unit": "micrometer"},
+                        {"name": "y", "type": "space", "unit": "micrometer"},
+                        {"name": "x", "type": "space", "unit": "micrometer"},
+                    ],
+                    "datasets": [
+                        {
+                            "path": "0",
+                            "coordinateTransformations": [
+                                {"type": "scale", "scale": [1.0, 1.0, 1.0]}
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+        zgroup={"version": "0.4"},
+        arrays={"0": image0},
+    )
+    return hierarchy
+
+
 def _build_raw_and_ignored_tree() -> tuple[FakeHierarchy, FakeZarr, FakeZarr]:
     hierarchy = FakeHierarchy()
     raw = hierarchy.add(
@@ -423,6 +458,15 @@ def test_reader_matches_upstream_for_fake_hcs_tree() -> None:
     expected_well = _call(_node_signature, _py_reader.Node(well, []), _py_reader)
     actual_well = _call(_node_signature, _cpp_reader.Node(well, []), _cpp_reader)
     assert expected_well == actual_well
+
+
+def test_reader_preserves_v04_axis_units_exactly() -> None:
+    hierarchy = _build_v04_units_tree()
+    zarr = hierarchy.nodes["/units-image"]
+
+    expected = _call(_reader_signature, _py_reader, zarr)
+    actual = _call(_reader_signature, _cpp_reader, zarr)
+    assert expected == actual
 
 
 def test_reader_matches_upstream_for_raw_zarray_and_ignored_nodes() -> None:

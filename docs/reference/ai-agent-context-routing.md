@@ -44,7 +44,9 @@ default.
 
 1. Read `docs/reference/porting-contract.md`.
 2. Read `.agents/skills/benchmark-first/SKILL.md`.
-3. Compare upstream and converted code on identical inputs and environment.
+3. If the benchmark target is a native or binding hot path, read
+   `.agents/skills/cpp-performance-optimization/SKILL.md`.
+4. Compare upstream and converted code on identical inputs and environment.
 
 ### External research
 
