@@ -28,6 +28,7 @@ from benchmarks.runtime_support import (
     write_minimal_v2_image,
 )
 from tests import test_cli_equivalence as cli_eq
+from tests import test_conversions_equivalence as conv_eq
 from tests import test_csv_equivalence as csv_eq
 from tests import test_data_equivalence as data_eq
 from tests import test_format_equivalence as format_eq
@@ -688,7 +689,7 @@ def _verify_csv_parse() -> None:
                         csv_eq._py_csv.parse_csv_value, literal, column_type
                     ),
                     format_eq._call(
-                        csv_eq._cpp_csv.parse_csv_value, literal, column_type
+                        csv_eq._run_native_parse_csv_value, literal, column_type
                     ),
                 )
             )
@@ -696,14 +697,47 @@ def _verify_csv_parse() -> None:
         _assert_equal(f"csv.parse_csv_value[{literal!r},{column_type!r}]", left, right)
 
 
-def _bench_csv_parse(module) -> float:
+def _bench_csv_parse_python() -> float:
     total = 0.0
     for literal in ("", "0", "1", "-1", "1.5", "abc", "True", "nan", "inf", "-inf"):
         for column_type in ("d", "l", "s", "b", "x"):
             total += _touch_value(
-                format_eq._call(module.parse_csv_value, literal, column_type)
+                format_eq._call(csv_eq._py_csv.parse_csv_value, literal, column_type)
             )
     return total
+
+
+def _verify_conversions_int_to_rgba() -> None:
+    for value in core_cases._INT_RGBA_VALUES:
+        _assert_equal(
+            f"conversions.int_to_rgba[{value}]",
+            conv_eq._py_conversions.int_to_rgba(value),
+            conv_eq._run_native_int_to_rgba(value),
+        )
+
+
+def _bench_conversions_int_to_rgba_python() -> float:
+    total = 0.0
+    for value in core_cases._INT_RGBA_VALUES:
+        rgba = conv_eq._py_conversions.int_to_rgba(value)
+        total += float(rgba[0]) + float(rgba[3])
+    return total
+
+
+def _verify_conversions_rgba_to_int() -> None:
+    for rgba in core_cases._RGBA_VALUES:
+        _assert_equal(
+            f"conversions.rgba_to_int[{rgba!r}]",
+            conv_eq._py_conversions.rgba_to_int(*rgba),
+            conv_eq._run_native_rgba_to_int(rgba),
+        )
+
+
+def _bench_conversions_rgba_to_int_python() -> float:
+    total = 0
+    for rgba in core_cases._RGBA_VALUES:
+        total += conv_eq._py_conversions.rgba_to_int(*rgba)
+    return float(total)
 
 
 def _verify_csv_dict_to_zarr() -> None:
@@ -725,16 +759,14 @@ def _verify_csv_dict_to_zarr() -> None:
             csv_eq._run_dict_to_zarr(
                 csv_eq._py_csv.dict_to_zarr, props, py_root, "cell_id"
             ),
-            csv_eq._run_dict_to_zarr(
-                csv_eq._cpp_csv.dict_to_zarr, props, cpp_root, "cell_id"
-            ),
+            csv_eq._run_native_dict_to_zarr(props, cpp_root, "cell_id"),
         )
     finally:
         shutil.rmtree(py_root.parent, ignore_errors=True)
         shutil.rmtree(cpp_root.parent, ignore_errors=True)
 
 
-def _bench_csv_dict_to_zarr(module) -> float:
+def _bench_csv_dict_to_zarr_python() -> float:
     root = _temp_dir("csv-dict-to-zarr") / "image.zarr"
     try:
         csv_eq._write_zarr_tree(
@@ -743,7 +775,7 @@ def _bench_csv_dict_to_zarr(module) -> float:
             {"labels/0": {"image-label": {"properties": [{"cell_id": 1}]}}},
         )
         outcome = csv_eq._run_dict_to_zarr(
-            module.dict_to_zarr, {"1": {"score": 1}}, root, "cell_id"
+            csv_eq._py_csv.dict_to_zarr, {"1": {"score": 1}}, root, "cell_id"
         )
         return _touch_outcome(outcome)
     finally:
@@ -2072,21 +2104,71 @@ PUBLIC_API_CASES = (
         lambda: _bench_cli_scale_wrapper(True),
         lambda: _bench_cli_scale_wrapper(False),
     ),
-    core_cases._make_case(
-        "csv",
-        "parse_csv_value",
-        "Typed CSV literal parsing across representative scalar cases.",
-        _verify_csv_parse,
-        lambda: _bench_csv_parse(csv_eq._py_csv),
-        lambda: _bench_csv_parse(csv_eq._cpp_csv),
+    core_cases.BenchmarkCase(
+        group="conversions",
+        name="int_to_rgba",
+        description="Signed 32-bit integer to normalized RGBA conversion.",
+        verify=_verify_conversions_int_to_rgba,
+        python_timer=core_cases._make_timer(
+            "conversions.int_to_rgba",
+            _verify_conversions_int_to_rgba,
+            _bench_conversions_int_to_rgba_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            case_id="conversions.int_to_rgba",
+            verify=_verify_conversions_int_to_rgba,
+            native_match="conversions.int_to_rgba",
+        ),
     ),
-    core_cases._make_case(
-        "csv",
-        "dict_to_zarr",
-        "Metadata injection from pre-built property dicts into label properties.",
-        _verify_csv_dict_to_zarr,
-        lambda: _bench_csv_dict_to_zarr(csv_eq._py_csv),
-        lambda: _bench_csv_dict_to_zarr(csv_eq._cpp_csv),
+    core_cases.BenchmarkCase(
+        group="conversions",
+        name="rgba_to_int",
+        description="RGBA byte tuple to signed integer conversion.",
+        verify=_verify_conversions_rgba_to_int,
+        python_timer=core_cases._make_timer(
+            "conversions.rgba_to_int",
+            _verify_conversions_rgba_to_int,
+            _bench_conversions_rgba_to_int_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            case_id="conversions.rgba_to_int",
+            verify=_verify_conversions_rgba_to_int,
+            native_match="conversions.rgba_to_int",
+        ),
+    ),
+    core_cases.BenchmarkCase(
+        group="csv",
+        name="parse_csv_value",
+        description="Typed CSV literal parsing across representative scalar cases.",
+        verify=_verify_csv_parse,
+        python_timer=core_cases._make_timer(
+            "csv.parse_csv_value",
+            _verify_csv_parse,
+            _bench_csv_parse_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            case_id="csv.parse_csv_value",
+            verify=_verify_csv_parse,
+            native_match="csv.parse_csv_value",
+        ),
+    ),
+    core_cases.BenchmarkCase(
+        group="csv",
+        name="dict_to_zarr",
+        description=(
+            "Metadata injection from pre-built property dicts into label properties."
+        ),
+        verify=_verify_csv_dict_to_zarr,
+        python_timer=core_cases._make_timer(
+            "csv.dict_to_zarr",
+            _verify_csv_dict_to_zarr,
+            _bench_csv_dict_to_zarr_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            case_id="csv.dict_to_zarr",
+            verify=_verify_csv_dict_to_zarr,
+            native_match="local.dict_to_zarr",
+        ),
     ),
     core_cases._make_case(
         "csv",

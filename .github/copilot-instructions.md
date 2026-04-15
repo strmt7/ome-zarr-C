@@ -26,6 +26,9 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
   matching wrapper exports, pybind registrations, and stale test/benchmark
   references in the same slice unless a remaining oracle-only dependency is
   explicitly justified and still exercised.
+- If parity and benchmark coverage can be preserved with the Python oracle plus
+  standalone-native probe/bench tooling, do not retain a pybind or Python
+  wrapper layer for that surface.
 - Ruff is Python-only. Never target `cpp/` or C/C++ files with Ruff; use
   native checks, compiler/test validation, and C++-appropriate tooling
   instead.

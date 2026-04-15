@@ -13,15 +13,15 @@
     {"upstream_file": "axes.py", "qualname": "Axes._validate_axes_types", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/axes.py"], "native_files": ["cpp/native/axes.cpp"]},
     {"entry_type": "non_callable_scaffold", "upstream_file": "axes.py", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/axes.py"], "native_files": ["cpp/native/axes.cpp"]},
 
-    {"upstream_file": "conversions.py", "qualname": "int_to_rgba", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/conversions.py"], "native_files": ["cpp/native/conversions.cpp"]},
-    {"upstream_file": "conversions.py", "qualname": "int_to_rgba_255", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/conversions.py"], "native_files": ["cpp/native/conversions.cpp"]},
-    {"upstream_file": "conversions.py", "qualname": "rgba_to_int", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/conversions.py"], "native_files": ["cpp/native/conversions.cpp"]},
-    {"entry_type": "non_callable_scaffold", "upstream_file": "conversions.py", "boundary_files": ["cpp/bindings/basic_bindings.cpp", "ome_zarr_c/conversions.py"], "native_files": ["cpp/native/conversions.cpp"]},
+    {"upstream_file": "conversions.py", "qualname": "int_to_rgba", "boundary_files": [], "native_files": ["cpp/native/conversions.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
+    {"upstream_file": "conversions.py", "qualname": "int_to_rgba_255", "boundary_files": [], "native_files": ["cpp/native/conversions.cpp", "cpp/tools/native_oracle_probe.cpp"]},
+    {"upstream_file": "conversions.py", "qualname": "rgba_to_int", "boundary_files": [], "native_files": ["cpp/native/conversions.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
+    {"entry_type": "non_callable_scaffold", "upstream_file": "conversions.py", "boundary_files": [], "native_files": ["cpp/native/conversions.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
 
-    {"upstream_file": "csv.py", "qualname": "parse_csv_value", "boundary_files": ["cpp/bindings/csv_bindings.cpp", "ome_zarr_c/csv.py"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "parse_csv_value", "boundary_files": [], "native_files": ["cpp/native/csv.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
     {"upstream_file": "csv.py", "qualname": "csv_to_zarr", "boundary_files": [], "native_files": ["cpp/native/csv.cpp", "cpp/native/local_runtime.cpp", "cpp/tools/native_cli.cpp"]},
-    {"upstream_file": "csv.py", "qualname": "dict_to_zarr", "boundary_files": ["cpp/bindings/csv_bindings.cpp", "ome_zarr_c/csv.py"], "native_files": ["cpp/native/csv.cpp"]},
-    {"entry_type": "non_callable_scaffold", "upstream_file": "csv.py", "boundary_files": ["cpp/bindings/csv_bindings.cpp", "ome_zarr_c/csv.py"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "dict_to_zarr", "boundary_files": [], "native_files": ["cpp/native/local_runtime.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
+    {"entry_type": "non_callable_scaffold", "upstream_file": "csv.py", "boundary_files": [], "native_files": ["cpp/native/csv.cpp", "cpp/native/local_runtime.cpp", "cpp/tools/native_oracle_probe.cpp"]},
 
     {"upstream_file": "dask_utils.py", "qualname": "_better_chunksize", "boundary_files": ["cpp/bindings/dask_utils_bindings.cpp", "ome_zarr_c/dask_utils.py"], "native_files": ["cpp/native/dask_utils.cpp"]},
     {"upstream_file": "dask_utils.py", "qualname": "resize", "boundary_files": ["cpp/bindings/dask_utils_bindings.cpp", "ome_zarr_c/dask_utils.py"], "native_files": ["cpp/native/dask_utils.cpp"]},

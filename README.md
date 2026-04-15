@@ -55,10 +55,6 @@ policy.
 The following upstream behaviors are native-backed and currently proven by
 differential tests on this runtime:
 
-- `ome_zarr_c.conversions`
-  - `int_to_rgba`
-  - `int_to_rgba_255`
-  - `rgba_to_int`
 - `ome_zarr_c.axes`
   - axes normalization
   - axis-name extraction
@@ -72,8 +68,6 @@ differential tests on this runtime:
   - metadata version lookup
   - well-dict validation
   - coordinate-transformation generation and validation
-- `ome_zarr_c.csv`
-  - `parse_csv_value`
 - `ome_zarr_c.writer`
   - `_blosc_compressor`
   - `_get_valid_axes`
@@ -463,8 +457,8 @@ build:
 
 Notable wins in that completed snapshot:
 
-- `conversions.rgba_to_int_batch`: `2.198x`
-- `conversions.int_to_rgba_batch`: `1.904x`
+- `conversions.rgba_to_int`: `37.771x`
+- `conversions.int_to_rgba`: `66.258x`
 - `data.rgb_to_5d_batch`: `2.467x`
 - `data.make_circle_batch`: `2.087x`
 - `format.detect_format_batch`: `1.413x`

@@ -52,6 +52,9 @@ porting work.
   matching wrapper exports, pybind registrations, obsolete runtime tests, and
   stale benchmark references in the same slice unless a remaining oracle-only
   dependency is still active and can be stated precisely.
+- If a replaced surface can be verified and benchmarked through the Python
+  oracle plus standalone-native probe/bench tools, remove the old pybind or
+  Python-wrapper surface instead of leaving it behind as compatibility glue.
 - Use Ruff only for Python or Markdown-like files. If linting a subset, pass
   those paths explicitly and keep `cpp/` out of the Ruff target list.
 - Start with the smallest sufficient context slice and broaden only when the

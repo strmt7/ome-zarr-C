@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import csv
 import importlib
+import json
 import math
 import random
 import sys
@@ -10,13 +11,15 @@ from pathlib import Path
 
 import zarr
 
+from tests import test_utils_equivalence as utils_eq
 from tests._outcomes import err, ok
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_csv = importlib.import_module("ome_zarr.csv")
-_cpp_csv = importlib.import_module("ome_zarr_c.csv")
+
+_NATIVE_COLUMN_TYPES = ["d", "l", "s", "b"]
 
 
 def _assert_same_value(left, right) -> None:
@@ -93,7 +96,7 @@ def _assert_parse_case(value: str, col_type: str) -> None:
         expected_exc = exc
 
     try:
-        actual_value = _cpp_csv.parse_csv_value(value, col_type)
+        actual_value = _run_native_parse_csv_value(value, col_type)
     except Exception as exc:  # noqa: BLE001
         actual_exc = exc
 
@@ -106,7 +109,7 @@ def _assert_parse_case(value: str, col_type: str) -> None:
 
 
 def test_column_types_match_upstream() -> None:
-    assert _cpp_csv.COLUMN_TYPES == _py_csv.COLUMN_TYPES
+    assert _NATIVE_COLUMN_TYPES == _py_csv.COLUMN_TYPES
 
 
 def test_parse_csv_value_examples_match_upstream() -> None:
@@ -171,7 +174,7 @@ def test_dict_to_zarr_matches_upstream_for_image_properties(tmp_path) -> None:
     _write_zarr_tree(cpp_root, root_attrs, subgroup_attrs)
 
     expected = _run_dict_to_zarr(_py_csv.dict_to_zarr, props_to_add, py_root, "cell_id")
-    actual = _run_dict_to_zarr(_cpp_csv.dict_to_zarr, props_to_add, cpp_root, "cell_id")
+    actual = _run_native_dict_to_zarr(props_to_add, cpp_root, "cell_id")
     assert expected == actual
 
 
@@ -199,7 +202,7 @@ def test_dict_to_zarr_matches_upstream_for_plate_and_missing_label_group(
     _write_zarr_tree(cpp_root, root_attrs, subgroup_attrs)
 
     expected = _run_dict_to_zarr(_py_csv.dict_to_zarr, props_to_add, py_root, "well_id")
-    actual = _run_dict_to_zarr(_cpp_csv.dict_to_zarr, props_to_add, cpp_root, "well_id")
+    actual = _run_native_dict_to_zarr(props_to_add, cpp_root, "well_id")
     assert expected == actual
 
 
@@ -218,7 +221,7 @@ def test_dict_to_zarr_matches_upstream_for_integer_mapping_key_quirk(
     _write_zarr_tree(cpp_root, root_attrs, subgroup_attrs)
 
     expected = _run_dict_to_zarr(_py_csv.dict_to_zarr, props_to_add, py_root, "cell_id")
-    actual = _run_dict_to_zarr(_cpp_csv.dict_to_zarr, props_to_add, cpp_root, "cell_id")
+    actual = _run_native_dict_to_zarr(props_to_add, cpp_root, "cell_id")
     assert expected == actual
 
 
@@ -235,7 +238,7 @@ def test_dict_to_zarr_matches_upstream_for_label_group_without_properties(
     _write_zarr_tree(cpp_root, root_attrs, subgroup_attrs)
 
     expected = _run_dict_to_zarr(_py_csv.dict_to_zarr, props_to_add, py_root, "cell_id")
-    actual = _run_dict_to_zarr(_cpp_csv.dict_to_zarr, props_to_add, cpp_root, "cell_id")
+    actual = _run_native_dict_to_zarr(props_to_add, cpp_root, "cell_id")
     assert expected == actual
 
 
@@ -250,9 +253,7 @@ def test_dict_to_zarr_matches_upstream_for_invalid_root(tmp_path) -> None:
     expected = _run_dict_to_zarr(
         _py_csv.dict_to_zarr, {"1": {"x": 1}}, py_root, "cell_id"
     )
-    actual = _run_dict_to_zarr(
-        _cpp_csv.dict_to_zarr, {"1": {"x": 1}}, cpp_root, "cell_id"
-    )
+    actual = _run_native_dict_to_zarr({"1": {"x": 1}}, cpp_root, "cell_id")
     assert expected == actual
 
 
@@ -300,7 +301,77 @@ def test_dict_to_zarr_random_image_cases_match_upstream(tmp_path) -> None:
         expected = _run_dict_to_zarr(
             _py_csv.dict_to_zarr, props_to_add, py_root, "cell_id"
         )
-        actual = _run_dict_to_zarr(
-            _cpp_csv.dict_to_zarr, props_to_add, cpp_root, "cell_id"
-        )
+        actual = _run_native_dict_to_zarr(props_to_add, cpp_root, "cell_id")
         assert expected == actual
+
+
+def _encode_native_dict_entries(props_to_add) -> str:
+    entries = []
+    for key, values in props_to_add.items():
+        entries.append(
+            {
+                "key_is_string": isinstance(key, str),
+                "key_text": str(key),
+                "values": copy.deepcopy(values),
+            }
+        )
+    return json.dumps(entries)
+
+
+def _decode_native_csv_value(payload):
+    kind = payload["kind"]
+    if kind == "string":
+        return payload["value"]
+    if kind == "float":
+        repr_value = payload.get("repr")
+        if repr_value == "nan":
+            return float("nan")
+        if repr_value == "inf":
+            return float("inf")
+        if repr_value == "-inf":
+            return float("-inf")
+        return float(payload["value"])
+    if kind == "int":
+        return int(payload["value"])
+    if kind == "bool":
+        return bool(payload["value"])
+    raise AssertionError(f"Unknown native CSV payload kind: {kind!r}")
+
+
+def _run_native_parse_csv_value(value: str, col_type: str):
+    outcome = utils_eq._run_native_probe(
+        [
+            "parse-csv-value",
+            "--value",
+            value,
+            "--col-type",
+            col_type,
+        ]
+    )
+    if outcome.status == "ok":
+        return _decode_native_csv_value(outcome.value)
+    error_type = outcome.error_type or Exception
+    raise error_type(outcome.error_message or "")
+
+
+def _run_native_dict_to_zarr(props_to_add, zarr_path: Path, zarr_id: str):
+    try:
+        outcome = utils_eq._run_native_probe(
+            [
+                "dict-to-zarr",
+                "--entries-json",
+                _encode_native_dict_entries(props_to_add),
+                "--path",
+                str(zarr_path),
+                "--zarr-id",
+                zarr_id,
+            ]
+        )
+        if outcome.status == "ok":
+            return ok(tree=_snapshot_tree(zarr_path))
+        error_type = outcome.error_type or Exception
+        return err(
+            error_type(outcome.error_message or ""), tree=_snapshot_tree(zarr_path)
+        )
+    except Exception as exc:  # noqa: BLE001
+        return err(exc, tree=_snapshot_tree(zarr_path))

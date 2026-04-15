@@ -11,13 +11,13 @@
     {"upstream_file": "axes.py", "qualname": "Axes._validate_03", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/axes.cpp"]},
     {"upstream_file": "axes.py", "qualname": "Axes._validate_axes_types", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/axes.cpp"]},
 
-    {"upstream_file": "conversions.py", "qualname": "int_to_rgba", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/conversions.cpp"]},
-    {"upstream_file": "conversions.py", "qualname": "int_to_rgba_255", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/conversions.cpp"]},
-    {"upstream_file": "conversions.py", "qualname": "rgba_to_int", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/conversions.cpp"]},
+    {"upstream_file": "conversions.py", "qualname": "int_to_rgba", "binding_files": [], "native_files": ["cpp/native/conversions.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
+    {"upstream_file": "conversions.py", "qualname": "int_to_rgba_255", "binding_files": [], "native_files": ["cpp/native/conversions.cpp", "cpp/tools/native_oracle_probe.cpp"]},
+    {"upstream_file": "conversions.py", "qualname": "rgba_to_int", "binding_files": [], "native_files": ["cpp/native/conversions.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
 
-    {"upstream_file": "csv.py", "qualname": "parse_csv_value", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "parse_csv_value", "binding_files": [], "native_files": ["cpp/native/csv.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
     {"upstream_file": "csv.py", "qualname": "csv_to_zarr", "binding_files": [], "native_files": ["cpp/native/csv.cpp", "cpp/native/local_runtime.cpp", "cpp/tools/native_cli.cpp"]},
-    {"upstream_file": "csv.py", "qualname": "dict_to_zarr", "binding_files": ["cpp/bindings/csv_bindings.cpp"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "dict_to_zarr", "binding_files": [], "native_files": ["cpp/native/local_runtime.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
 
     {"upstream_file": "data.py", "qualname": "coins", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp"]},
     {"upstream_file": "data.py", "qualname": "astronaut", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp", "cpp/native/scale.cpp"]},

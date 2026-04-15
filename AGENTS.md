@@ -158,6 +158,10 @@ benchmark comparison, but it is not the target runtime product.
     pybind registrations, stale benchmark references, and obsolete runtime
     tests in the same slice unless a remaining oracle-only dependency can be
     stated precisely and verified.
+47. If parity proof and performance measurement for a surface can be carried by
+    standalone native tools plus the Python oracle, do not keep a pybind or
+    Python-wrapper version of that surface alive just to satisfy old tests or
+    benchmarks. Repoint the tests/benchmarks and delete the binding layer.
 
 ## Fast load order
 

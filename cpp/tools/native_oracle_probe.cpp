@@ -1,19 +1,25 @@
 #include <cstdint>
+#include <cerrno>
 #include <cstdlib>
+#include <cmath>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "../../third_party/nlohmann/json.hpp"
+#include "../native/conversions.hpp"
+#include "../native/csv.hpp"
 #include "../native/local_runtime.hpp"
 #include "../native/utils.hpp"
 
 namespace {
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 using namespace ome_zarr_c::native_code;
 
 struct ExitError final : public std::runtime_error {
@@ -23,9 +29,19 @@ struct ExitError final : public std::runtime_error {
 struct Options {
     std::string command;
     std::string path;
+    std::string value;
+    std::string col_type;
     std::string parts_json;
+    std::string entries_json;
+    std::string zarr_id;
+    std::string rgba_json;
     bool has_path = false;
+    bool has_value = false;
+    bool has_col_type = false;
     bool has_parts_json = false;
+    bool has_entries_json = false;
+    bool has_zarr_id = false;
+    bool has_rgba_json = false;
     std::size_t loops = 1;
 };
 
@@ -47,7 +63,12 @@ std::size_t parse_positive_integer(const char* text, const char* flag_name) {
         << "Commands:\n"
         << "  splitall --path PATH [--loops N]\n"
         << "  strip-common-prefix --parts-json JSON [--loops N]\n"
-        << "  find-multiscales --path PATH [--loops N]\n";
+        << "  find-multiscales --path PATH [--loops N]\n"
+        << "  int-to-rgba --value INT32 [--loops N]\n"
+        << "  int-to-rgba-255 --value INT32 [--loops N]\n"
+        << "  rgba-to-int --rgba-json JSON [--loops N]\n"
+        << "  parse-csv-value --value TEXT --col-type TYPE [--loops N]\n"
+        << "  dict-to-zarr --entries-json JSON --path PATH --zarr-id ID [--loops N]\n";
     std::exit(code);
 }
 
@@ -70,12 +91,52 @@ Options parse_options(const int argc, char** argv) {
             options.has_path = true;
             continue;
         }
+        if (arg == "--value") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --value");
+            }
+            options.value = argv[++index];
+            options.has_value = true;
+            continue;
+        }
+        if (arg == "--col-type") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --col-type");
+            }
+            options.col_type = argv[++index];
+            options.has_col_type = true;
+            continue;
+        }
         if (arg == "--parts-json") {
             if (index + 1 >= argc) {
                 throw ExitError("Missing value after --parts-json");
             }
             options.parts_json = argv[++index];
             options.has_parts_json = true;
+            continue;
+        }
+        if (arg == "--rgba-json") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --rgba-json");
+            }
+            options.rgba_json = argv[++index];
+            options.has_rgba_json = true;
+            continue;
+        }
+        if (arg == "--entries-json") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --entries-json");
+            }
+            options.entries_json = argv[++index];
+            options.has_entries_json = true;
+            continue;
+        }
+        if (arg == "--zarr-id") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --zarr-id");
+            }
+            options.zarr_id = argv[++index];
+            options.has_zarr_id = true;
             continue;
         }
         if (arg == "--loops") {
@@ -127,6 +188,28 @@ json make_error_payload(
         result["records"] = std::move(records);
     }
     return result;
+}
+
+json encode_csv_value(const CsvValue& value) {
+    if (const auto* text = std::get_if<std::string>(&value)) {
+        return json{{"kind", "string"}, {"value", *text}};
+    }
+    if (const auto* number = std::get_if<double>(&value)) {
+        if (std::isnan(*number)) {
+            return json{{"kind", "float"}, {"repr", "nan"}};
+        }
+        if (std::isinf(*number)) {
+            return json{
+                {"kind", "float"},
+                {"repr", *number < 0.0 ? "-inf" : "inf"},
+            };
+        }
+        return json{{"kind", "float"}, {"value", *number}};
+    }
+    if (const auto* integer = std::get_if<std::int64_t>(&value)) {
+        return json{{"kind", "int"}, {"value", *integer}};
+    }
+    return json{{"kind", "bool"}, {"value", std::get<bool>(value)}};
 }
 
 std::string python_like_parts_repr(
@@ -240,6 +323,143 @@ json run_find_multiscales(const Options& options) {
     return make_ok_payload(value, stdout_text, records);
 }
 
+std::int32_t parse_int32_value(const std::string& text) {
+    char* end = nullptr;
+    errno = 0;
+    const long long raw = std::strtoll(text.c_str(), &end, 10);
+    if (end == text.c_str() || *end != '\0' || errno == ERANGE ||
+        raw < static_cast<long long>(std::numeric_limits<std::int32_t>::min()) ||
+        raw > static_cast<long long>(std::numeric_limits<std::int32_t>::max())) {
+        throw ExitError("Invalid int32 value: " + text);
+    }
+    return static_cast<std::int32_t>(raw);
+}
+
+json run_int_to_rgba(const Options& options) {
+    if (!options.has_value) {
+        throw ExitError("int-to-rgba requires --value");
+    }
+    std::array<double, 4> rgba{};
+    const auto value = parse_int32_value(options.value);
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        rgba = int_to_rgba(value);
+    }
+    return make_ok_payload(json::array({rgba[0], rgba[1], rgba[2], rgba[3]}));
+}
+
+json run_int_to_rgba_255(const Options& options) {
+    if (!options.has_value) {
+        throw ExitError("int-to-rgba-255 requires --value");
+    }
+    std::array<std::uint8_t, 4> rgba{};
+    const auto value = parse_int32_value(options.value);
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        rgba = int_to_rgba_255_bytes(value);
+    }
+    return make_ok_payload(json::array({rgba[0], rgba[1], rgba[2], rgba[3]}));
+}
+
+json run_rgba_to_int(const Options& options) {
+    if (!options.has_rgba_json) {
+        throw ExitError("rgba-to-int requires --rgba-json");
+    }
+    const json parsed = json::parse(options.rgba_json);
+    if (!parsed.is_array() || parsed.size() != 4U) {
+        throw ExitError("--rgba-json must decode to a JSON array of length 4");
+    }
+    std::array<std::uint8_t, 4> rgba{};
+    for (std::size_t index = 0; index < 4U; ++index) {
+        if (!parsed[index].is_number_integer() && !parsed[index].is_number_unsigned()) {
+            throw ExitError("--rgba-json entries must be integers");
+        }
+        const auto value = parsed[index].get<int>();
+        if (value < 0 || value > 255) {
+            throw ExitError("--rgba-json entries must be in [0, 255]");
+        }
+        rgba[index] = static_cast<std::uint8_t>(value);
+    }
+
+    std::int32_t value = 0;
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        value = rgba_to_int(rgba[0], rgba[1], rgba[2], rgba[3]);
+    }
+    return make_ok_payload(value);
+}
+
+json run_parse_csv_value(const Options& options) {
+    if (!options.has_value) {
+        throw ExitError("parse-csv-value requires --value");
+    }
+    if (!options.has_col_type) {
+        throw ExitError("parse-csv-value requires --col-type");
+    }
+
+    CsvValue value{};
+    try {
+        for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+            value = parse_csv_value(options.value, options.col_type);
+        }
+    } catch (const std::overflow_error& exc) {
+        return make_error_payload("OverflowError", exc.what());
+    }
+    return make_ok_payload(encode_csv_value(value));
+}
+
+json run_dict_to_zarr(const Options& options) {
+    if (!options.has_entries_json) {
+        throw ExitError("dict-to-zarr requires --entries-json");
+    }
+    if (!options.has_path) {
+        throw ExitError("dict-to-zarr requires --path");
+    }
+    if (!options.has_zarr_id) {
+        throw ExitError("dict-to-zarr requires --zarr-id");
+    }
+
+    const json parsed = json::parse(options.entries_json);
+    if (!parsed.is_array()) {
+        throw ExitError("--entries-json must decode to a JSON array");
+    }
+
+    std::vector<LocalDictToZarrEntry> entries;
+    entries.reserve(parsed.size());
+    for (const auto& item : parsed) {
+        if (!item.is_object()) {
+            throw ExitError("--entries-json items must be JSON objects");
+        }
+        const auto key_is_string_iter = item.find("key_is_string");
+        const auto key_text_iter = item.find("key_text");
+        const auto values_iter = item.find("values");
+        if (key_is_string_iter == item.end() || !key_is_string_iter->is_boolean()) {
+            throw ExitError("--entries-json items require boolean key_is_string");
+        }
+        if (key_text_iter == item.end() || !key_text_iter->is_string()) {
+            throw ExitError("--entries-json items require string key_text");
+        }
+        if (values_iter == item.end() || !values_iter->is_object()) {
+            throw ExitError("--entries-json items require object values");
+        }
+        entries.push_back(LocalDictToZarrEntry{
+            key_is_string_iter->get<bool>(),
+            key_text_iter->get<std::string>(),
+            *values_iter,
+        });
+    }
+
+    try {
+        LocalDictToZarrResult result{};
+        for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+            result = local_dict_to_zarr(entries, options.path, options.zarr_id);
+        }
+        return make_ok_payload(json{
+            {"touched_label_groups", result.touched_label_groups},
+            {"updated_properties", result.updated_properties},
+        });
+    } catch (const std::runtime_error& exc) {
+        return make_error_payload("Exception", exc.what());
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -252,6 +472,16 @@ int main(int argc, char** argv) {
             payload = run_strip_common_prefix(options);
         } else if (options.command == "find-multiscales") {
             payload = run_find_multiscales(options);
+        } else if (options.command == "int-to-rgba") {
+            payload = run_int_to_rgba(options);
+        } else if (options.command == "int-to-rgba-255") {
+            payload = run_int_to_rgba_255(options);
+        } else if (options.command == "rgba-to-int") {
+            payload = run_rgba_to_int(options);
+        } else if (options.command == "parse-csv-value") {
+            payload = run_parse_csv_value(options);
+        } else if (options.command == "dict-to-zarr") {
+            payload = run_dict_to_zarr(options);
         } else {
             throw ExitError("Unknown command: " + options.command);
         }

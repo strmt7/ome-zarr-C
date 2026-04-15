@@ -470,8 +470,8 @@ build:
 
 Notable wins in that completed snapshot:
 
-- `conversions.rgba_to_int_batch`: `2.198x`
-- `conversions.int_to_rgba_batch`: `1.904x`
+- `conversions.rgba_to_int`: `37.771x`
+- `conversions.int_to_rgba`: `66.258x`
 - `data.rgb_to_5d_batch`: `2.467x`
 - `data.make_circle_batch`: `2.087x`
 - `format.detect_format_batch`: `1.413x`

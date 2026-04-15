@@ -48,7 +48,6 @@ if str(UPSTREAM_ROOT) not in sys.path:
 
 _py_axes = importlib.import_module("ome_zarr.axes")
 _py_conversions = importlib.import_module("ome_zarr.conversions")
-_py_csv = importlib.import_module("ome_zarr.csv")
 _py_data = importlib.import_module("ome_zarr.data")
 _py_dask_utils = importlib.import_module("ome_zarr.dask_utils")
 _py_format = importlib.import_module("ome_zarr.format")
@@ -59,8 +58,6 @@ _py_scale = importlib.import_module("ome_zarr.scale")
 _py_writer = importlib.import_module("ome_zarr.writer")
 
 _cpp_axes = importlib.import_module("ome_zarr_c.axes")
-_cpp_conversions = importlib.import_module("ome_zarr_c.conversions")
-_cpp_csv = importlib.import_module("ome_zarr_c.csv")
 _cpp_data = importlib.import_module("ome_zarr_c.data")
 _cpp_dask_utils = importlib.import_module("ome_zarr_c.dask_utils")
 _cpp_format = importlib.import_module("ome_zarr_c.format")
@@ -314,36 +311,6 @@ _RGBA_VALUES = tuple(
     tuple(_RNG.randint(0, 255) for _ in range(4)) for _ in range(8_192)
 )
 
-_CSV_PARSE_CASES: list[tuple[str, str]] = []
-for literal in (
-    "",
-    "0",
-    "1",
-    "-1",
-    "1.5",
-    "2.5",
-    "-2.5",
-    "abc",
-    "True",
-    "False",
-    " 3 ",
-    "1e3",
-    "nan",
-):
-    for column_type in ("d", "l", "s", "b", "x"):
-        _CSV_PARSE_CASES.append((literal, column_type))
-for _ in range(768):
-    whole = _RNG.randint(-1_000_000, 1_000_000)
-    frac = _RNG.randint(0, 9_999)
-    exponent = _RNG.randint(-5, 5)
-    value = f"{whole}.{frac:04d}e{exponent:+d}"
-    for column_type in ("d", "l"):
-        _CSV_PARSE_CASES.append((value, column_type))
-for literal in ("inf", "-inf"):
-    for column_type in ("d", "s", "b", "x"):
-        _CSV_PARSE_CASES.append((literal, column_type))
-_CSV_PARSE_CASES = tuple(_CSV_PARSE_CASES)
-
 _AXES_CASES = (
     (None, _py_format.FormatV01(), _cpp_format.FormatV01()),
     (None, _py_format.FormatV02(), _cpp_format.FormatV02()),
@@ -572,59 +539,6 @@ def _runtime_fmt_pair(version: str):
     if version == "0.4":
         return _py_format.FormatV04(), _cpp_format.FormatV04()
     return _py_format.FormatV05(), _cpp_format.FormatV05()
-
-
-def _verify_int_to_rgba() -> None:
-    _assert_parity(
-        "micro.conversions.int_to_rgba_batch",
-        [_py_conversions.int_to_rgba(value) for value in _INT_RGBA_VALUES],
-        [_cpp_conversions.int_to_rgba(value) for value in _INT_RGBA_VALUES],
-    )
-
-
-def _bench_int_to_rgba(module: object) -> float:
-    total = 0.0
-    for value in _INT_RGBA_VALUES:
-        rgba = module.int_to_rgba(value)
-        total += rgba[0] + rgba[3]
-    return _float_payload(total)
-
-
-def _verify_rgba_to_int() -> None:
-    _assert_parity(
-        "micro.conversions.rgba_to_int_batch",
-        [_py_conversions.rgba_to_int(*rgba) for rgba in _RGBA_VALUES],
-        [_cpp_conversions.rgba_to_int(*rgba) for rgba in _RGBA_VALUES],
-    )
-
-
-def _bench_rgba_to_int(module: object) -> float:
-    total = 0
-    for rgba in _RGBA_VALUES:
-        total += module.rgba_to_int(*rgba)
-    return float(total)
-
-
-def _verify_parse_csv_value() -> None:
-    _assert_parity(
-        "micro.csv.parse_csv_value_batch",
-        [
-            _py_csv.parse_csv_value(value, column_type)
-            for value, column_type in _CSV_PARSE_CASES
-        ],
-        [
-            _cpp_csv.parse_csv_value(value, column_type)
-            for value, column_type in _CSV_PARSE_CASES
-        ],
-    )
-
-
-def _bench_parse_csv_value(module: object) -> float:
-    total = 0.0
-    for value, column_type in _CSV_PARSE_CASES:
-        parsed = module.parse_csv_value(value, column_type)
-        total += _touch(parsed)
-    return _float_payload(total)
 
 
 def _verify_axes_constructor() -> None:
@@ -1392,30 +1306,6 @@ def _bench_cli_create_info(py_like: bool, case_name: str) -> float:
 
 
 ALL_CASES = (
-    _make_case(
-        "micro",
-        "conversions.int_to_rgba_batch",
-        "Signed 32-bit integer to RGBA batch conversion.",
-        _verify_int_to_rgba,
-        lambda: _bench_int_to_rgba(_py_conversions),
-        lambda: _bench_int_to_rgba(_cpp_conversions),
-    ),
-    _make_case(
-        "micro",
-        "conversions.rgba_to_int_batch",
-        "RGBA tuple to signed integer batch conversion.",
-        _verify_rgba_to_int,
-        lambda: _bench_rgba_to_int(_py_conversions),
-        lambda: _bench_rgba_to_int(_cpp_conversions),
-    ),
-    _make_case(
-        "micro",
-        "csv.parse_csv_value_batch",
-        "CSV scalar parsing across mixed numeric and string inputs.",
-        _verify_parse_csv_value,
-        lambda: _bench_parse_csv_value(_py_csv),
-        lambda: _bench_parse_csv_value(_cpp_csv),
-    ),
     _make_case(
         "micro",
         "axes.constructor_batch",
