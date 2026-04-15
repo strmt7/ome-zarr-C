@@ -703,6 +703,54 @@ void test_io_and_utils() {
     require(
         std::filesystem::exists(download_v3_output / "image-v3.zarr" / "s0" / "c" / "0" / "0"),
         "local download v3 copied chunks");
+
+    const auto csv_runtime_root = fixture_root / "csv-image.zarr";
+    std::filesystem::create_directories(csv_runtime_root / "labels" / "0");
+    {
+        std::ofstream zarr_json(csv_runtime_root / "zarr.json");
+        zarr_json << R"({"attributes":{"multiscales":[{"version":"0.4"}]},"zarr_format":3,"node_type":"group"})";
+    }
+    {
+        std::ofstream zarr_json(csv_runtime_root / "labels" / "0" / "zarr.json");
+        zarr_json << R"({"attributes":{"image-label":{"properties":[{"cell_id":1}]}},"zarr_format":3,"node_type":"group"})";
+    }
+    const auto csv_runtime_path = fixture_root / "csv-props.csv";
+    {
+        std::ofstream csv_file(csv_runtime_path);
+        csv_file << "cell_id,score,alive\n";
+        csv_file << "1,4.5,1\n";
+    }
+    const auto csv_result = local_csv_to_labels(
+        csv_runtime_path.generic_string(),
+        "cell_id",
+        "score#d,alive#b",
+        csv_runtime_root.generic_string(),
+        "cell_id");
+    require_eq(csv_result.touched_label_groups, std::size_t{1}, "local csv touched label groups");
+    require_eq(csv_result.updated_properties, std::size_t{1}, "local csv updated properties");
+    {
+        std::ifstream metadata(csv_runtime_root / "labels" / "0" / "zarr.json");
+        std::ostringstream buffer;
+        buffer << metadata.rdbuf();
+        const auto text = buffer.str();
+        require(text.find("\"score\": 4.5") != std::string::npos, "local csv wrote numeric property");
+        require(text.find("\"alive\": true") != std::string::npos, "local csv wrote boolean property");
+    }
+    require_throws<std::invalid_argument>(
+        [&]() {
+            static_cast<void>(local_csv_to_labels(
+                csv_runtime_path.generic_string(),
+                "missing_id",
+                "score#d",
+                csv_runtime_root.generic_string(),
+                "cell_id"));
+        },
+        [](const std::invalid_argument& exc) {
+            require(
+                std::string(exc.what()).find("missing_id") != std::string::npos,
+                "local csv missing-id message");
+        },
+        "local csv missing id should fail");
 }
 
 void test_reader_and_writer() {

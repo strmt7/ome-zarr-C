@@ -243,6 +243,22 @@ const fs::path& bench_runtime_fixture_root() {
             zattrs << R"({"multiscales":[{}]})";
         }
 
+        const fs::path csv_image = root_path / "csv_image.zarr";
+        fs::create_directories(csv_image / "labels" / "0");
+        {
+            std::ofstream zarr_json(csv_image / "zarr.json");
+            zarr_json << R"({"attributes":{"multiscales":[{"version":"0.4"}]},"zarr_format":3,"node_type":"group"})";
+        }
+        {
+            std::ofstream zarr_json(csv_image / "labels" / "0" / "zarr.json");
+            zarr_json << R"({"attributes":{"image-label":{"properties":[{"cell_id":"1"}]}},"zarr_format":3,"node_type":"group"})";
+        }
+        {
+            std::ofstream csv_file(root_path / "csv_props.csv");
+            csv_file << "cell_id,score\n";
+            csv_file << "1,4.5\n";
+        }
+
         return root_path;
     }();
     return root;
@@ -533,6 +549,32 @@ std::uint64_t bench_local_download(std::size_t iteration) {
         result.copied_root.size() + result.listed_paths.size() + exists);
 }
 
+std::uint64_t bench_local_csv_to_labels(std::size_t iteration) {
+    const auto seed_root = bench_runtime_fixture_root() / "csv_image.zarr";
+    const auto working_root =
+        bench_runtime_fixture_root() /
+        ("csv_image_work_" + std::to_string(iteration % 32U) + ".zarr");
+    std::error_code error;
+    std::filesystem::remove_all(working_root, error);
+    error.clear();
+    std::filesystem::copy(
+        seed_root,
+        working_root,
+        std::filesystem::copy_options::recursive,
+        error);
+    if (error) {
+        throw std::runtime_error("Failed to prepare csv_to_labels benchmark fixture");
+    }
+    const auto result = local_csv_to_labels(
+        (bench_runtime_fixture_root() / "csv_props.csv").string(),
+        "cell_id",
+        "score#d",
+        working_root.string(),
+        "cell_id");
+    return static_cast<std::uint64_t>(
+        result.touched_label_groups + result.updated_properties);
+}
+
 std::uint64_t bench_reader_plate_levels(std::size_t) {
     const auto plans = reader_plate_level_plans(
         {"A", "B", "C"},
@@ -665,6 +707,7 @@ int main(int argc, char** argv) {
             {"format.v01_init_store", 1, bench_format_v01_init_store},
             {"format.well_and_coord", 2, bench_format_well_and_coord},
             {"io_subpath", 1, bench_io_subpath},
+            {"local.csv_to_labels", 1024, bench_local_csv_to_labels},
             {"local.download", 1, bench_local_download},
             {"local.finder", 1, bench_local_finder},
             {"local.find_multiscales", 1, bench_local_find_multiscales},

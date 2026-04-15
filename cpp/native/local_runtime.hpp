@@ -56,4 +56,16 @@ LocalDownloadResult local_download_copy(
     const std::string& input_path,
     const std::string& output_dir);
 
+struct LocalCsvToLabelsResult {
+    std::size_t touched_label_groups;
+    std::size_t updated_properties;
+};
+
+LocalCsvToLabelsResult local_csv_to_labels(
+    const std::string& csv_path,
+    const std::string& csv_id,
+    const std::string& csv_keys,
+    const std::string& zarr_path,
+    const std::string& zarr_id);
+
 }  // namespace ome_zarr_c::native_code

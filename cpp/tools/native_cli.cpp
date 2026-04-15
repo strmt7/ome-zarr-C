@@ -42,7 +42,8 @@ std::string require_option_value(
         << "  info <path>\n"
         << "  download <path> [--output DIR]\n"
         << "  finder <path> [--port PORT]\n"
-        << "  view <path> [--port PORT] [--force|-f]\n";
+        << "  view <path> [--port PORT] [--force|-f]\n"
+        << "  csv_to_labels <csv_path> <csv_id> <csv_keys> <zarr_path> <zarr_id>\n";
     std::exit(code);
 }
 
@@ -184,6 +185,27 @@ void handle_view(const std::vector<std::string>& args) {
     local_view_run(preparation, port);
 }
 
+void handle_csv_to_labels(const std::vector<std::string>& args) {
+    if (args.size() != 5U) {
+        throw ExitError(
+            "csv_to_labels requires csv_path csv_id csv_keys zarr_path zarr_id");
+    }
+
+    const auto& csv_path = args[0];
+    const auto& csv_id = args[1];
+    const auto& csv_keys = args[2];
+    const auto& zarr_path = args[3];
+    const auto& zarr_id = args[4];
+
+    std::cout << "csv_to_labels " << csv_path << " " << zarr_path << "\n";
+    static_cast<void>(local_csv_to_labels(
+        csv_path,
+        csv_id,
+        csv_keys,
+        zarr_path,
+        zarr_id));
+}
+
 void dispatch(int argc, char** argv) {
     if (argc < 2) {
         print_usage_and_exit(2);
@@ -209,6 +231,10 @@ void dispatch(int argc, char** argv) {
     }
     if (command == "view") {
         handle_view(args);
+        return;
+    }
+    if (command == "csv_to_labels") {
+        handle_csv_to_labels(args);
         return;
     }
 

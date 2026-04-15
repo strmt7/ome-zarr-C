@@ -98,6 +98,7 @@ Current commands:
 ./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
 ./build-cpp/ome_zarr_native_cli download /tmp/demo/image.zarr --output /tmp/out
 ./build-cpp/ome_zarr_native_cli view /tmp/demo/image.zarr --port 8013
+./build-cpp/ome_zarr_native_cli csv_to_labels /tmp/demo/props.csv cell_id score#d /tmp/demo/image.zarr cell_id
 ```
 
 Current scope:
@@ -107,6 +108,7 @@ Current scope:
 - `finder`: standalone local OME-Zarr discovery plus BioFile Finder CSV output
 - `download`: standalone local OME-Zarr export with real v2/v3 metadata and chunk rewriting
 - `view`: standalone local validator-serving runtime with real browser launch and CORS-enabled HTTP serving
+- `csv_to_labels`: standalone local CSV-to-label-properties mutation for image and plate roots
 
 This still does not replace the full historical Python CLI. The native product
 path is being expanded command by command, and every new standalone command
@@ -161,6 +163,13 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match info_v3_image_with_stats \
   --native-match local.info_stats \
   --paired-case runtime.utils.info_v3_image_with_stats=local.info_stats
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match csv.csv_to_zarr \
+  --python-match csv.csv_to_zarr \
+  --native-match local.csv_to_labels \
+  --paired-case csv.csv_to_zarr=local.csv_to_labels
 ```
 
 The standalone `view` pairing intentionally compares Python `utils.view` against

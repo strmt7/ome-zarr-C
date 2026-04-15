@@ -145,7 +145,8 @@ Current committed manifest:
 
 ## Dependency-Sensitive Surfaces
 
-Store-backed reader, writer, data, CLI, and `utils.download()` paths are now
+Store-backed reader, writer, data, CLI, CSV label-ingestion, and
+`utils.download()` paths are now
 covered by differential tests and benchmark lanes on the currently qualified
 dependency window shipped in `pyproject.toml`.
 
@@ -324,6 +325,13 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match info_v3_image_with_stats \
   --native-match local.info_stats \
   --paired-case runtime.utils.info_v3_image_with_stats=local.info_stats
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match csv.csv_to_zarr \
+  --python-match csv.csv_to_zarr \
+  --native-match local.csv_to_labels \
+  --paired-case csv.csv_to_zarr=local.csv_to_labels
 ```
 
 Current standalone native CLI commands:
@@ -334,6 +342,7 @@ Current standalone native CLI commands:
 ./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
 ./build-cpp/ome_zarr_native_cli download /tmp/demo/image.zarr --output /tmp/out
 ./build-cpp/ome_zarr_native_cli view /tmp/demo/image.zarr --port 8013
+./build-cpp/ome_zarr_native_cli csv_to_labels /tmp/demo/props.csv cell_id score#d /tmp/demo/image.zarr cell_id
 ```
 
 Run the current proven-safe local verification lane:

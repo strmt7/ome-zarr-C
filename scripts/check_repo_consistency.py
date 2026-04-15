@@ -87,6 +87,8 @@ def main() -> int:
         issues.append("README.md is missing the native CLI download example.")
     if "ome_zarr_native_cli view " not in readme_text:
         issues.append("README.md is missing the native CLI view example.")
+    if "ome_zarr_native_cli csv_to_labels " not in readme_text:
+        issues.append("README.md is missing the native CLI csv_to_labels example.")
     if "ome_zarr_native_bench_core" not in readme_text:
         issues.append("README.md is missing the native core benchmark command.")
     if "scripts/compare_iteration_benchmarks.py" not in readme_text:
@@ -105,6 +107,10 @@ def main() -> int:
     ):
         issues.append(
             "README.md is missing the native info --stats iteration benchmark example."
+        )
+    if "--paired-case csv.csv_to_zarr=local.csv_to_labels" not in readme_text:
+        issues.append(
+            "README.md is missing the native csv_to_labels iteration benchmark example."
         )
     if "ome_zarr_native_bench_format" in readme_text and not native_bench.exists():
         issues.append(
