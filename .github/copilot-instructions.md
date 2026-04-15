@@ -18,6 +18,10 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Do not expose plan-only or helper-only commands through the shipped
   standalone native CLI. Public native entrypoints must be real runtime
   commands or durable product APIs.
+- Once a standalone-native runtime surface exists and parity is proven, treat
+  the corresponding Python-visible binding path as shrink-only debt. Remove
+  redundant `setup.py` sources and direct `cpp/bindings/` dependencies on
+  standalone runtime modules instead of keeping duplicate product paths alive.
 - Ruff is Python-only. Never target `cpp/` or C/C++ files with Ruff; use
   native checks, compiler/test validation, and C++-appropriate tooling
   instead.

@@ -30,6 +30,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--python", type=Path, default=DEFAULT_PYTHON)
     parser.add_argument("--python-timeout", type=int, default=180)
     parser.add_argument("--native-timeout", type=int, default=120)
+    parser.add_argument("--processes", type=int, default=3)
+    parser.add_argument("--values", type=int, default=2)
+    parser.add_argument("--warmups", type=int, default=1)
+    parser.add_argument("--min-time", type=float, default=0.01)
     parser.add_argument("--markdown-out", type=Path)
     parser.add_argument("--json-out", type=Path)
     parser.add_argument(
@@ -229,13 +233,13 @@ def main() -> int:
             "--fast",
             "--quiet",
             "--processes",
-            "3",
+            str(args.processes),
             "--values",
-            "2",
+            str(args.values),
             "--warmups",
-            "1",
+            str(args.warmups),
             "--min-time",
-            "0.01",
+            str(args.min_time),
             "--timeout",
             str(args.python_timeout),
             "--output",

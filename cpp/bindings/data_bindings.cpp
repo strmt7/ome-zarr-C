@@ -254,7 +254,7 @@ std::vector<std::size_t> native_chunks_from_object(py::object chunks) {
     return native_chunks;
 }
 
-py::object data_create_zarr(
+py::object data_create_zarr_python_fallback(
     const std::string& zarr_directory,
     py::object method = py::none(),
     const std::string& label_name = "coins",
@@ -402,6 +402,20 @@ py::object data_create_zarr(
     }
 
     return grp;
+}
+
+py::object data_create_zarr(
+    const std::string& zarr_directory,
+    py::object method = py::none(),
+    const std::string& label_name = "coins",
+    py::object fmt = py::none(),
+    py::object chunks = py::none()) {
+    return data_create_zarr_python_fallback(
+        zarr_directory,
+        method,
+        label_name,
+        fmt,
+        chunks);
 }
 
 }  // namespace

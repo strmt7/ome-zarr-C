@@ -283,17 +283,48 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --paired-case runtime.utils.info_v3_image_with_stats=local.info_stats
 
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite core \
+  --match runtime.data.create_zarr_coins_v05 \
+  --python-match runtime.data.create_zarr_coins_v05 \
+  --native-match local.create_coins \
+  --paired-case runtime.data.create_zarr_coins_v05=local.create_coins
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --suite public-api \
   --match csv.csv_to_zarr \
   --python-match csv.csv_to_zarr \
   --native-match local.csv_to_labels \
   --paired-case csv.csv_to_zarr=local.csv_to_labels
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match scale_wrapper \
+  --python-match cli.scale_wrapper \
+  --native-match local.scale_nearest \
+  --paired-case cli.scale_wrapper=local.scale_nearest
 ```
 
 The standalone `view` comparison intentionally uses `local.view_prepare` rather
 than timing the lifetime of a running HTTP server. That keeps the iteration
 benchmark bounded while the subprocess parity tests still validate the real
 native server behavior.
+
+For heavier end-to-end cases such as native `create`, use the comparison
+helper's bounded pyperf controls instead of repeating a large multi-process
+run:
+
+```bash
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite core \
+  --match runtime.data.create_zarr_coins_v05 \
+  --python-match runtime.data.create_zarr_coins_v05 \
+  --native-match local.create_coins \
+  --paired-case runtime.data.create_zarr_coins_v05=local.create_coins \
+  --processes 1 \
+  --values 1 \
+  --warmups 1 \
+  --min-time 0.005
+```
 
 List the available cases across all suites:
 

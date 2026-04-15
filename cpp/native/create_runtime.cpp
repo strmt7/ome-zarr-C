@@ -1,0 +1,280 @@
+#include "create_runtime.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <optional>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "../../third_party/nlohmann/json.hpp"
+#include "create_assets.hpp"
+#include "python_random.hpp"
+
+namespace ome_zarr_c::native_code {
+
+namespace {
+
+namespace fs = std::filesystem;
+using json = nlohmann::json;
+
+std::string trim_nul_terminated(std::string_view text) {
+    const auto end = text.find('\0');
+    if (end == std::string_view::npos) {
+        return std::string(text);
+    }
+    return std::string(text.substr(0, end));
+}
+
+std::uint64_t parse_tar_octal(std::string_view text) {
+    std::uint64_t value = 0U;
+    bool saw_digit = false;
+    for (const char ch : text) {
+        if (ch == '\0' || ch == ' ') {
+            continue;
+        }
+        if (ch < '0' || ch > '7') {
+            break;
+        }
+        saw_digit = true;
+        value = (value << 3U) + static_cast<std::uint64_t>(ch - '0');
+    }
+    return saw_digit ? value : 0U;
+}
+
+bool block_is_zeroed(const std::array<char, 512>& block) {
+    return std::all_of(
+        block.begin(),
+        block.end(),
+        [](const char value) { return value == '\0'; });
+}
+
+json load_json_file(const fs::path& path) {
+    std::ifstream stream(path);
+    if (!stream) {
+        throw std::runtime_error("Unable to open JSON file: " + path.string());
+    }
+    return json::parse(stream);
+}
+
+void write_json_file(const fs::path& path, const json& payload) {
+    std::ofstream stream(path, std::ios::trunc);
+    if (!stream) {
+        throw std::runtime_error("Unable to write JSON file: " + path.string());
+    }
+    stream << payload.dump(2) << "\n";
+}
+
+std::optional<std::uint64_t> create_seed_from_env() {
+    const char* raw = std::getenv("OME_ZARR_C_CREATE_SEED");
+    if (raw == nullptr || *raw == '\0') {
+        return std::nullopt;
+    }
+    std::string text(raw);
+    const bool negative = !text.empty() && text.front() == '-';
+    if (negative) {
+        text.erase(text.begin());
+    }
+    if (text.empty() ||
+        !std::all_of(text.begin(), text.end(), [](unsigned char ch) {
+            return std::isdigit(ch) != 0;
+        })) {
+        throw std::invalid_argument(
+            "OME_ZARR_C_CREATE_SEED must be a decimal integer");
+    }
+    const auto parsed = static_cast<std::uint64_t>(std::stoull(text));
+    return parsed;
+}
+
+std::string labels_group_metadata_relpath(const std::string& version) {
+    return version == "0.4" ? "labels/.zattrs" : "labels/zarr.json";
+}
+
+std::string label_group_metadata_relpath(
+    const std::string& version,
+    const std::string& label_name) {
+    return version == "0.4"
+        ? "labels/" + label_name + "/.zattrs"
+        : "labels/" + label_name + "/zarr.json";
+}
+
+void patch_labels_group_name(
+    const fs::path& root,
+    const std::string& version,
+    const std::string& label_name) {
+    const fs::path metadata_path = root / labels_group_metadata_relpath(version);
+    json payload = load_json_file(metadata_path);
+    if (version == "0.4") {
+        payload["labels"] = json::array({label_name});
+    } else {
+        payload["attributes"]["ome"]["labels"] = json::array({label_name});
+    }
+    write_json_file(metadata_path, payload);
+}
+
+void patch_label_group_metadata(
+    const fs::path& root,
+    const std::string& version,
+    const std::string& label_name,
+    const CreateColorMode color_mode,
+    const std::optional<std::uint64_t> seed_override) {
+    const fs::path metadata_path = root / label_group_metadata_relpath(version, label_name);
+    json payload = load_json_file(metadata_path);
+
+    json* image_label = nullptr;
+    json* multiscales = nullptr;
+    if (version == "0.4") {
+        image_label = &payload["image-label"];
+        multiscales = &payload["multiscales"];
+    } else {
+        image_label = &payload["attributes"]["ome"]["image-label"];
+        multiscales = &payload["attributes"]["ome"]["multiscales"];
+    }
+
+    if (multiscales != nullptr && multiscales->is_array() && !multiscales->empty() &&
+        (*multiscales)[0].is_object()) {
+        (*multiscales)[0]["name"] = "/labels/" + label_name;
+    }
+
+    if (image_label == nullptr || !image_label->is_object()) {
+        write_json_file(metadata_path, payload);
+        return;
+    }
+
+    if (color_mode == CreateColorMode::native_random) {
+        const auto seed = seed_override.has_value()
+            ? seed_override
+            : create_seed_from_env();
+        PythonRandom generator = python_random_from_seed(seed);
+        json colors = json::array();
+        for (int label_value = 1; label_value <= 8; ++label_value) {
+            json rgba = json::array();
+            for (int component = 0; component < 4; ++component) {
+                rgba.push_back(generator.randbelow(256U));
+            }
+            colors.push_back(
+                json{
+                    {"label-value", label_value},
+                    {"rgba", rgba},
+                });
+        }
+        (*image_label)["colors"] = colors;
+    }
+
+    write_json_file(metadata_path, payload);
+}
+
+std::string rewritten_tar_path(
+    const std::string& original,
+    const std::string& default_label_name,
+    const std::string& label_name) {
+    if (default_label_name == label_name) {
+        return original;
+    }
+    const std::string from_prefix = "labels/" + default_label_name;
+    if (original == from_prefix) {
+        return "labels/" + label_name;
+    }
+    if (original.rfind(from_prefix + "/", 0) == 0) {
+        return "labels/" + label_name + original.substr(from_prefix.size());
+    }
+    return original;
+}
+
+void extract_tar_archive(
+    const fs::path& archive_path,
+    const fs::path& destination_root,
+    const std::string& default_label_name,
+    const std::string& label_name) {
+    std::ifstream stream(archive_path, std::ios::binary);
+    if (!stream) {
+        throw std::runtime_error("Unable to open create archive: " + archive_path.string());
+    }
+
+    while (true) {
+        std::array<char, 512> header{};
+        stream.read(header.data(), static_cast<std::streamsize>(header.size()));
+        if (stream.gcount() == 0) {
+            break;
+        }
+        if (stream.gcount() != static_cast<std::streamsize>(header.size())) {
+            throw std::runtime_error("Truncated tar header in " + archive_path.string());
+        }
+        if (block_is_zeroed(header)) {
+            break;
+        }
+
+        const std::string original_name =
+            trim_nul_terminated(std::string_view(header.data(), 100));
+        const std::string path_name =
+            rewritten_tar_path(original_name, default_label_name, label_name);
+        const char typeflag = header[156];
+        const auto file_size =
+            parse_tar_octal(std::string_view(header.data() + 124, 12));
+        const auto padding = (512U - (file_size % 512U)) % 512U;
+        const fs::path destination = destination_root / path_name;
+
+        if (typeflag == 'x' || typeflag == 'g') {
+            stream.ignore(static_cast<std::streamsize>(file_size + padding));
+        } else if (typeflag == '5') {
+            fs::create_directories(destination);
+        } else if (typeflag == '0' || typeflag == '\0') {
+            fs::create_directories(destination.parent_path());
+            std::vector<char> payload(static_cast<std::size_t>(file_size));
+            if (file_size > 0U) {
+                stream.read(payload.data(), static_cast<std::streamsize>(file_size));
+                if (stream.gcount() != static_cast<std::streamsize>(file_size)) {
+                    throw std::runtime_error(
+                        "Truncated tar payload in " + archive_path.string());
+                }
+            }
+            std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+            if (!output) {
+                throw std::runtime_error(
+                    "Unable to write extracted file: " + destination.string());
+            }
+            if (!payload.empty()) {
+                output.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+            }
+            if (padding > 0U) {
+                stream.ignore(static_cast<std::streamsize>(padding));
+            }
+        } else {
+            throw std::runtime_error(
+                "Unsupported tar entry type in create archive: " +
+                std::string(1, typeflag));
+        }
+    }
+}
+
+}  // namespace
+
+void local_create_sample(
+    const std::string& zarr_directory,
+    const std::string& method_name,
+    const std::string& label_name,
+    const std::string& version,
+    const CreateColorMode color_mode,
+    const std::optional<std::uint64_t> seed) {
+    const auto asset = create_asset_spec(method_name, version);
+    const fs::path destination_root(zarr_directory);
+    std::error_code ec;
+    fs::remove_all(destination_root, ec);
+    fs::create_directories(destination_root.parent_path(), ec);
+    extract_tar_archive(
+        asset.archive_path,
+        destination_root,
+        asset.default_label_name,
+        label_name);
+    patch_labels_group_name(destination_root, version, label_name);
+    patch_label_group_metadata(destination_root, version, label_name, color_mode, seed);
+}
+
+}  // namespace ome_zarr_c::native_code

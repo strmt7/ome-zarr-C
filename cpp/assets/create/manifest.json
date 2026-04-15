@@ -1,0 +1,10 @@
+{
+  "source": "source_code_v.0.15.0/ome_zarr/cli.py create",
+  "seed": 0,
+  "archives": [
+    "coins_v04_seed0.tar",
+    "coins_v05_seed0.tar",
+    "astronaut_v04_seed0.tar",
+    "astronaut_v05_seed0.tar"
+  ]
+}

@@ -43,6 +43,11 @@ porting work.
   overhead.
 - Keep standalone native CLI surfaces limited to real runtime commands or
   durable product APIs.
+- Once a standalone-native runtime surface exists and parity is proven, treat
+  the corresponding binding/runtime path as shrink-only debt and reduce it in
+  later slices instead of adding fresh semantics there. Remove matching
+  `setup.py` sources and direct `cpp/bindings/` dependencies on standalone
+  runtime modules once they are no longer needed for oracle work.
 - Use Ruff only for Python or Markdown-like files. If linting a subset, pass
   those paths explicitly and keep `cpp/` out of the Ruff target list.
 - Start with the smallest sufficient context slice and broaden only when the

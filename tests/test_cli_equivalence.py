@@ -6,13 +6,17 @@ import io
 import json
 import logging
 import random
+import shutil
+import subprocess
 import sys
 from contextlib import nullcontext, redirect_stdout
+from functools import lru_cache
 from pathlib import Path
 from unittest.mock import patch
 
 import dask.array as da
 import numpy as np
+import pytest
 import zarr
 
 from tests._outcomes import err, ok
@@ -92,6 +96,52 @@ def _snapshot_tree(root: Path):
     return snapshot
 
 
+@lru_cache(maxsize=1)
+def _native_cli_path() -> Path:
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("cmake is required for standalone native CLI tests")
+
+    build_dir = ROOT / "build-cpp-tests"
+    configure_cmd = [
+        cmake,
+        "-S",
+        str(ROOT),
+        "-B",
+        str(build_dir),
+        "-DCMAKE_BUILD_TYPE=Release",
+    ]
+    if shutil.which("ninja") is not None:
+        configure_cmd[1:1] = ["-G", "Ninja"]
+
+    try:
+        subprocess.run(configure_cmd, check=True, capture_output=True, text=True)
+        subprocess.run(
+            [cmake, "--build", str(build_dir), "-j2"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        failure_text = f"{exc.stdout}\n{exc.stderr}"
+        if (
+            "Could not find BLOSC_LIBRARY" in failure_text
+            or "Could not find ZSTD_LIBRARY" in failure_text
+            or "blosc.h" in failure_text
+            or "zstd.h" in failure_text
+        ):
+            pytest.skip(
+                "standalone native CLI tests require libblosc-dev and libzstd-dev"
+            )
+        raise
+
+    cli_path = build_dir / "ome_zarr_native_cli"
+    if not cli_path.exists():
+        cli_path = cli_path.with_suffix(".exe")
+    assert cli_path.exists(), "standalone native CLI binary was not built"
+    return cli_path
+
+
 def _rewrite_snapshot_prefix(snapshot, old_prefix: str, new_prefix: str):
     rewritten = []
     for kind, rel_path, payload in snapshot:
@@ -121,6 +171,27 @@ def _run_main(main_func, args: list[str], replacements: dict[str, str]):
         return ok(stdout=_normalize_output(stream.getvalue(), replacements))
     except Exception as exc:  # noqa: BLE001
         return err(exc, stdout=_normalize_output(stream.getvalue(), replacements))
+
+
+def _run_native_cli(args: list[str], replacements: dict[str, str]):
+    completed = subprocess.run(
+        [str(_native_cli_path()), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    stdout = _normalize_output(completed.stdout, replacements)
+    payload = {
+        "returncode": completed.returncode,
+        "stderr": completed.stderr,
+    }
+    if completed.returncode == 0:
+        return ok(stdout=stdout, payload=payload)
+    return err(
+        RuntimeError(completed.stderr.strip() or completed.stdout.strip()),
+        stdout=stdout,
+        payload=payload,
+    )
 
 
 def _run_config_logging(
@@ -367,3 +438,101 @@ def test_cli_scale_matches_upstream(tmp_path) -> None:
     )
     assert expected == actual
     assert _snapshot_tree(py_output) == _snapshot_tree(cpp_output)
+
+
+def test_native_cli_scale_matches_upstream(tmp_path) -> None:
+    data = np.arange(64, dtype=np.uint16).reshape(8, 8)
+    py_input = tmp_path / "py-native-scale-input.zarr"
+    native_input = tmp_path / "native-scale-input.zarr"
+    py_output = tmp_path / "py-native-scale-output.zarr"
+    native_output = tmp_path / "native-scale-output.zarr"
+    replacements = {
+        str(py_input): "<INPUT>",
+        str(native_input): "<INPUT>",
+        str(py_output): "<OUTPUT>",
+        str(native_output): "<OUTPUT>",
+    }
+
+    for input_path in (py_input, native_input):
+        arr = zarr.open_array(
+            str(input_path),
+            mode="w",
+            shape=data.shape,
+            chunks=(2, 2),
+            dtype=data.dtype,
+        )
+        arr[:] = data
+        arr.attrs.update({"alpha": 1})
+
+    expected = _run_main(
+        _py_cli.main,
+        [
+            "scale",
+            str(py_input),
+            str(py_output),
+            "yx",
+            "--copy-metadata",
+            "--method=nearest",
+            "--max_layer=2",
+        ],
+        replacements,
+    )
+    actual = _run_native_cli(
+        [
+            "scale",
+            str(native_input),
+            str(native_output),
+            "yx",
+            "--copy-metadata",
+            "--method=nearest",
+            "--max_layer=2",
+        ],
+        replacements,
+    )
+    assert expected.status == actual.status == "ok"
+    assert expected.stdout == actual.stdout
+    assert _snapshot_tree(py_output) == _snapshot_tree(native_output)
+
+
+def test_native_cli_scale_invalid_method_matches_upstream(tmp_path) -> None:
+    data = np.arange(16, dtype=np.uint16).reshape(4, 4)
+    py_input = tmp_path / "py-bad-scale-input.zarr"
+    native_input = tmp_path / "native-bad-scale-input.zarr"
+    replacements = {
+        str(py_input): "<INPUT>",
+        str(native_input): "<INPUT>",
+    }
+
+    for input_path in (py_input, native_input):
+        arr = zarr.open_array(
+            str(input_path),
+            mode="w",
+            shape=data.shape,
+            chunks=(2, 2),
+            dtype=data.dtype,
+        )
+        arr[:] = data
+
+    expected = _run_main(
+        _py_cli.main,
+        [
+            "scale",
+            str(py_input),
+            str(tmp_path / "py-bad-output.zarr"),
+            "yx",
+            "--method=laplacian",
+        ],
+        replacements,
+    )
+    actual = _run_native_cli(
+        [
+            "scale",
+            str(native_input),
+            str(tmp_path / "native-bad-output.zarr"),
+            "yx",
+            "--method=laplacian",
+        ],
+        replacements,
+    )
+    assert expected.status == actual.status == "err"
+    assert expected.error_message == actual.error_message

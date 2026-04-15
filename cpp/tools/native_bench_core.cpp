@@ -18,6 +18,7 @@
 #include "../native/axes.hpp"
 #include "../native/cli.hpp"
 #include "../native/conversions.hpp"
+#include "../native/create_runtime.hpp"
 #include "../native/csv.hpp"
 #include "../native/dask_utils.hpp"
 #include "../native/data.hpp"
@@ -26,6 +27,7 @@
 #include "../native/local_runtime.hpp"
 #include "../native/reader.hpp"
 #include "../native/scale.hpp"
+#include "../native/scale_runtime.hpp"
 #include "../native/utils.hpp"
 #include "../native/writer.hpp"
 
@@ -193,6 +195,46 @@ std::string json_escape(std::string_view text) {
     return output.str();
 }
 
+void write_u16_v2_array_fixture(
+    const fs::path& root,
+    const std::vector<std::uint16_t>& values,
+    const std::vector<std::int64_t>& shape,
+    const std::vector<std::int64_t>& chunk_shape,
+    const std::optional<int>& alpha_attr = std::nullopt) {
+    fs::create_directories(root);
+    {
+        std::ofstream zarray(root / ".zarray");
+        zarray
+            << "{\"shape\":[" << shape[0] << "," << shape[1] << "],"
+            << "\"chunks\":[" << chunk_shape[0] << "," << chunk_shape[1] << "],"
+            << "\"dtype\":\"<u2\",\"compressor\":null,\"fill_value\":0,"
+            << "\"filters\":null,\"order\":\"C\",\"dimension_separator\":\".\","
+            << "\"zarr_format\":2}";
+    }
+    if (alpha_attr.has_value()) {
+        std::ofstream zattrs(root / ".zattrs");
+        zattrs << "{\"alpha\":" << alpha_attr.value() << "}";
+    }
+    for (std::int64_t chunk_y = 0; chunk_y < shape[0] / chunk_shape[0]; ++chunk_y) {
+        for (std::int64_t chunk_x = 0; chunk_x < shape[1] / chunk_shape[1]; ++chunk_x) {
+            std::ofstream chunk(
+                root / (std::to_string(chunk_y) + "." + std::to_string(chunk_x)),
+                std::ios::binary);
+            for (std::int64_t y = 0; y < chunk_shape[0]; ++y) {
+                for (std::int64_t x = 0; x < chunk_shape[1]; ++x) {
+                    const auto global_y = chunk_y * chunk_shape[0] + y;
+                    const auto global_x = chunk_x * chunk_shape[1] + x;
+                    const auto value = values[static_cast<std::size_t>(
+                        global_y * shape[1] + global_x)];
+                    chunk.write(
+                        reinterpret_cast<const char*>(&value),
+                        static_cast<std::streamsize>(sizeof(value)));
+                }
+            }
+        }
+    }
+}
+
 const fs::path& bench_runtime_fixture_root() {
     static const fs::path root = [] {
         const fs::path root_path =
@@ -258,6 +300,17 @@ const fs::path& bench_runtime_fixture_root() {
             csv_file << "cell_id,score\n";
             csv_file << "1,4.5\n";
         }
+
+        std::vector<std::uint16_t> scale_values(64);
+        for (std::size_t index = 0; index < scale_values.size(); ++index) {
+            scale_values[index] = static_cast<std::uint16_t>(index);
+        }
+        write_u16_v2_array_fixture(
+            root_path / "scale_input.zarr",
+            scale_values,
+            {8, 8},
+            {2, 2},
+            1);
 
         return root_path;
     }();
@@ -495,6 +548,46 @@ std::uint64_t bench_data_create_plan(std::size_t iteration) {
         plan.size_c);
 }
 
+std::uint64_t bench_local_create_coins(std::size_t iteration) {
+    const auto output_root =
+        bench_runtime_fixture_root() /
+        ("create_coins_" + std::to_string(iteration % 32U) + ".zarr");
+    std::error_code error;
+    std::filesystem::remove_all(output_root, error);
+    local_create_sample(
+        output_root.generic_string(),
+        "coins",
+        "coins",
+        "0.5",
+        CreateColorMode::native_random,
+        std::uint64_t{0});
+    const auto metadata_size =
+        std::filesystem::file_size(output_root / "zarr.json") +
+        std::filesystem::file_size(output_root / "labels" / "coins" / "zarr.json");
+    std::filesystem::remove_all(output_root, error);
+    return static_cast<std::uint64_t>(metadata_size);
+}
+
+std::uint64_t bench_local_create_astronaut(std::size_t iteration) {
+    const auto output_root =
+        bench_runtime_fixture_root() /
+        ("create_astronaut_" + std::to_string(iteration % 32U) + ".zarr");
+    std::error_code error;
+    std::filesystem::remove_all(output_root, error);
+    local_create_sample(
+        output_root.generic_string(),
+        "astronaut",
+        "circles",
+        "0.5",
+        CreateColorMode::native_random,
+        std::uint64_t{0});
+    const auto metadata_size =
+        std::filesystem::file_size(output_root / "zarr.json") +
+        std::filesystem::file_size(output_root / "labels" / "circles" / "zarr.json");
+    std::filesystem::remove_all(output_root, error);
+    return static_cast<std::uint64_t>(metadata_size);
+}
+
 std::uint64_t bench_local_find_multiscales(std::size_t) {
     const auto images = local_find_multiscales(
         (bench_runtime_fixture_root() / "finder_tree" / "image.zarr").string());
@@ -573,6 +666,30 @@ std::uint64_t bench_local_csv_to_labels(std::size_t iteration) {
         "cell_id");
     return static_cast<std::uint64_t>(
         result.touched_label_groups + result.updated_properties);
+}
+
+std::uint64_t bench_local_scale_nearest(std::size_t iteration) {
+    const auto output_root =
+        bench_runtime_fixture_root() /
+        ("scale_out_" + std::to_string(iteration % 32U) + ".zarr");
+    std::error_code error;
+    std::filesystem::remove_all(output_root, error);
+    const auto result = local_scale_array(
+        (bench_runtime_fixture_root() / "scale_input.zarr").string(),
+        output_root.string(),
+        "yx",
+        true,
+        "nearest",
+        false,
+        2,
+        2);
+    const auto metadata_size =
+        std::filesystem::file_size(output_root / "zarr.json") +
+        std::filesystem::file_size(output_root / "s0" / "zarr.json") +
+        std::filesystem::file_size(output_root / "s1" / "zarr.json") +
+        std::filesystem::file_size(output_root / "s2" / "zarr.json");
+    std::filesystem::remove_all(output_root, error);
+    return static_cast<std::uint64_t>(metadata_size + result.levels.size());
 }
 
 std::uint64_t bench_reader_plate_levels(std::size_t) {
@@ -707,12 +824,15 @@ int main(int argc, char** argv) {
             {"format.v01_init_store", 1, bench_format_v01_init_store},
             {"format.well_and_coord", 2, bench_format_well_and_coord},
             {"io_subpath", 1, bench_io_subpath},
+            {"local.create_astronaut", 4096, bench_local_create_astronaut},
+            {"local.create_coins", 4096, bench_local_create_coins},
             {"local.csv_to_labels", 1024, bench_local_csv_to_labels},
             {"local.download", 1, bench_local_download},
             {"local.finder", 1, bench_local_finder},
             {"local.find_multiscales", 1, bench_local_find_multiscales},
             {"local.info", 1, bench_local_info},
             {"local.info_stats", 1, bench_local_info_stats},
+            {"local.scale_nearest", 32, bench_local_scale_nearest},
             {"local.view_prepare", 1, bench_local_view_prepare},
             {"reader_plate_levels", 4, bench_reader_plate_levels},
             {"scale_build_pyramid", 8, bench_scale_build_pyramid},
