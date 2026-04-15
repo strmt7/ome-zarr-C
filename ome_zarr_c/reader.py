@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 from collections.abc import Iterator
-from typing import Any, cast, overload
+from typing import Any, Protocol, cast, overload
 
 import dask.array as da
 import numpy as np
@@ -13,7 +13,6 @@ import numpy as np
 from . import _core
 from ._frozen_upstream import ensure_frozen_upstream_importable
 from .format import format_from_version
-from .io import ZarrLocation
 
 ensure_frozen_upstream_importable()
 
@@ -27,6 +26,21 @@ _KNOWN_AXES = {
     "c": "channel",
     "t": "time",
 }
+
+
+class LocationLike(Protocol):
+    fmt: object
+    zgroup: dict
+    zarray: dict
+    root_attrs: dict
+
+    def exists(self) -> bool: ...
+
+    def basename(self) -> str: ...
+
+    def create(self, path: str) -> LocationLike: ...
+
+    def load(self, subpath: str = "") -> da.core.Array: ...
 
 
 def _normalized_multiscale_axes(
@@ -60,18 +74,18 @@ class Node:
 
     def __init__(
         self,
-        zarr: ZarrLocation,
-        root: Node | Reader | list[ZarrLocation],
+        zarr: LocationLike,
+        root: Node | Reader | list[LocationLike],
         visibility: bool = True,
         plate_labels: bool = False,
     ):
         self.zarr = zarr
         self.root = root
-        self.seen: list[ZarrLocation] = []
+        self.seen: list[LocationLike] = []
         if isinstance(root, (Node, Reader)):
             self.seen = root.seen
         else:
-            self.seen = cast(list[ZarrLocation], root)
+            self.seen = cast(list[LocationLike], root)
         self.__visible = visibility
 
         self.metadata: JSONDict = dict()
@@ -124,7 +138,7 @@ class Node:
 
     def add(
         self,
-        zarr: ZarrLocation,
+        zarr: LocationLike,
         prepend: bool = False,
         visibility: bool | None = None,
         plate_labels: bool = False,
@@ -163,7 +177,7 @@ class Spec:
     """Base class for specifications that can be implemented by groups or arrays."""
 
     @staticmethod
-    def matches(zarr: ZarrLocation) -> bool:
+    def matches(zarr: LocationLike) -> bool:
         raise NotImplementedError()
 
     def __init__(self, node: Node) -> None:
@@ -180,7 +194,7 @@ class Spec:
 
 class Labels(Spec):
     @staticmethod
-    def matches(zarr: ZarrLocation) -> bool:
+    def matches(zarr: LocationLike) -> bool:
         return bool(_core.reader_matches_labels(zarr))
 
     def __init__(self, node: Node) -> None:
@@ -193,7 +207,7 @@ class Labels(Spec):
 
 class Label(Spec):
     @staticmethod
-    def matches(zarr: ZarrLocation) -> bool:
+    def matches(zarr: LocationLike) -> bool:
         return bool(_core.reader_matches_label(zarr))
 
     def __init__(self, node: Node) -> None:
@@ -223,7 +237,7 @@ class Label(Spec):
 
 class Multiscales(Spec):
     @staticmethod
-    def matches(zarr: ZarrLocation) -> bool:
+    def matches(zarr: LocationLike) -> bool:
         return bool(_core.reader_matches_multiscales(zarr))
 
     def __init__(self, node: Node) -> None:
@@ -270,7 +284,7 @@ class Multiscales(Spec):
 
 class OMERO(Spec):
     @staticmethod
-    def matches(zarr: ZarrLocation) -> bool:
+    def matches(zarr: LocationLike) -> bool:
         return bool(_core.reader_matches_omero(zarr))
 
     def __init__(self, node: Node) -> None:
@@ -297,7 +311,7 @@ class OMERO(Spec):
 
 class Well(Spec):
     @staticmethod
-    def matches(zarr: ZarrLocation) -> bool:
+    def matches(zarr: LocationLike) -> bool:
         return bool(_core.reader_matches_well(zarr))
 
     def __init__(self, node: Node) -> None:
@@ -363,12 +377,12 @@ class Well(Spec):
 
 class Plate(Spec):
     @staticmethod
-    def matches(zarr: ZarrLocation) -> bool:
+    def matches(zarr: LocationLike) -> bool:
         return bool(_core.reader_matches_plate(zarr))
 
     def __init__(self, node: Node) -> None:
         super().__init__(node)
-        LOGGER.debug("Plate created with ZarrLocation fmt: %s", self.zarr.fmt)
+        LOGGER.debug("Plate created with location fmt: %s", self.zarr.fmt)
         self.get_pyramid_lazy(node)
 
     def get_pyramid_lazy(self, node: Node) -> None:
@@ -482,10 +496,10 @@ class Plate(Spec):
 class Reader:
     """Parses the given Zarr instance into a collection of Nodes."""
 
-    def __init__(self, zarr: ZarrLocation) -> None:
+    def __init__(self, zarr: LocationLike) -> None:
         assert zarr.exists()
         self.zarr = zarr
-        self.seen: list[ZarrLocation] = [zarr]
+        self.seen: list[LocationLike] = [zarr]
 
     def __call__(self) -> Iterator[Node]:
         node = Node(self.zarr, self)

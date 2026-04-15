@@ -18,6 +18,7 @@
 #include "../native/data.hpp"
 #include "../native/conversions.hpp"
 #include "../native/csv.hpp"
+#include "../native/io.hpp"
 #include "../native/local_runtime.hpp"
 #include "../native/utils.hpp"
 
@@ -33,6 +34,7 @@ struct ExitError final : public std::runtime_error {
 struct Options {
     std::string command;
     std::string path;
+    std::string mode = "r";
     std::string value;
     std::string col_type;
     std::string parts_json;
@@ -47,6 +49,7 @@ struct Options {
     std::string offset_json;
     std::string axes_json;
     std::string format_version;
+    std::string create_subpath;
     std::string cases_json;
     bool has_path = false;
     bool has_value = false;
@@ -63,6 +66,7 @@ struct Options {
     bool has_offset_json = false;
     bool has_axes_json = false;
     bool has_format_version = false;
+    bool has_create_subpath = false;
     bool has_cases_json = false;
     std::size_t loops = 1;
 };
@@ -86,6 +90,8 @@ std::size_t parse_positive_integer(const char* text, const char* flag_name) {
         << "  splitall --path PATH [--loops N]\n"
         << "  strip-common-prefix --parts-json JSON [--loops N]\n"
         << "  find-multiscales --path PATH [--loops N]\n"
+        << "  io-signature --path PATH [--mode MODE] [--format-version VERSION] "
+           "[--create-subpath SUBPATH] [--loops N]\n"
         << "  int-to-rgba --value INT32 [--loops N]\n"
         << "  int-to-rgba-255 --value INT32 [--loops N]\n"
         << "  rgba-to-int --rgba-json JSON [--loops N]\n"
@@ -125,6 +131,13 @@ Options parse_options(const int argc, char** argv) {
             }
             options.value = argv[++index];
             options.has_value = true;
+            continue;
+        }
+        if (arg == "--mode") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --mode");
+            }
+            options.mode = argv[++index];
             continue;
         }
         if (arg == "--col-type") {
@@ -236,6 +249,14 @@ Options parse_options(const int argc, char** argv) {
             }
             options.format_version = argv[++index];
             options.has_format_version = true;
+            continue;
+        }
+        if (arg == "--create-subpath") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --create-subpath");
+            }
+            options.create_subpath = argv[++index];
+            options.has_create_subpath = true;
             continue;
         }
         if (arg == "--cases-json") {
@@ -847,6 +868,27 @@ json run_find_multiscales(const Options& options) {
     return make_ok_payload(value, stdout_text, records);
 }
 
+json run_io_signature(const Options& options) {
+    if (!options.has_path) {
+        throw ExitError("io-signature requires --path");
+    }
+    const std::string requested_version =
+        options.has_format_version ? options.format_version : "0.5";
+    LocalIoSignature signature{};
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        signature = local_io_signature(
+            options.path,
+            options.mode,
+            requested_version,
+            options.create_subpath,
+            options.has_create_subpath);
+    }
+    if (signature.is_none) {
+        return make_ok_payload(nullptr);
+    }
+    return make_ok_payload(signature.value);
+}
+
 std::int32_t parse_int32_value(const std::string& text) {
     char* end = nullptr;
     errno = 0;
@@ -996,6 +1038,8 @@ int main(int argc, char** argv) {
             payload = run_strip_common_prefix(options);
         } else if (options.command == "find-multiscales") {
             payload = run_find_multiscales(options);
+        } else if (options.command == "io-signature") {
+            payload = run_io_signature(options);
         } else if (options.command == "int-to-rgba") {
             payload = run_int_to_rgba(options);
         } else if (options.command == "int-to-rgba-255") {

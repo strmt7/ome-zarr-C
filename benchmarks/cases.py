@@ -39,6 +39,7 @@ from tests import test_axes_equivalence as axes_eq
 from tests import test_cli_equivalence as cli_eq
 from tests import test_data_equivalence as data_eq
 from tests import test_data_runtime_equivalence as data_rt
+from tests import test_io_equivalence as io_eq
 from tests import test_utils_equivalence as utils_eq
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,7 +63,6 @@ _py_writer = importlib.import_module("ome_zarr.writer")
 
 _cpp_dask_utils = importlib.import_module("ome_zarr_c.dask_utils")
 _cpp_format = importlib.import_module("ome_zarr_c.format")
-_cpp_io = importlib.import_module("ome_zarr_c.io")
 _cpp_scale = importlib.import_module("ome_zarr_c.scale")
 _cpp_writer = importlib.import_module("ome_zarr_c.writer")
 
@@ -920,19 +920,25 @@ def _bench_scaler_local_mean(py_like: bool) -> float:
 
 
 def _verify_parse_url_v2() -> None:
-    assert run_parse_url(_py_io.parse_url, _runtime_v2_source()) == run_parse_url(
-        _cpp_io.parse_url, _runtime_v2_source()
-    )
+    assert run_parse_url(
+        _py_io.parse_url, _runtime_v2_source()
+    ) == io_eq._run_native_io_signature(_runtime_v2_source())
 
 
 def _verify_parse_url_v3() -> None:
-    assert run_parse_url(_py_io.parse_url, _runtime_v3_source()) == run_parse_url(
-        _cpp_io.parse_url, _runtime_v3_source()
-    )
+    assert run_parse_url(
+        _py_io.parse_url, _runtime_v3_source()
+    ) == io_eq._run_native_io_signature(_runtime_v3_source())
 
 
-def _bench_parse_url(module: object, source: Path, case_name: str) -> float:
-    outcome = run_parse_url(module.parse_url, source)
+def _bench_parse_url_python(source: Path, case_name: str) -> float:
+    outcome = run_parse_url(_py_io.parse_url, source)
+    _assert_outcome_ok(case_name, outcome)
+    return _touch_outcome(outcome)
+
+
+def _bench_parse_url_native(source: Path, case_name: str) -> float:
+    outcome = io_eq._run_native_io_signature(source)
     _assert_outcome_ok(case_name, outcome)
     return _touch_outcome(outcome)
 
@@ -1481,11 +1487,11 @@ ALL_CASES = (
             "minimal v2 image."
         ),
         _verify_parse_url_v2,
-        lambda: _bench_parse_url(
-            _py_io, _runtime_v2_source(), "runtime.io.parse_url_v2_image"
+        lambda: _bench_parse_url_python(
+            _runtime_v2_source(), "runtime.io.parse_url_v2_image"
         ),
-        lambda: _bench_parse_url(
-            _cpp_io, _runtime_v2_source(), "runtime.io.parse_url_v2_image"
+        lambda: _bench_parse_url_native(
+            _runtime_v2_source(), "runtime.io.parse_url_v2_image"
         ),
     ),
     _make_case(
@@ -1496,11 +1502,11 @@ ALL_CASES = (
             "minimal v3 image."
         ),
         _verify_parse_url_v3,
-        lambda: _bench_parse_url(
-            _py_io, _runtime_v3_source(), "runtime.io.parse_url_v3_image"
+        lambda: _bench_parse_url_python(
+            _runtime_v3_source(), "runtime.io.parse_url_v3_image"
         ),
-        lambda: _bench_parse_url(
-            _cpp_io, _runtime_v3_source(), "runtime.io.parse_url_v3_image"
+        lambda: _bench_parse_url_native(
+            _runtime_v3_source(), "runtime.io.parse_url_v3_image"
         ),
     ),
     _make_case(

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../third_party/nlohmann/json.hpp"
+
 #include <string>
 #include <vector>
 
@@ -52,5 +54,17 @@ bool io_is_local_store(IoPathKind path_kind);
 bool io_parse_url_returns_none(const std::string& mode, bool exists);
 
 bool io_protocol_is_http(const std::vector<std::string>& protocols);
+
+struct LocalIoSignature {
+    bool is_none = false;
+    nlohmann::ordered_json value = nullptr;
+};
+
+LocalIoSignature local_io_signature(
+    const std::string& path,
+    const std::string& mode,
+    const std::string& requested_version,
+    const std::string& create_subpath = "",
+    bool use_create_subpath = false);
 
 }  // namespace ome_zarr_c::native_code

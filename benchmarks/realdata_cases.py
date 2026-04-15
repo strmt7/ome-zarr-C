@@ -15,8 +15,8 @@ def _include_large_fixture() -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
-def _reader_summary(io_module, reader_module, path):
-    location = io_module.parse_url(str(path))
+def _reader_summary(reader_module, path):
+    location = io_eq._py_io.parse_url(str(path))
     if location is None:
         raise AssertionError(f"realdata path is not parseable as zarr: {path}")
     return [
@@ -54,17 +54,22 @@ def _verify_examples_image_surface() -> None:
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
             "info": _python_info_stdout(path),
-            "reader": _reader_summary(io_eq._py_io, reader_eq._py_reader, path),
+            "reader": _reader_summary(reader_eq._py_reader, path),
         },
         {
-            "parse_url": run_parse_url(io_eq._cpp_io.parse_url, str(path)),
+            "parse_url": io_eq._run_native_io_signature(str(path)),
             "info": _native_info_stdout(path),
-            "reader": _reader_summary(io_eq._cpp_io, reader_eq._cpp_reader, path),
+            "reader": _reader_summary(reader_eq._cpp_reader, path),
         },
     )
 
 
-def _bench_examples_image_surface(io_module, utils_module, reader_module) -> float:
+def _bench_examples_image_surface(
+    utils_module,
+    reader_module,
+    *,
+    native_parse_url: bool,
+) -> float:
     path = ensure_fixture("examples_image")
     info_value = (
         _python_info_stdout(path)
@@ -73,9 +78,13 @@ def _bench_examples_image_surface(io_module, utils_module, reader_module) -> flo
     )
     return core_cases._touch(
         {
-            "parse_url": run_parse_url(io_module.parse_url, str(path)),
+            "parse_url": (
+                io_eq._run_native_io_signature(str(path))
+                if native_parse_url
+                else run_parse_url(io_eq._py_io.parse_url, str(path))
+            ),
             "info": info_value,
-            "reader": _reader_summary(io_module, reader_module, path),
+            "reader": _reader_summary(reader_module, path),
         }
     )
 
@@ -87,17 +96,22 @@ def _verify_examples_plate_surface() -> None:
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
             "info": _python_info_stdout(path),
-            "reader": _reader_summary(io_eq._py_io, reader_eq._py_reader, path),
+            "reader": _reader_summary(reader_eq._py_reader, path),
         },
         {
-            "parse_url": run_parse_url(io_eq._cpp_io.parse_url, str(path)),
+            "parse_url": io_eq._run_native_io_signature(str(path)),
             "info": _native_info_stdout(path),
-            "reader": _reader_summary(io_eq._cpp_io, reader_eq._cpp_reader, path),
+            "reader": _reader_summary(reader_eq._cpp_reader, path),
         },
     )
 
 
-def _bench_examples_plate_surface(io_module, utils_module, reader_module) -> float:
+def _bench_examples_plate_surface(
+    utils_module,
+    reader_module,
+    *,
+    native_parse_url: bool,
+) -> float:
     path = ensure_fixture("examples_plate")
     info_value = (
         _python_info_stdout(path)
@@ -106,9 +120,13 @@ def _bench_examples_plate_surface(io_module, utils_module, reader_module) -> flo
     )
     return core_cases._touch(
         {
-            "parse_url": run_parse_url(io_module.parse_url, str(path)),
+            "parse_url": (
+                io_eq._run_native_io_signature(str(path))
+                if native_parse_url
+                else run_parse_url(io_eq._py_io.parse_url, str(path))
+            ),
             "info": info_value,
-            "reader": _reader_summary(io_module, reader_module, path),
+            "reader": _reader_summary(reader_module, path),
         }
     )
 
@@ -120,17 +138,22 @@ def _verify_bia_tonsil3_surface() -> None:
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
             "info": _python_info_stdout(path),
-            "reader": _reader_summary(io_eq._py_io, reader_eq._py_reader, path),
+            "reader": _reader_summary(reader_eq._py_reader, path),
         },
         {
-            "parse_url": run_parse_url(io_eq._cpp_io.parse_url, str(path)),
+            "parse_url": io_eq._run_native_io_signature(str(path)),
             "info": _native_info_stdout(path),
-            "reader": _reader_summary(io_eq._cpp_io, reader_eq._cpp_reader, path),
+            "reader": _reader_summary(reader_eq._cpp_reader, path),
         },
     )
 
 
-def _bench_bia_tonsil3_surface(io_module, utils_module, reader_module) -> float:
+def _bench_bia_tonsil3_surface(
+    utils_module,
+    reader_module,
+    *,
+    native_parse_url: bool,
+) -> float:
     path = ensure_fixture("bia_tonsil3")
     info_value = (
         _python_info_stdout(path)
@@ -139,9 +162,13 @@ def _bench_bia_tonsil3_surface(io_module, utils_module, reader_module) -> float:
     )
     return core_cases._touch(
         {
-            "parse_url": run_parse_url(io_module.parse_url, str(path)),
+            "parse_url": (
+                io_eq._run_native_io_signature(str(path))
+                if native_parse_url
+                else run_parse_url(io_eq._py_io.parse_url, str(path))
+            ),
             "info": info_value,
-            "reader": _reader_summary(io_module, reader_module, path),
+            "reader": _reader_summary(reader_module, path),
         }
     )
 
@@ -153,17 +180,22 @@ def _verify_bia_156_42_surface() -> None:
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
             "info": _python_info_stdout(path),
-            "reader": _reader_summary(io_eq._py_io, reader_eq._py_reader, path),
+            "reader": _reader_summary(reader_eq._py_reader, path),
         },
         {
-            "parse_url": run_parse_url(io_eq._cpp_io.parse_url, str(path)),
+            "parse_url": io_eq._run_native_io_signature(str(path)),
             "info": _native_info_stdout(path),
-            "reader": _reader_summary(io_eq._cpp_io, reader_eq._cpp_reader, path),
+            "reader": _reader_summary(reader_eq._cpp_reader, path),
         },
     )
 
 
-def _bench_bia_156_42_surface(io_module, utils_module, reader_module) -> float:
+def _bench_bia_156_42_surface(
+    utils_module,
+    reader_module,
+    *,
+    native_parse_url: bool,
+) -> float:
     path = ensure_fixture("bia_156_42")
     info_value = (
         _python_info_stdout(path)
@@ -172,9 +204,13 @@ def _bench_bia_156_42_surface(io_module, utils_module, reader_module) -> float:
     )
     return core_cases._touch(
         {
-            "parse_url": run_parse_url(io_module.parse_url, str(path)),
+            "parse_url": (
+                io_eq._run_native_io_signature(str(path))
+                if native_parse_url
+                else run_parse_url(io_eq._py_io.parse_url, str(path))
+            ),
             "info": info_value,
-            "reader": _reader_summary(io_module, reader_module, path),
+            "reader": _reader_summary(reader_module, path),
         }
     )
 
@@ -186,10 +222,10 @@ REALDATA_CASES = [
         "Real-data parse_url/info/reader benchmark on a small example OME-Zarr image.",
         _verify_examples_image_surface,
         lambda: _bench_examples_image_surface(
-            io_eq._py_io, "python", reader_eq._py_reader
+            "python", reader_eq._py_reader, native_parse_url=False
         ),
         lambda: _bench_examples_image_surface(
-            io_eq._cpp_io, "native", reader_eq._cpp_reader
+            "native", reader_eq._cpp_reader, native_parse_url=True
         ),
     ),
     core_cases._make_case(
@@ -198,10 +234,10 @@ REALDATA_CASES = [
         "Real-data parse_url/info/reader benchmark on a small example OME-Zarr plate.",
         _verify_examples_plate_surface,
         lambda: _bench_examples_plate_surface(
-            io_eq._py_io, "python", reader_eq._py_reader
+            "python", reader_eq._py_reader, native_parse_url=False
         ),
         lambda: _bench_examples_plate_surface(
-            io_eq._cpp_io, "native", reader_eq._cpp_reader
+            "native", reader_eq._cpp_reader, native_parse_url=True
         ),
     ),
     core_cases._make_case(
@@ -213,10 +249,10 @@ REALDATA_CASES = [
         ),
         _verify_bia_tonsil3_surface,
         lambda: _bench_bia_tonsil3_surface(
-            io_eq._py_io, "python", reader_eq._py_reader
+            "python", reader_eq._py_reader, native_parse_url=False
         ),
         lambda: _bench_bia_tonsil3_surface(
-            io_eq._cpp_io, "native", reader_eq._cpp_reader
+            "native", reader_eq._cpp_reader, native_parse_url=True
         ),
     ),
 ]
@@ -232,10 +268,10 @@ if _include_large_fixture():
             ),
             _verify_bia_156_42_surface,
             lambda: _bench_bia_156_42_surface(
-                io_eq._py_io, "python", reader_eq._py_reader
+                "python", reader_eq._py_reader, native_parse_url=False
             ),
             lambda: _bench_bia_156_42_surface(
-                io_eq._cpp_io, "native", reader_eq._cpp_reader
+                "native", reader_eq._cpp_reader, native_parse_url=True
             ),
         )
     )

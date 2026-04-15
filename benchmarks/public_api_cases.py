@@ -32,7 +32,6 @@ from tests import test_conversions_equivalence as conv_eq
 from tests import test_csv_equivalence as csv_eq
 from tests import test_data_equivalence as data_eq
 from tests import test_format_equivalence as format_eq
-from tests import test_io_equivalence as io_eq
 from tests import test_reader_equivalence as reader_eq
 from tests import test_scaler_equivalence as scaler_eq
 from tests import test_utils_equivalence as utils_eq
@@ -1316,92 +1315,6 @@ def _bench_format_well_and_coord(module) -> float:
     return total
 
 
-def _verify_io_location_methods() -> None:
-    v2_root = _temp_dir("io-v2") / "image.zarr"
-    v3_root = _temp_dir("io-v3") / "image.zarr"
-    try:
-        io_eq._write_minimal_v2_image(v2_root)
-        io_eq._write_minimal_v3_image(v3_root)
-        _assert_equal(
-            "io.location_methods",
-            {
-                "v2": io_eq._run_parse_url(
-                    io_eq._py_io.parse_url, str(v2_root), mode="r"
-                ),
-                "v3": io_eq._run_parse_url(
-                    io_eq._py_io.parse_url, str(v3_root), mode="r"
-                ),
-            },
-            {
-                "v2": io_eq._run_parse_url(
-                    io_eq._cpp_io.parse_url, str(v2_root), mode="r"
-                ),
-                "v3": io_eq._run_parse_url(
-                    io_eq._cpp_io.parse_url, str(v3_root), mode="r"
-                ),
-            },
-        )
-    finally:
-        shutil.rmtree(v2_root.parent, ignore_errors=True)
-        shutil.rmtree(v3_root.parent, ignore_errors=True)
-
-
-def _bench_io_location_methods(module) -> float:
-    v2_root = _temp_dir("io-location") / "image.zarr"
-    try:
-        io_eq._write_minimal_v2_image(v2_root)
-        return _touch_outcome(
-            io_eq._run_parse_url(module.parse_url, str(v2_root), mode="r")
-        )
-    finally:
-        shutil.rmtree(v2_root.parent, ignore_errors=True)
-
-
-def _run_io_create_load(io_module, root: Path):
-    fmt = (
-        io_eq._py_format.FormatV05()
-        if io_module is io_eq._py_io
-        else io_eq._cpp_format.FormatV05()
-    )
-    write_location = io_module.parse_url(root, mode="w", fmt=fmt)
-    if write_location is None:
-        raise AssertionError("parse_url unexpectedly returned None in write mode")
-    group = zarr.open_group(str(root), mode="a", zarr_format=3)
-    array = group.create_array(name="s0", shape=(2, 2), chunks=(2, 2), dtype="i4")
-    array[:] = [[1, 2], [3, 4]]
-    read_location = io_module.parse_url(root, mode="r", fmt=fmt)
-    if read_location is None:
-        raise AssertionError("parse_url unexpectedly returned None in read mode")
-    child = read_location.create("s0")
-    return {
-        "child_path": Path(child.path).relative_to(root.parent).as_posix(),
-        "child_exists": child.exists(),
-        "loaded": read_location.load("s0").compute().tolist(),
-    }
-
-
-def _verify_io_create_load() -> None:
-    py_root = _temp_dir("py-io-create-load") / "image.zarr"
-    cpp_root = _temp_dir("cpp-io-create-load") / "image.zarr"
-    try:
-        _assert_equal(
-            "io.create_load",
-            _run_io_create_load(io_eq._py_io, py_root),
-            _run_io_create_load(io_eq._cpp_io, cpp_root),
-        )
-    finally:
-        shutil.rmtree(py_root.parent, ignore_errors=True)
-        shutil.rmtree(cpp_root.parent, ignore_errors=True)
-
-
-def _bench_io_create_load(io_module) -> float:
-    root = _temp_dir("io-create-load") / "image.zarr"
-    try:
-        return _touch_value(_run_io_create_load(io_module, root))
-    finally:
-        shutil.rmtree(root.parent, ignore_errors=True)
-
-
 def _verify_utils_path_helpers() -> None:
     parts_cases = [
         [["root", "a", "b"], ["root", "a", "c"]],
@@ -2249,22 +2162,6 @@ PUBLIC_API_CASES = (
         _verify_format_well_and_coord,
         lambda: _bench_format_well_and_coord(format_eq._py_format),
         lambda: _bench_format_well_and_coord(format_eq._cpp_format),
-    ),
-    core_cases._make_case(
-        "io",
-        "location_methods",
-        "ZarrLocation method surface through parse_url on v2 and v3 fixtures.",
-        _verify_io_location_methods,
-        lambda: _bench_io_location_methods(io_eq._py_io),
-        lambda: _bench_io_location_methods(io_eq._cpp_io),
-    ),
-    core_cases._make_case(
-        "io",
-        "create_load",
-        "Explicit ZarrLocation.create and ZarrLocation.load behavior in write mode.",
-        _verify_io_create_load,
-        lambda: _bench_io_create_load(io_eq._py_io),
-        lambda: _bench_io_create_load(io_eq._cpp_io),
     ),
     core_cases._make_case(
         "reader",
