@@ -30,6 +30,21 @@ struct LocalFinderResult {
 
 LocalFinderResult local_finder_csv(const std::string& input_path, int port);
 
+struct LocalViewPreparation {
+    bool should_warn;
+    std::string warning_message;
+    std::string parent_dir;
+    std::string image_name;
+    std::string url;
+};
+
+LocalViewPreparation local_view_prepare(
+    const std::string& input_path,
+    int port,
+    bool force);
+
+void local_view_run(const LocalViewPreparation& preparation, int port);
+
 struct LocalDownloadResult {
     std::string copied_root;
     std::vector<std::string> listed_paths;

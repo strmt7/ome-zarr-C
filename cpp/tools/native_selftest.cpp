@@ -624,6 +624,24 @@ void test_io_and_utils() {
             "local finder csv body");
     }
 
+    const auto warning_preparation =
+        local_view_prepare((fixture_root / "missing-image.zarr").generic_string(), 8013, false);
+    require(warning_preparation.should_warn, "local view should warn without metadata");
+    const auto ok_preparation =
+        local_view_prepare((fixture_root / "image.zarr").generic_string(), 8013, false);
+    require(!ok_preparation.should_warn, "local view should prepare valid image");
+    require_eq(
+        ok_preparation.parent_dir,
+        fixture_root.generic_string(),
+        "local view parent directory");
+    require_eq(
+        ok_preparation.image_name,
+        std::string("image.zarr"),
+        "local view image name");
+    require(
+        ok_preparation.url.find("http://localhost:8013/image.zarr") != std::string::npos,
+        "local view validator url");
+
     const auto download_output = fixture_root / "downloads";
     const auto download_result = local_download_copy(
         (fixture_root / "image.zarr").generic_string(),

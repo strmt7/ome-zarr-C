@@ -83,6 +83,8 @@ def main() -> int:
         issues.append("README.md is missing the native CLI finder example.")
     if "ome_zarr_native_cli download " not in readme_text:
         issues.append("README.md is missing the native CLI download example.")
+    if "ome_zarr_native_cli view " not in readme_text:
+        issues.append("README.md is missing the native CLI view example.")
     if "ome_zarr_native_bench_core" not in readme_text:
         issues.append("README.md is missing the native core benchmark command.")
     if "scripts/compare_iteration_benchmarks.py" not in readme_text:
@@ -90,6 +92,10 @@ def main() -> int:
     if "--paired-case utils.download=local.download" not in readme_text:
         issues.append(
             "README.md is missing the native download iteration benchmark example."
+        )
+    if "--paired-case utils.view=local.view_prepare" not in readme_text:
+        issues.append(
+            "README.md is missing the native view iteration benchmark example."
         )
     if "ome_zarr_native_bench_format" in readme_text and not native_bench.exists():
         issues.append(

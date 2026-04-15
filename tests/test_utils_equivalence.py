@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import importlib
 import io
 import json
@@ -7,8 +8,10 @@ import logging
 import os
 import random
 import shutil
+import socket
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from collections import deque
 from contextlib import ExitStack, redirect_stdout
@@ -99,6 +102,51 @@ def _run_native_cli(args: list[str]):
         RuntimeError(completed.stderr.strip() or completed.stdout.strip()),
         stdout=completed.stdout,
         payload=payload,
+    )
+
+
+def _spawn_native_cli(args: list[str], *, env: dict[str, str] | None = None):
+    return subprocess.Popen(
+        [str(_native_cli_path()), *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+
+
+def _find_free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _wait_for_path(path: Path, *, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.exists():
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"Timed out waiting for {path}")
+
+
+def _wait_for_http(port: int, target: str, *, timeout: float = 5.0) -> bytes:
+    last_error = None
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            conn = http.client.HTTPConnection("localhost", port, timeout=1)
+            conn.request("GET", target)
+            response = conn.getresponse()
+            body = response.read()
+            conn.close()
+            if response.status == 200:
+                return body
+        except OSError as exc:
+            last_error = exc
+        time.sleep(0.05)
+    raise AssertionError(
+        f"Timed out waiting for HTTP server on port {port}: {last_error}"
     )
 
 
@@ -828,3 +876,90 @@ def test_native_cli_download_matches_upstream_for_v2_and_v3(tmp_path) -> None:
             _normalize_download_stdout(expected.stdout, replacements)
         )
         assert expected.tree == snapshot_json_tree(cpp_output / source.name)
+
+
+def test_native_cli_view_warns_like_upstream_when_image_missing(tmp_path) -> None:
+    missing = tmp_path / "missing-image.zarr"
+    expected = _run_view(
+        _py_utils.view,
+        missing,
+        port=8014,
+        dry_run=False,
+        force=False,
+        patch_runtime=True,
+    )
+    actual = _run_native_cli(["view", str(missing), "--port", "8014"])
+
+    assert expected.status == actual.status == "ok"
+    assert actual.payload["stderr"] == ""
+    assert actual.stdout == expected.stdout
+
+
+def test_native_cli_view_serves_validator_target_and_records_browser_url(
+    tmp_path,
+) -> None:
+    py_root = tmp_path / "py-case" / "data"
+    cpp_root = tmp_path / "cpp-case" / "data"
+    _build_simple_view_tree(py_root)
+    _build_simple_view_tree(cpp_root)
+
+    port = _find_free_port()
+    expected = _run_view(
+        _py_utils.view,
+        py_root / "image.zarr",
+        port=port,
+        dry_run=False,
+        force=False,
+        patch_runtime=True,
+    )
+    assert expected.status == "ok"
+    expected_url = expected.browser_calls[0]
+
+    browser_log = tmp_path / "browser-url.txt"
+    browser_script = tmp_path / "browser-recorder.sh"
+    browser_script.write_text('#!/bin/sh\nprintf \'%s\' "$1" > "$BROWSER_LOG_PATH"\n')
+    browser_script.chmod(0o755)
+
+    env = os.environ.copy()
+    env["BROWSER"] = str(browser_script)
+    env["BROWSER_LOG_PATH"] = str(browser_log)
+
+    process = _spawn_native_cli(
+        ["view", str(cpp_root / "image.zarr"), "--port", str(port)],
+        env=env,
+    )
+    try:
+        _wait_for_path(browser_log)
+        assert browser_log.read_text() == expected_url
+
+        expected_bytes = (cpp_root / "image.zarr" / ".zattrs").read_bytes()
+        body = _wait_for_http(port, "/image.zarr/.zattrs")
+        assert body == expected_bytes
+
+        conn = http.client.HTTPConnection("localhost", port, timeout=2)
+        conn.request(
+            "GET",
+            "/image.zarr/.zattrs",
+            headers={"Range": "bytes=0-7"},
+        )
+        response = conn.getresponse()
+        ranged_body = response.read()
+        headers = {key.lower(): value for key, value in response.getheaders()}
+        conn.close()
+
+        assert response.status == 206
+        assert headers["access-control-allow-origin"] == "*"
+        assert headers["content-range"].startswith("bytes 0-7/")
+        assert ranged_body == expected_bytes[:8]
+        assert process.poll() is None
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+    stdout, stderr = process.communicate()
+    assert stdout == ""
+    assert stderr == ""

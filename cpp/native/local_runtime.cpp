@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <chrono>
 #include <ctime>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -14,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 #include <sys/stat.h>
@@ -21,6 +23,7 @@
 #include <blosc.h>
 #include <zstd.h>
 
+#include "../../third_party/cpp-httplib/httplib.h"
 #include "../../third_party/nlohmann/json.hpp"
 #include "../../third_party/tinyxml2/tinyxml2.h"
 #include "io.hpp"
@@ -581,6 +584,48 @@ std::string csv_escape(std::string_view text) {
     return escaped;
 }
 
+std::string shell_quote_posix(const std::string& value) {
+    std::string quoted = "'";
+    for (const char ch : value) {
+        if (ch == '\'') {
+            quoted += "'\"'\"'";
+        } else {
+            quoted.push_back(ch);
+        }
+    }
+    quoted.push_back('\'');
+    return quoted;
+}
+
+std::string render_browser_command(const std::string& url) {
+    const char* browser_env = std::getenv("BROWSER");
+    if (browser_env != nullptr && browser_env[0] != '\0') {
+        std::string command(browser_env);
+        const auto placeholder = command.find("%s");
+        if (placeholder != std::string::npos) {
+            command.replace(placeholder, 2, shell_quote_posix(url));
+            return command;
+        }
+        return command + " " + shell_quote_posix(url);
+    }
+#if defined(__APPLE__)
+    return "open " + shell_quote_posix(url);
+#elif defined(_WIN32)
+    return "cmd /c start \"\" " + shell_quote_posix(url);
+#else
+    return "xdg-open " + shell_quote_posix(url);
+#endif
+}
+
+void open_browser_noexcept(const std::string& url) {
+    const auto command = render_browser_command(url);
+    if (command.empty()) {
+        return;
+    }
+    const int exit_code = std::system(command.c_str());
+    static_cast<void>(exit_code);
+}
+
 }  // namespace
 
 LocalFindMultiscalesResult local_find_multiscales(const std::string& input_path) {
@@ -754,6 +799,53 @@ LocalFinderResult local_finder_csv(const std::string& input_path, const int port
     };
     result.app_url = plan.url + "?source=" + percent_encode(source.dump()) + "&v=2";
     return result;
+}
+
+LocalViewPreparation local_view_prepare(
+    const std::string& input_path,
+    const int port,
+    const bool force) {
+    std::size_t discovered_count = 0;
+    if (!force) {
+        const fs::path input_root(input_path);
+        if (metadata_json_path(input_root).has_value()) {
+            discovered_count = local_find_multiscales(input_path).images.size();
+        }
+    }
+
+    const auto plan = utils_view_plan(input_path, port, force, discovered_count);
+    return LocalViewPreparation{
+        plan.should_warn,
+        plan.warning_message,
+        plan.parent_dir,
+        plan.image_name,
+        plan.url,
+    };
+}
+
+void local_view_run(const LocalViewPreparation& preparation, const int port) {
+    httplib::Server server;
+    server.set_post_routing_handler(
+        [](const httplib::Request&, httplib::Response& response) {
+            response.set_header("Access-Control-Allow-Origin", "*");
+        });
+    server.set_error_handler(
+        [](const httplib::Request&, httplib::Response& response) {
+            response.set_header("Access-Control-Allow-Origin", "*");
+        });
+
+    const auto serve_dir =
+        preparation.parent_dir.empty() ? std::string(".") : preparation.parent_dir;
+    if (!server.set_mount_point("/", serve_dir)) {
+        throw std::runtime_error("Unable to mount directory for view server: " + serve_dir);
+    }
+
+    open_browser_noexcept(preparation.url);
+
+    if (!server.listen("localhost", port)) {
+        throw std::runtime_error(
+            "Failed to start local view server on localhost:" + std::to_string(port));
+    }
 }
 
 LocalDownloadResult local_download_copy(

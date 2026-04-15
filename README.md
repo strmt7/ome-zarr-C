@@ -310,6 +310,13 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match utils.download \
   --native-match local.download \
   --paired-case utils.download=local.download
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match view \
+  --python-match utils.view \
+  --native-match local.view_prepare \
+  --paired-case utils.view=local.view_prepare
 ```
 
 Current standalone native CLI commands:
@@ -318,6 +325,7 @@ Current standalone native CLI commands:
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
 ./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
 ./build-cpp/ome_zarr_native_cli download /tmp/demo/image.zarr --output /tmp/out
+./build-cpp/ome_zarr_native_cli view /tmp/demo/image.zarr --port 8013
 ```
 
 Run the current proven-safe local verification lane:

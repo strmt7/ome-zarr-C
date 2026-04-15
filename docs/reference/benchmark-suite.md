@@ -267,7 +267,19 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match utils.download \
   --native-match local.download \
   --paired-case utils.download=local.download
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match view \
+  --python-match utils.view \
+  --native-match local.view_prepare \
+  --paired-case utils.view=local.view_prepare
 ```
+
+The standalone `view` comparison intentionally uses `local.view_prepare` rather
+than timing the lifetime of a running HTTP server. That keeps the iteration
+benchmark bounded while the subprocess parity tests still validate the real
+native server behavior.
 
 List the available cases across all suites:
 
