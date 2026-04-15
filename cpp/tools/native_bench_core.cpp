@@ -460,6 +460,18 @@ std::uint64_t bench_local_finder(std::size_t) {
         result.app_url.size());
 }
 
+std::uint64_t bench_local_view_prepare(std::size_t) {
+    const auto preparation = local_view_prepare(
+        (bench_runtime_fixture_root() / "finder_tree" / "image.zarr").string(),
+        8013,
+        false);
+    return static_cast<std::uint64_t>(
+        preparation.parent_dir.size() +
+        preparation.image_name.size() +
+        preparation.url.size() +
+        (preparation.should_warn ? 1U : 0U));
+}
+
 std::uint64_t bench_local_download(std::size_t iteration) {
     const auto output_root =
         bench_runtime_fixture_root() / ("download_out_" + std::to_string(iteration % 32U));
@@ -610,6 +622,7 @@ int main(int argc, char** argv) {
             {"local.finder", 1, bench_local_finder},
             {"local.find_multiscales", 1, bench_local_find_multiscales},
             {"local.info", 1, bench_local_info},
+            {"local.view_prepare", 1, bench_local_view_prepare},
             {"reader_plate_levels", 4, bench_reader_plate_levels},
             {"scale_build_pyramid", 8, bench_scale_build_pyramid},
             {"utils.finder", 1, bench_utils_finder},

@@ -96,6 +96,7 @@ Current commands:
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
 ./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
 ./build-cpp/ome_zarr_native_cli download /tmp/demo/image.zarr --output /tmp/out
+./build-cpp/ome_zarr_native_cli view /tmp/demo/image.zarr --port 8013
 ```
 
 Current scope:
@@ -103,6 +104,7 @@ Current scope:
 - `info`: standalone local metadata traversal for OME-Zarr image roots
 - `finder`: standalone local OME-Zarr discovery plus BioFile Finder CSV output
 - `download`: standalone local OME-Zarr export with real v2/v3 metadata and chunk rewriting
+- `view`: standalone local validator-serving runtime with real browser launch and CORS-enabled HTTP serving
 
 This still does not replace the full historical Python CLI. The native product
 path is being expanded command by command, and every new standalone command
@@ -143,4 +145,16 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match utils.download \
   --native-match local.download \
   --paired-case utils.download=local.download
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match view \
+  --python-match utils.view \
+  --native-match local.view_prepare \
+  --paired-case utils.view=local.view_prepare
 ```
+
+The standalone `view` pairing intentionally compares Python `utils.view` against
+native `local.view_prepare`, because the long-lived HTTP server itself is not a
+bounded benchmark target. The comparison measures validator URL and serving
+setup cost, while the subprocess CLI tests cover the real server behavior.

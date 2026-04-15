@@ -41,7 +41,8 @@ std::string require_option_value(
         << "Commands:\n"
         << "  info <path>\n"
         << "  download <path> [--output DIR]\n"
-        << "  finder <path> [--port PORT]\n";
+        << "  finder <path> [--port PORT]\n"
+        << "  view <path> [--port PORT] [--force|-f]\n";
     std::exit(code);
 }
 
@@ -146,6 +147,47 @@ void handle_download(const std::vector<std::string>& args) {
     std::cout << "to " << output_dir << "\n";
 }
 
+void handle_view(const std::vector<std::string>& args) {
+    std::string path;
+    int port = 8000;
+    bool force = false;
+
+    for (std::size_t index = 0; index < args.size(); ++index) {
+        const auto& arg = args[index];
+        if (arg == "--port") {
+            const auto value = require_option_value(args, index, "--port");
+            try {
+                port = std::stoi(value);
+            } catch (const std::exception&) {
+                throw ExitError("Invalid integer for --port: " + value);
+            }
+            continue;
+        }
+        if (arg == "--force" || arg == "-f") {
+            force = true;
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            throw ExitError("Unknown view option: " + arg);
+        }
+        if (!path.empty()) {
+            throw ExitError("view accepts exactly one path argument");
+        }
+        path = arg;
+    }
+
+    if (path.empty()) {
+        throw ExitError("view requires a path argument");
+    }
+
+    const auto preparation = local_view_prepare(path, port, force);
+    if (preparation.should_warn) {
+        std::cout << preparation.warning_message << "\n";
+        return;
+    }
+    local_view_run(preparation, port);
+}
+
 void dispatch(int argc, char** argv) {
     if (argc < 2) {
         print_usage_and_exit(2);
@@ -167,6 +209,10 @@ void dispatch(int argc, char** argv) {
     }
     if (command == "download") {
         handle_download(args);
+        return;
+    }
+    if (command == "view") {
+        handle_view(args);
         return;
     }
 
