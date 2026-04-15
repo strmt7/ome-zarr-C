@@ -26,6 +26,7 @@ REMOVED_RUNTIME_PATTERN = re.compile(
     r"ome_zarr_c\.csv|cpp/bindings/csv_bindings\.cpp|"
     r"ome_zarr_c\.conversions|"
     r"ome_zarr_c\.data|cpp/bindings/data_bindings\.cpp|"
+    r"ome_zarr_c\.axes|"
     r"tests/test_scaler_runtime_equivalence\.py|"
     r"tests/test_utils_download_runtime\.py|"
     r"tests/test_utils_info_equivalence\.py)\b"

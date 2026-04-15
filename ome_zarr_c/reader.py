@@ -12,7 +12,6 @@ import numpy as np
 
 from . import _core
 from ._frozen_upstream import ensure_frozen_upstream_importable
-from .axes import Axes
 from .format import format_from_version
 from .io import ZarrLocation
 
@@ -21,6 +20,39 @@ ensure_frozen_upstream_importable()
 JSONDict = importlib.import_module("ome_zarr.types").JSONDict
 
 LOGGER = logging.getLogger("ome_zarr.reader")
+_KNOWN_AXES = {
+    "x": "space",
+    "y": "space",
+    "z": "space",
+    "c": "channel",
+    "t": "time",
+}
+
+
+def _normalized_multiscale_axes(
+    axes: list[str] | list[dict[str, str]] | None,
+    fmt: object,
+) -> list[str] | list[dict[str, str]]:
+    version = str(getattr(fmt, "version", fmt))
+    if axes is None:
+        if version in ("0.1", "0.2"):
+            axes = ["t", "c", "z", "y", "x"]
+        else:
+            raise AttributeError("'Axes' object has no attribute 'axes'")
+
+    normalized: list[dict[str, str]] = []
+    for axis in axes:
+        if isinstance(axis, str):
+            axis_dict = {"name": axis}
+            if axis in _KNOWN_AXES:
+                axis_dict["type"] = _KNOWN_AXES[axis]
+            normalized.append(axis_dict)
+        else:
+            normalized.append(dict(axis))
+
+    if version == "0.3":
+        return [axis["name"] for axis in normalized]
+    return normalized
 
 
 class Node:
@@ -202,8 +234,7 @@ class Multiscales(Spec):
         datasets = payload["datasets"]
         axes = payload["axes"]
         fmt = format_from_version(version)
-        axes_obj = Axes(axes, fmt)
-        node.metadata["axes"] = axes_obj.to_list()
+        node.metadata["axes"] = _normalized_multiscale_axes(axes, fmt)
         node.metadata["name"] = payload["name"]
         self.datasets = list(payload["paths"])
         if "coordinateTransformations" in payload:

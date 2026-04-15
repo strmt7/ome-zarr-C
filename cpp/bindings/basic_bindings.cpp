@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -17,14 +16,6 @@
 namespace py = pybind11;
 
 namespace {
-
-const std::map<std::string, std::string> kKnownAxes = {
-    {"x", "space"},
-    {"y", "space"},
-    {"z", "space"},
-    {"c", "channel"},
-    {"t", "time"},
-};
 
 bool is_number_like(const py::handle& value) {
     return PyFloat_Check(value.ptr()) || PyLong_Check(value.ptr());
@@ -214,45 +205,6 @@ coordinate_transformations_validation_input(py::handle transformations_handle) {
     }
 
     return native_group;
-}
-
-py::list axes_to_dicts(const py::sequence& axes) {
-    const auto records =
-        ome_zarr_c::bindings::axis_records_from_sequence(axes);
-    return ome_zarr_c::bindings::axis_records_to_dict_list_preserving_original_dicts(
-        ome_zarr_c::native_code::axes_to_dicts(records),
-        axes);
-}
-
-py::list get_names(const py::sequence& axes) {
-    py::list result;
-    const auto names =
-        ome_zarr_c::native_code::get_names(
-            ome_zarr_c::bindings::axis_records_from_sequence(axes));
-    for (const auto& name : names) {
-        result.append(py::str(name));
-    }
-    return result;
-}
-
-void validate_03(const py::sequence& axes) {
-    try {
-        const auto names =
-            ome_zarr_c::native_code::get_names(
-                ome_zarr_c::bindings::axis_records_from_sequence(axes));
-        ome_zarr_c::native_code::validate_03(names);
-    } catch (const std::invalid_argument& exc) {
-        throw py::value_error(exc.what());
-    }
-}
-
-void validate_axes_types(const py::sequence& axes) {
-    try {
-        ome_zarr_c::native_code::validate_axes_types(
-            ome_zarr_c::bindings::axis_records_from_sequence(axes));
-    } catch (const std::invalid_argument& exc) {
-        throw py::value_error(exc.what());
-    }
 }
 
 py::object get_valid_axes(
@@ -611,10 +563,6 @@ py::object validate_datasets(
 }  // namespace
 
 void register_basic_bindings(py::module_& m) {
-    m.def("axes_to_dicts", &axes_to_dicts);
-    m.def("get_names", &get_names);
-    m.def("validate_03", &validate_03);
-    m.def("validate_axes_types", &validate_axes_types);
     m.def("_get_valid_axes",
           &get_valid_axes,
           py::arg("ndim") = py::none(),
