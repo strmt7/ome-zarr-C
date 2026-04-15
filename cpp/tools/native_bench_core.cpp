@@ -337,6 +337,20 @@ std::uint64_t bench_conversions_roundtrip(std::size_t iteration) {
     return static_cast<std::uint64_t>(rgba[0] + rgba[1] + rgba[2] + rgba[3]);
 }
 
+std::uint64_t bench_conversions_int_to_rgba(std::size_t iteration) {
+    const auto rgba = int_to_rgba(static_cast<std::int32_t>(iteration * 7919U));
+    return static_cast<std::uint64_t>(
+        rgba[0] * 255.0 + rgba[1] * 255.0 + rgba[2] * 255.0 + rgba[3] * 255.0);
+}
+
+std::uint64_t bench_conversions_rgba_to_int(std::size_t iteration) {
+    return static_cast<std::uint64_t>(rgba_to_int(
+        static_cast<std::uint8_t>(iteration & 0xFFU),
+        static_cast<std::uint8_t>((iteration + 17U) & 0xFFU),
+        static_cast<std::uint8_t>((iteration + 37U) & 0xFFU),
+        static_cast<std::uint8_t>((iteration + 59U) & 0xFFU)));
+}
+
 std::uint64_t bench_csv_props(std::size_t) {
     const auto props = csv_props_by_id(
         {
@@ -348,6 +362,37 @@ std::uint64_t bench_csv_props(std::size_t) {
         "cell_id",
         parse_csv_key_specs("score#d,count#l,flag#b"));
     return static_cast<std::uint64_t>(props.size());
+}
+
+std::uint64_t bench_csv_parse_value(std::size_t iteration) {
+    static const std::vector<std::pair<std::string, std::string>> cases = {
+        {"", "s"},
+        {"0", "l"},
+        {"1.5", "d"},
+        {"abc", "s"},
+        {"True", "b"},
+        {"nan", "d"},
+        {"inf", "d"},
+        {"-inf", "d"},
+    };
+    const auto& current = cases.at(iteration % cases.size());
+    const auto parsed = parse_csv_value(current.first, current.second);
+    if (const auto* text = std::get_if<std::string>(&parsed)) {
+        return static_cast<std::uint64_t>(text->size());
+    }
+    if (const auto* number = std::get_if<double>(&parsed)) {
+        if (std::isnan(*number)) {
+            return 1U;
+        }
+        if (std::isinf(*number)) {
+            return 2U;
+        }
+        return static_cast<std::uint64_t>(std::abs(*number));
+    }
+    if (const auto* integer = std::get_if<std::int64_t>(&parsed)) {
+        return static_cast<std::uint64_t>(*integer >= 0 ? *integer : -*integer);
+    }
+    return std::get<bool>(parsed) ? 1U : 0U;
 }
 
 std::uint64_t bench_dask_zoom(std::size_t iteration) {
@@ -668,6 +713,34 @@ std::uint64_t bench_local_csv_to_labels(std::size_t iteration) {
         result.touched_label_groups + result.updated_properties);
 }
 
+std::uint64_t bench_local_dict_to_zarr(std::size_t iteration) {
+    const auto seed_root = bench_runtime_fixture_root() / "csv_image.zarr";
+    const auto working_root =
+        bench_runtime_fixture_root() /
+        ("dict_image_work_" + std::to_string(iteration % 32U) + ".zarr");
+    std::error_code error;
+    std::filesystem::remove_all(working_root, error);
+    error.clear();
+    std::filesystem::copy(
+        seed_root,
+        working_root,
+        std::filesystem::copy_options::recursive,
+        error);
+    if (error) {
+        throw std::runtime_error("Failed to prepare dict_to_zarr benchmark fixture");
+    }
+    const auto result = local_dict_to_zarr(
+        {LocalDictToZarrEntry{
+            true,
+            "1",
+            nlohmann::ordered_json{{"score", 4.5}, {"alive", true}},
+        }},
+        working_root.string(),
+        "cell_id");
+    return static_cast<std::uint64_t>(
+        result.touched_label_groups + result.updated_properties);
+}
+
 std::uint64_t bench_local_scale_nearest(std::size_t iteration) {
     const auto output_root =
         bench_runtime_fixture_root() /
@@ -814,6 +887,9 @@ int main(int argc, char** argv) {
                  }
                  return total;
              }},
+            {"csv.parse_csv_value", 2048, bench_csv_parse_value},
+            {"conversions.int_to_rgba", 2048, bench_conversions_int_to_rgba},
+            {"conversions.rgba_to_int", 2048, bench_conversions_rgba_to_int},
             {"conversions_roundtrip", 1, bench_conversions_roundtrip},
             {"csv_props_by_id", 8, bench_csv_props},
             {"data.create_plan", 1, bench_data_create_plan},
@@ -827,6 +903,7 @@ int main(int argc, char** argv) {
             {"local.create_astronaut", 4096, bench_local_create_astronaut},
             {"local.create_coins", 4096, bench_local_create_coins},
             {"local.csv_to_labels", 1024, bench_local_csv_to_labels},
+            {"local.dict_to_zarr", 1024, bench_local_dict_to_zarr},
             {"local.download", 1, bench_local_download},
             {"local.finder", 1, bench_local_finder},
             {"local.find_multiscales", 1, bench_local_find_multiscales},

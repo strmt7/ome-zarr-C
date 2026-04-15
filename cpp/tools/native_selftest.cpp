@@ -15,6 +15,8 @@
 #include <variant>
 #include <vector>
 
+#include "../../third_party/nlohmann/json.hpp"
+
 #include <zstd.h>
 
 #include "../native/axes.hpp"
@@ -883,6 +885,63 @@ void test_io_and_utils() {
                 "local csv missing-id message");
         },
         "local csv missing id should fail");
+
+    const auto dict_runtime_root = fixture_root / "dict-image.zarr";
+    std::filesystem::create_directories(dict_runtime_root / "labels" / "0");
+    {
+        std::ofstream zarr_json(dict_runtime_root / "zarr.json");
+        zarr_json << R"({"attributes":{"multiscales":[{"version":"0.4"}]},"zarr_format":3,"node_type":"group"})";
+    }
+    {
+        std::ofstream zarr_json(dict_runtime_root / "labels" / "0" / "zarr.json");
+        zarr_json << R"({"attributes":{"image-label":{"properties":[{"cell_id":1,"seed":7}]}},"zarr_format":3,"node_type":"group"})";
+    }
+    const auto dict_result = local_dict_to_zarr(
+        {LocalDictToZarrEntry{
+            true,
+            "1",
+            nlohmann::ordered_json{{"score", 9.5}, {"alive", true}},
+        }},
+        dict_runtime_root.generic_string(),
+        "cell_id");
+    require_eq(
+        dict_result.touched_label_groups,
+        std::size_t{1},
+        "local dict touched label groups");
+    require_eq(
+        dict_result.updated_properties,
+        std::size_t{1},
+        "local dict updated properties");
+    {
+        std::ifstream metadata(dict_runtime_root / "labels" / "0" / "zarr.json");
+        std::ostringstream buffer;
+        buffer << metadata.rdbuf();
+        const auto text = buffer.str();
+        require(
+            text.find("\"score\": 9.5") != std::string::npos,
+            "local dict wrote numeric property");
+        require(
+            text.find("\"alive\": true") != std::string::npos,
+            "local dict wrote boolean property");
+    }
+    require_throws<std::runtime_error>(
+        [&]() {
+            static_cast<void>(local_dict_to_zarr(
+                {LocalDictToZarrEntry{
+                    true,
+                    "1",
+                    nlohmann::ordered_json{{"score", 1}},
+                }},
+                (fixture_root / "dict-bad.zarr").generic_string(),
+                "cell_id"));
+        },
+        [](const std::runtime_error& exc) {
+            require_eq(
+                std::string(exc.what()),
+                std::string("zarr_path must be to plate.zarr or image.zarr"),
+                "local dict invalid-root message");
+        },
+        "local dict invalid root should fail");
 }
 
 void test_reader_and_writer() {

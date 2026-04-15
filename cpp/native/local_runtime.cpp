@@ -40,7 +40,7 @@ namespace ome_zarr_c::native_code {
 
 namespace {
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 namespace fs = std::filesystem;
 
 bool json_truthy(const json& value) {
@@ -99,7 +99,6 @@ void write_json_file(const fs::path& path, const json& payload) {
         throw std::runtime_error("Unable to open JSON file for write: " + path.string());
     }
     stream << payload.dump(2);
-    stream << "\n";
 }
 
 json load_json_or_empty(const fs::path& path) {
@@ -279,6 +278,33 @@ std::string python_like_string(const json& value) {
         return output.str();
     }
     return value.dump();
+}
+
+std::vector<std::string> label_paths_for_root(const fs::path& zarr_path) {
+    auto root_state = load_group_attrs_state(zarr_path, true);
+    const json root_attrs =
+        root_state.attrs.is_object() ? root_state.attrs : json::object();
+    const bool has_plate =
+        root_attrs.contains("plate") && root_attrs["plate"].is_object();
+    const bool has_multiscales = root_attrs.contains("multiscales");
+
+    std::vector<std::string> well_paths;
+    if (has_plate) {
+        const auto wells_iter = root_attrs["plate"].find("wells");
+        if (wells_iter != root_attrs["plate"].end() && wells_iter->is_array()) {
+            for (const auto& well : *wells_iter) {
+                if (well.is_object() && well.contains("path") && well["path"].is_string()) {
+                    well_paths.push_back(well["path"].get<std::string>());
+                }
+            }
+        }
+    }
+
+    return csv_label_paths(
+        has_plate,
+        has_multiscales,
+        zarr_path.string(),
+        well_paths);
 }
 
 std::optional<fs::path> array_metadata_path(const fs::path& path) {
@@ -1718,30 +1744,7 @@ LocalCsvToLabelsResult local_csv_to_labels(
             header_repr.str());
     }
 
-    auto root_state = load_group_attrs_state(fs::path(zarr_path), true);
-    const json root_attrs =
-        root_state.attrs.is_object() ? root_state.attrs : json::object();
-    const bool has_plate =
-        root_attrs.contains("plate") && root_attrs["plate"].is_object();
-    const bool has_multiscales = root_attrs.contains("multiscales");
-
-    std::vector<std::string> well_paths;
-    if (has_plate) {
-        const auto wells_iter = root_attrs["plate"].find("wells");
-        if (wells_iter != root_attrs["plate"].end() && wells_iter->is_array()) {
-            for (const auto& well : *wells_iter) {
-                if (well.is_object() && well.contains("path") && well["path"].is_string()) {
-                    well_paths.push_back(well["path"].get<std::string>());
-                }
-            }
-        }
-    }
-
-    const auto label_paths = csv_label_paths(
-        has_plate,
-        has_multiscales,
-        zarr_path,
-        well_paths);
+    const auto label_paths = label_paths_for_root(fs::path(zarr_path));
 
     LocalCsvToLabelsResult result{};
     for (const auto& label_path : label_paths) {
@@ -1771,6 +1774,57 @@ LocalCsvToLabelsResult local_csv_to_labels(
             }
             result.updated_properties += 1U;
             changed = true;
+        }
+        persist_group_attrs_state(label_state);
+        result.touched_label_groups += 1U;
+        if (!changed) {
+            continue;
+        }
+    }
+
+    return result;
+}
+
+LocalDictToZarrResult local_dict_to_zarr(
+    const std::vector<LocalDictToZarrEntry>& props_to_add,
+    const std::string& zarr_path,
+    const std::string& zarr_id) {
+    const auto label_paths = label_paths_for_root(fs::path(zarr_path));
+
+    LocalDictToZarrResult result{};
+    for (const auto& label_path : label_paths) {
+        auto label_state = load_group_attrs_state(fs::path(label_path), true);
+        json& attrs = label_state.attrs;
+        if (!attrs.is_object() || !attrs.contains("image-label") ||
+            !attrs["image-label"].is_object() ||
+            !attrs["image-label"].contains("properties") ||
+            !attrs["image-label"]["properties"].is_array()) {
+            persist_group_attrs_state(label_state);
+            continue;
+        }
+
+        bool changed = false;
+        for (auto& props_dict : attrs["image-label"]["properties"]) {
+            if (!props_dict.is_object()) {
+                continue;
+            }
+            const auto props_id = python_like_string(
+                props_dict.contains(zarr_id) ? props_dict[zarr_id] : json(nullptr));
+            for (const auto& entry : props_to_add) {
+                if (!entry.key_is_string || entry.key_text != props_id) {
+                    continue;
+                }
+                if (!entry.values.is_object()) {
+                    throw std::invalid_argument(
+                        "props_to_add values must be JSON objects");
+                }
+                for (const auto& item : entry.values.items()) {
+                    props_dict[item.key()] = item.value();
+                }
+                result.updated_properties += 1U;
+                changed = true;
+                break;
+            }
         }
         persist_group_attrs_state(label_state);
         result.touched_label_groups += 1U;

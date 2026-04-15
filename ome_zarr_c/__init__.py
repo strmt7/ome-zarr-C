@@ -6,8 +6,6 @@ except ImportError:
     __version__ = "0+unknown"
 
 from .axes import KNOWN_AXES, Axes
-from .conversions import int_to_rgba, int_to_rgba_255, rgba_to_int
-from .csv import COLUMN_TYPES, dict_to_zarr, parse_csv_value
 from .data import CHANNEL_DIMENSION, astronaut, coins, make_circle, rgb_to_5d
 from .format import (
     CurrentFormat,
@@ -36,7 +34,6 @@ from .reader import (
 
 __all__ = [
     "Axes",
-    "COLUMN_TYPES",
     "CHANNEL_DIMENSION",
     "CurrentFormat",
     "Format",
@@ -59,15 +56,10 @@ __all__ = [
     "astronaut",
     "coins",
     "detect_format",
-    "dict_to_zarr",
     "format_from_version",
     "format_implementations",
-    "int_to_rgba",
-    "int_to_rgba_255",
     "make_circle",
-    "parse_csv_value",
     "parse_url",
-    "rgba_to_int",
     "rgb_to_5d",
     "ZarrLocation",
 ]

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../third_party/nlohmann/json.hpp"
+
 #include <string>
 #include <vector>
 
@@ -62,10 +64,26 @@ struct LocalCsvToLabelsResult {
     std::size_t updated_properties;
 };
 
+struct LocalDictToZarrEntry {
+    bool key_is_string;
+    std::string key_text;
+    nlohmann::ordered_json values;
+};
+
+struct LocalDictToZarrResult {
+    std::size_t touched_label_groups;
+    std::size_t updated_properties;
+};
+
 LocalCsvToLabelsResult local_csv_to_labels(
     const std::string& csv_path,
     const std::string& csv_id,
     const std::string& csv_keys,
+    const std::string& zarr_path,
+    const std::string& zarr_id);
+
+LocalDictToZarrResult local_dict_to_zarr(
+    const std::vector<LocalDictToZarrEntry>& props_to_add,
     const std::string& zarr_path,
     const std::string& zarr_id);
 

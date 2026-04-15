@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "../native/axes.hpp"
-#include "../native/conversions.hpp"
 #include "../native/csv.hpp"
 #include "../native/format.hpp"
 #include "../native/utils.hpp"
@@ -253,50 +252,6 @@ void validate_axes_types(const py::sequence& axes) {
             ome_zarr_c::bindings::axis_records_from_sequence(axes));
     } catch (const std::invalid_argument& exc) {
         throw py::value_error(exc.what());
-    }
-}
-
-py::list int_to_rgba_255(std::int32_t value) {
-    const auto bytes = ome_zarr_c::native_code::int_to_rgba_255_bytes(value);
-    py::list result;
-    for (const auto byte : bytes) {
-        result.append(py::int_(byte));
-    }
-    return result;
-}
-
-py::list int_to_rgba(std::int32_t value) {
-    const auto rgba = ome_zarr_c::native_code::int_to_rgba(value);
-    py::list result;
-    for (const auto channel : rgba) {
-        result.append(py::float_(channel));
-    }
-    return result;
-}
-
-std::int32_t rgba_to_int(
-    std::uint8_t r,
-    std::uint8_t g,
-    std::uint8_t b,
-    std::uint8_t a) {
-    return ome_zarr_c::native_code::rgba_to_int(r, g, b, a);
-}
-
-py::object parse_csv_value(const std::string& value, const std::string& col_type) {
-    try {
-        const auto parsed = ome_zarr_c::native_code::parse_csv_value(value, col_type);
-        if (const auto* text = std::get_if<std::string>(&parsed)) {
-            return py::str(*text);
-        }
-        if (const auto* number = std::get_if<double>(&parsed)) {
-            return py::float_(*number);
-        }
-        if (const auto* integer = std::get_if<std::int64_t>(&parsed)) {
-            return py::int_(*integer);
-        }
-        return py::bool_(std::get<bool>(parsed));
-    } catch (const std::overflow_error& exc) {
-        ome_zarr_c::bindings::raise_overflow_error(exc.what());
     }
 }
 
@@ -660,10 +615,6 @@ void register_basic_bindings(py::module_& m) {
     m.def("get_names", &get_names);
     m.def("validate_03", &validate_03);
     m.def("validate_axes_types", &validate_axes_types);
-    m.def("int_to_rgba", &int_to_rgba);
-    m.def("int_to_rgba_255", &int_to_rgba_255);
-    m.def("rgba_to_int", &rgba_to_int);
-    m.def("parse_csv_value", &parse_csv_value);
     m.def("_get_valid_axes",
           &get_valid_axes,
           py::arg("ndim") = py::none(),

@@ -22,6 +22,9 @@
   than leaving dormant compatibility code behind. Keep only the smallest
   oracle-only residue that is still actively verified and explain it
   concretely if it cannot be removed yet.
+- If tests or benchmarks for a replaced surface can run through the Python
+  oracle plus standalone-native probe/bench tooling, rewire them and delete
+  the pybind/Python wrapper path instead of preserving it as benchmark glue.
 - Do not ship plan-only or helper-only standalone CLI commands. Public native
   CLI surfaces should correspond to real runtime commands or durable product
   APIs that are intended to survive the migration.
