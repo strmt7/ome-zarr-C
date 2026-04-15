@@ -5,7 +5,10 @@
 #include <string_view>
 #include <vector>
 
+#include "../native/cli.hpp"
+#include "../native/create_runtime.hpp"
 #include "../native/local_runtime.hpp"
+#include "../native/scale_runtime.hpp"
 
 namespace {
 
@@ -40,11 +43,58 @@ std::string require_option_value(
         << "\n"
         << "Commands:\n"
         << "  info <path>\n"
+        << "  create [--method coins|astronaut] <path> [--format 0.4|0.5]\n"
         << "  download <path> [--output DIR]\n"
         << "  finder <path> [--port PORT]\n"
         << "  view <path> [--port PORT] [--force|-f]\n"
+        << "  scale <input_array> <output_directory> <axes> [--copy-metadata] [--method METHOD]\n"
         << "  csv_to_labels <csv_path> <csv_id> <csv_keys> <zarr_path> <zarr_id>\n";
     std::exit(code);
+}
+
+void handle_create(const std::vector<std::string>& args) {
+    std::string method = "coins";
+    std::string version = "0.5";
+    std::string path;
+
+    for (std::size_t index = 0; index < args.size(); ++index) {
+        const auto& arg = args[index];
+        if (arg == "--method") {
+            method = require_option_value(args, index, "--method");
+            continue;
+        }
+        if (arg.rfind("--method=", 0) == 0) {
+            method = arg.substr(std::string("--method=").size());
+            continue;
+        }
+        if (arg == "--format") {
+            version = require_option_value(args, index, "--format");
+            continue;
+        }
+        if (arg.rfind("--format=", 0) == 0) {
+            version = arg.substr(std::string("--format=").size());
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            throw ExitError("Unknown create option: " + arg);
+        }
+        if (!path.empty()) {
+            throw ExitError("create accepts exactly one path argument");
+        }
+        path = arg;
+    }
+
+    if (path.empty()) {
+        throw ExitError("create requires a path argument");
+    }
+
+    const auto plan = cli_create_plan(method);
+    local_create_sample(
+        path,
+        plan.method_name,
+        plan.label_name,
+        version,
+        CreateColorMode::native_random);
 }
 
 void handle_info(const std::vector<std::string>& args) {
@@ -206,6 +256,118 @@ void handle_csv_to_labels(const std::vector<std::string>& args) {
         zarr_id));
 }
 
+void handle_scale(const std::vector<std::string>& args) {
+    std::string input_array;
+    std::string output_directory;
+    std::string axes;
+    bool copy_metadata = false;
+    bool in_place = false;
+    std::string method = "resize";
+    int downscale = 2;
+    int max_layer = 4;
+
+    std::vector<std::string> positional;
+    positional.reserve(3);
+    for (std::size_t index = 0; index < args.size(); ++index) {
+        const auto& arg = args[index];
+        if (arg == "--copy-metadata") {
+            copy_metadata = true;
+            continue;
+        }
+        if (arg == "--in-place") {
+            in_place = true;
+            continue;
+        }
+        if (arg == "--method") {
+            method = require_option_value(args, index, "--method");
+            continue;
+        }
+        if (arg.rfind("--method=", 0) == 0) {
+            method = arg.substr(std::string("--method=").size());
+            continue;
+        }
+        if (arg == "--downscale") {
+            const auto value = require_option_value(args, index, "--downscale");
+            try {
+                downscale = std::stoi(value);
+            } catch (const std::exception&) {
+                throw ExitError("Invalid integer for --downscale: " + value);
+            }
+            continue;
+        }
+        if (arg.rfind("--downscale=", 0) == 0) {
+            const auto value = arg.substr(std::string("--downscale=").size());
+            try {
+                downscale = std::stoi(value);
+            } catch (const std::exception&) {
+                throw ExitError("Invalid integer for --downscale: " + value);
+            }
+            continue;
+        }
+        if (arg == "--max_layer") {
+            const auto value = require_option_value(args, index, "--max_layer");
+            try {
+                max_layer = std::stoi(value);
+            } catch (const std::exception&) {
+                throw ExitError("Invalid integer for --max_layer: " + value);
+            }
+            continue;
+        }
+        if (arg.rfind("--max_layer=", 0) == 0) {
+            const auto value = arg.substr(std::string("--max_layer=").size());
+            try {
+                max_layer = std::stoi(value);
+            } catch (const std::exception&) {
+                throw ExitError("Invalid integer for --max_layer: " + value);
+            }
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            throw ExitError("Unknown scale option: " + arg);
+        }
+        positional.push_back(arg);
+    }
+
+    if (positional.size() != 3U) {
+        throw ExitError("scale requires input_array output_directory axes");
+    }
+    input_array = positional[0];
+    output_directory = positional[1];
+    axes = positional[2];
+
+    if (copy_metadata) {
+        const auto result = local_scale_array(
+            input_array,
+            output_directory,
+            axes,
+            copy_metadata,
+            method,
+            in_place,
+            downscale,
+            max_layer);
+        std::cout << "copying attribute keys: ";
+        std::cout << "[";
+        for (std::size_t index = 0; index < result.copied_metadata_keys.size(); ++index) {
+            if (index > 0) {
+                std::cout << ", ";
+            }
+            std::cout << "'" << result.copied_metadata_keys[index] << "'";
+        }
+        std::cout << "]\n";
+        return;
+    }
+
+    static_cast<void>(local_scale_array(
+        input_array,
+        output_directory,
+        axes,
+        copy_metadata,
+        method,
+        in_place,
+        downscale,
+        max_layer));
+}
+
 void dispatch(int argc, char** argv) {
     if (argc < 2) {
         print_usage_and_exit(2);
@@ -219,6 +381,10 @@ void dispatch(int argc, char** argv) {
     const auto args = rest_args(argc, argv, 2);
     if (command == "info") {
         handle_info(args);
+        return;
+    }
+    if (command == "create") {
+        handle_create(args);
         return;
     }
     if (command == "finder") {
@@ -235,6 +401,10 @@ void dispatch(int argc, char** argv) {
     }
     if (command == "csv_to_labels") {
         handle_csv_to_labels(args);
+        return;
+    }
+    if (command == "scale") {
+        handle_scale(args);
         return;
     }
 

@@ -20,6 +20,7 @@
 #include "../native/axes.hpp"
 #include "../native/cli.hpp"
 #include "../native/conversions.hpp"
+#include "../native/create_runtime.hpp"
 #include "../native/csv.hpp"
 #include "../native/dask_utils.hpp"
 #include "../native/data.hpp"
@@ -28,6 +29,7 @@
 #include "../native/local_runtime.hpp"
 #include "../native/reader.hpp"
 #include "../native/scale.hpp"
+#include "../native/scale_runtime.hpp"
 #include "../native/utils.hpp"
 #include "../native/writer.hpp"
 
@@ -49,6 +51,47 @@ std::vector<char> zstd_compress_bytes(const std::vector<char>& payload) {
     }
     compressed.resize(static_cast<std::size_t>(written));
     return compressed;
+}
+
+void write_u16_v2_array_fixture(
+    const std::filesystem::path& root,
+    const std::vector<std::uint16_t>& values,
+    const std::vector<std::int64_t>& shape,
+    const std::vector<std::int64_t>& chunk_shape,
+    const std::optional<int>& alpha_attr = std::nullopt) {
+    std::filesystem::create_directories(root);
+    {
+        std::ofstream zarray(root / ".zarray");
+        zarray
+            << "{\"shape\":[" << shape[0] << "," << shape[1] << "],"
+            << "\"chunks\":[" << chunk_shape[0] << "," << chunk_shape[1] << "],"
+            << "\"dtype\":\"<u2\",\"compressor\":null,\"fill_value\":0,"
+            << "\"filters\":null,\"order\":\"C\",\"dimension_separator\":\".\","
+            << "\"zarr_format\":2}";
+    }
+    if (alpha_attr.has_value()) {
+        std::ofstream zattrs(root / ".zattrs");
+        zattrs << "{\"alpha\":" << alpha_attr.value() << "}";
+    }
+
+    for (std::int64_t chunk_y = 0; chunk_y < shape[0] / chunk_shape[0]; ++chunk_y) {
+        for (std::int64_t chunk_x = 0; chunk_x < shape[1] / chunk_shape[1]; ++chunk_x) {
+            const auto chunk_path =
+                root / (std::to_string(chunk_y) + "." + std::to_string(chunk_x));
+            std::ofstream chunk(chunk_path, std::ios::binary);
+            for (std::int64_t y = 0; y < chunk_shape[0]; ++y) {
+                for (std::int64_t x = 0; x < chunk_shape[1]; ++x) {
+                    const auto global_y = chunk_y * chunk_shape[0] + y;
+                    const auto global_x = chunk_x * chunk_shape[1] + x;
+                    const auto value = values[static_cast<std::size_t>(
+                        global_y * shape[1] + global_x)];
+                    chunk.write(
+                        reinterpret_cast<const char*>(&value),
+                        static_cast<std::streamsize>(sizeof(value)));
+                }
+            }
+        }
+    }
 }
 
 template <typename Left, typename Right>
@@ -703,6 +746,95 @@ void test_io_and_utils() {
     require(
         std::filesystem::exists(download_v3_output / "image-v3.zarr" / "s0" / "c" / "0" / "0"),
         "local download v3 copied chunks");
+
+    const auto create_root = fixture_root / "native-create-v05.zarr";
+    local_create_sample(
+        create_root.generic_string(),
+        "coins",
+        "coins",
+        "0.5",
+        CreateColorMode::keep_asset_seed);
+    require(
+        std::filesystem::exists(create_root / "zarr.json"),
+        "local create wrote root metadata");
+    require(
+        std::filesystem::exists(create_root / "labels" / "coins" / "zarr.json"),
+        "local create wrote label metadata");
+    {
+        std::ifstream metadata(create_root / "labels" / "coins" / "zarr.json");
+        std::ostringstream buffer;
+        buffer << metadata.rdbuf();
+        const auto text = buffer.str();
+        require(
+            text.find("\"name\": \"/labels/coins\"") != std::string::npos,
+            "local create multiscales name");
+        require(
+            text.find("\"label-value\": 8") != std::string::npos,
+            "local create colors preserved");
+    }
+
+    const auto scale_input = fixture_root / "scale-input.zarr";
+    std::vector<std::uint16_t> scale_values(64);
+    for (std::size_t index = 0; index < scale_values.size(); ++index) {
+        scale_values[index] = static_cast<std::uint16_t>(index);
+    }
+    write_u16_v2_array_fixture(scale_input, scale_values, {8, 8}, {2, 2}, 1);
+    const auto scale_output = fixture_root / "scale-output.zarr";
+    const auto scale_result = local_scale_array(
+        scale_input.generic_string(),
+        scale_output.generic_string(),
+        "yx",
+        true,
+        "nearest",
+        false,
+        2,
+        2);
+    require_eq(
+        scale_result.copied_metadata_keys,
+        std::vector<std::string>{"alpha"},
+        "local scale copied metadata keys");
+    require_eq(scale_result.levels.size(), std::size_t{3}, "local scale level count");
+    require_eq(
+        scale_result.levels[1].shape,
+        std::vector<std::int64_t>{4, 4},
+        "local scale level 1 shape");
+    require(
+        std::filesystem::exists(scale_output / "s2" / "c" / "0" / "0"),
+        "local scale wrote level-2 chunk");
+    {
+        std::ifstream metadata(scale_output / "zarr.json");
+        std::ostringstream buffer;
+        buffer << metadata.rdbuf();
+        const auto text = buffer.str();
+        require(
+            text.find("\"version\": \"0.5\"") != std::string::npos,
+            "local scale root version");
+        require(
+            text.find("\"name\": \"/\"") != std::string::npos,
+            "local scale multiscales name");
+        require(
+            text.find("\"alpha\": 1") != std::string::npos,
+            "local scale copied root attrs");
+    }
+    require_throws<std::invalid_argument>(
+        [&]() {
+            static_cast<void>(local_scale_array(
+                scale_input.generic_string(),
+                (fixture_root / "scale-bad-output.zarr").generic_string(),
+                "yx",
+                false,
+                "laplacian",
+                false,
+                2,
+                2));
+        },
+        [](const std::invalid_argument& exc) {
+            require_eq(
+                std::string(exc.what()),
+                std::string("'laplacian' is not a valid Methods"),
+                "local scale invalid-method message");
+        },
+        "local scale invalid method should fail");
 
     const auto csv_runtime_root = fixture_root / "csv-image.zarr";
     std::filesystem::create_directories(csv_runtime_root / "labels" / "0");

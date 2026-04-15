@@ -7,6 +7,12 @@ from setuptools import find_packages, setup
 define_macros = []
 if sys.version_info >= (3, 14):
     define_macros.append(("OME_ZARR_C_PY_LIST_INDEX_GENERIC_NOT_FOUND", "1"))
+define_macros.append(
+    (
+        "OME_ZARR_C_SOURCE_ROOT",
+        '"' + os.path.abspath(os.path.dirname(__file__)).replace("\\", "\\\\") + '"',
+    )
+)
 
 
 def _build_flags() -> tuple[list[str], list[str]]:

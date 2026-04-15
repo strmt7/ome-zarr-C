@@ -12,6 +12,11 @@
   and Python package layers may remain temporarily for parity proof, but they
   are transitional scaffolding and should not be expanded unless required to
   validate behavior against the frozen upstream.
+- Once a standalone-native runtime surface exists and parity is proven, treat
+  the matching binding/runtime path as shrink-only debt. Do not add new
+  semantics there; reduce or delete it in later slices. Remove redundant
+  `setup.py` sources and direct `cpp/bindings/` dependencies on standalone
+  runtime modules as soon as the native path is proven.
 - Do not ship plan-only or helper-only standalone CLI commands. Public native
   CLI surfaces should correspond to real runtime commands or durable product
   APIs that are intended to survive the migration.

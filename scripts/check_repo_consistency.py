@@ -37,6 +37,8 @@ def main() -> int:
     native_selftest = ROOT / "cpp/tools/native_selftest.cpp"
     cmake_file = ROOT / "CMakeLists.txt"
     iteration_compare_script = ROOT / "scripts/compare_iteration_benchmarks.py"
+    setup_py = ROOT / "setup.py"
+    data_bindings = ROOT / "cpp/bindings/data_bindings.cpp"
 
     for required in (
         standalone_doc,
@@ -54,6 +56,8 @@ def main() -> int:
     agents_text = read_text(ROOT / "AGENTS.md")
     docs_index_text = read_text(ROOT / "docs/index.md")
     readme_text = read_text(ROOT / "README.md")
+    setup_text = read_text(setup_py)
+    data_bindings_text = read_text(data_bindings)
 
     if "docs/reference/standalone-cpp-target.md" not in agents_text:
         issues.append(
@@ -81,12 +85,16 @@ def main() -> int:
         issues.append("README.md is missing the native CLI info example.")
     if "ome_zarr_native_cli info /tmp/demo/image.zarr --stats" not in readme_text:
         issues.append("README.md is missing the native CLI info --stats example.")
+    if "ome_zarr_native_cli create " not in readme_text:
+        issues.append("README.md is missing the native CLI create example.")
     if "ome_zarr_native_cli finder " not in readme_text:
         issues.append("README.md is missing the native CLI finder example.")
     if "ome_zarr_native_cli download " not in readme_text:
         issues.append("README.md is missing the native CLI download example.")
     if "ome_zarr_native_cli view " not in readme_text:
         issues.append("README.md is missing the native CLI view example.")
+    if "ome_zarr_native_cli scale " not in readme_text:
+        issues.append("README.md is missing the native CLI scale example.")
     if "ome_zarr_native_cli csv_to_labels " not in readme_text:
         issues.append("README.md is missing the native CLI csv_to_labels example.")
     if "ome_zarr_native_bench_core" not in readme_text:
@@ -108,9 +116,20 @@ def main() -> int:
         issues.append(
             "README.md is missing the native info --stats iteration benchmark example."
         )
+    if (
+        "--paired-case runtime.data.create_zarr_coins_v05=local.create_coins"
+        not in readme_text
+    ):
+        issues.append(
+            "README.md is missing the native create iteration benchmark example."
+        )
     if "--paired-case csv.csv_to_zarr=local.csv_to_labels" not in readme_text:
         issues.append(
             "README.md is missing the native csv_to_labels iteration benchmark example."
+        )
+    if "--paired-case cli.scale_wrapper=local.scale_nearest" not in readme_text:
+        issues.append(
+            "README.md is missing the native scale iteration benchmark example."
         )
     if "ome_zarr_native_bench_format" in readme_text and not native_bench.exists():
         issues.append(
@@ -130,6 +149,26 @@ def main() -> int:
     if "ome_zarr_native_cli" in readme_text and not native_cli.exists():
         issues.append(
             "README.md references ome_zarr_native_cli, but the source file is missing."
+        )
+    if "cpp/native/create_runtime.cpp" in setup_text:
+        issues.append(
+            "setup.py still builds standalone-native create runtime into the "
+            "Python extension."
+        )
+    if "cpp/native/create_assets.cpp" in setup_text:
+        issues.append(
+            "setup.py still builds standalone-native create assets into the "
+            "Python extension."
+        )
+    if "cpp/native/python_random.cpp" in setup_text:
+        issues.append(
+            "setup.py still builds standalone-native Python-random emulation "
+            "into the Python extension."
+        )
+    if '#include "../native/create_runtime.hpp"' in data_bindings_text:
+        issues.append(
+            "cpp/bindings/data_bindings.cpp still depends on standalone-native "
+            "create runtime."
         )
 
     for path in TEXT_FILES:

@@ -16,14 +16,18 @@ set(OME_ZARR_C_NATIVE_SOURCES
     cpp/native/axes.cpp
     cpp/native/cli.cpp
     cpp/native/conversions.cpp
+    cpp/native/create_assets.cpp
+    cpp/native/create_runtime.cpp
     cpp/native/csv.cpp
     cpp/native/dask_utils.cpp
     cpp/native/data.cpp
     cpp/native/format.cpp
     cpp/native/io.cpp
     cpp/native/local_runtime.cpp
+    cpp/native/python_random.cpp
     cpp/native/reader.cpp
     cpp/native/scale.cpp
+    cpp/native/scale_runtime.cpp
     cpp/native/utils.cpp
     cpp/native/writer.cpp
     third_party/tinyxml2/tinyxml2.cpp
@@ -31,6 +35,9 @@ set(OME_ZARR_C_NATIVE_SOURCES
 
 add_library(ome_zarr_native STATIC ${OME_ZARR_C_NATIVE_SOURCES})
 target_include_directories(ome_zarr_native PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/cpp/native)
+target_compile_definitions(
+    ome_zarr_native
+    PUBLIC OME_ZARR_C_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
 
 find_library(BLOSC_LIBRARY NAMES blosc REQUIRED)
 find_library(ZSTD_LIBRARY NAMES zstd REQUIRED)

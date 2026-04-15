@@ -147,6 +147,12 @@ benchmark comparison, but it is not the target runtime product.
     library or CLI first. Do not widen the Python-visible harness unless the
     change is strictly for parity proof, fixture generation, or benchmark
     comparison around the native runtime.
+45. Once a standalone-native runtime command or library entrypoint exists and
+    parity is proven for that surface, treat the corresponding binding-heavy
+    runtime path as shrink-only debt. Do not add new semantic work there;
+    reduce, delegate, or delete it in subsequent slices. That includes
+    removing no-longer-needed source files from `setup.py` and cutting direct
+    `cpp/bindings/` dependencies on standalone-native runtime modules.
 
 ## Fast load order
 

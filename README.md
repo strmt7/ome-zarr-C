@@ -327,11 +327,25 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --paired-case runtime.utils.info_v3_image_with_stats=local.info_stats
 
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite core \
+  --match runtime.data.create_zarr_coins_v05 \
+  --python-match runtime.data.create_zarr_coins_v05 \
+  --native-match local.create_coins \
+  --paired-case runtime.data.create_zarr_coins_v05=local.create_coins
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --suite public-api \
   --match csv.csv_to_zarr \
   --python-match csv.csv_to_zarr \
   --native-match local.csv_to_labels \
   --paired-case csv.csv_to_zarr=local.csv_to_labels
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match scale_wrapper \
+  --python-match cli.scale_wrapper \
+  --native-match local.scale_nearest \
+  --paired-case cli.scale_wrapper=local.scale_nearest
 ```
 
 Current standalone native CLI commands:
@@ -339,10 +353,32 @@ Current standalone native CLI commands:
 ```bash
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr --stats
+./build-cpp/ome_zarr_native_cli create --method coins --format 0.5 /tmp/demo/coins.zarr
 ./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
 ./build-cpp/ome_zarr_native_cli download /tmp/demo/image.zarr --output /tmp/out
 ./build-cpp/ome_zarr_native_cli view /tmp/demo/image.zarr --port 8013
+./build-cpp/ome_zarr_native_cli scale /tmp/demo/input.zarr /tmp/demo/output.zarr yx --copy-metadata --method nearest --max_layer 2
 ./build-cpp/ome_zarr_native_cli csv_to_labels /tmp/demo/props.csv cell_id score#d /tmp/demo/image.zarr cell_id
+```
+
+All upstream CLI commands now have standalone-native replacements. The
+remaining migration target is deleting the transitional Python-visible binding
+and package layers from the delivered product path.
+
+For heavier end-to-end iteration comparisons such as `create`, lower the
+pyperf worker count explicitly so the bounded run stays practical:
+
+```bash
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite core \
+  --match runtime.data.create_zarr_coins_v05 \
+  --python-match runtime.data.create_zarr_coins_v05 \
+  --native-match local.create_coins \
+  --paired-case runtime.data.create_zarr_coins_v05=local.create_coins \
+  --processes 1 \
+  --values 1 \
+  --warmups 1 \
+  --min-time 0.005
 ```
 
 Run the current proven-safe local verification lane:

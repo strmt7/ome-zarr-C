@@ -59,8 +59,8 @@ Current `main` now ships these standalone-native CMake targets:
 
 - `ome_zarr_native`: static library built from `cpp/native/`
 - `ome_zarr_native_cli`: native executable entrypoint for real standalone
-  runtime commands such as `info`, `finder`, `download`, `view`, and
-  `csv_to_labels`
+  runtime commands such as `info`, `create`, `finder`, `download`, `view`,
+  `scale`, and `csv_to_labels`
 - `ome_zarr_native_selftest`: native smoke and edge-case regression checks
 - `ome_zarr_native_bench_format`: focused format hotspot benchmark
 - `ome_zarr_native_bench_core`: broader bounded native benchmark suite
@@ -68,3 +68,8 @@ Current `main` now ships these standalone-native CMake targets:
 These targets run without importing the Python runtime. Python remains in the
 repository separately for parity-proof workflows against the frozen upstream
 release.
+
+The largest remaining migration work is no longer a CLI/runtime gap. It is the
+controlled retirement of `cpp/bindings/`, `ome_zarr_c/`, and Python package
+metadata from the delivered product path now that all upstream CLI commands
+have standalone-native replacements.
