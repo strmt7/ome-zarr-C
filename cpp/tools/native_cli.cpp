@@ -40,6 +40,7 @@ std::string require_option_value(
         << "\n"
         << "Commands:\n"
         << "  info <path>\n"
+        << "  download <path> [--output DIR]\n"
         << "  finder <path> [--port PORT]\n";
     std::exit(code);
 }
@@ -110,6 +111,41 @@ void handle_finder(const std::vector<std::string>& args) {
     }
 }
 
+void handle_download(const std::vector<std::string>& args) {
+    std::string path;
+    std::string output_dir = ".";
+
+    for (std::size_t index = 0; index < args.size(); ++index) {
+        const auto& arg = args[index];
+        if (arg == "--output") {
+            output_dir = require_option_value(args, index, "--output");
+            continue;
+        }
+        if (arg.rfind("--output=", 0) == 0) {
+            output_dir = arg.substr(std::string("--output=").size());
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            throw ExitError("Unknown download option: " + arg);
+        }
+        if (!path.empty()) {
+            throw ExitError("download accepts exactly one path argument");
+        }
+        path = arg;
+    }
+
+    if (path.empty()) {
+        throw ExitError("download requires a path argument");
+    }
+
+    const auto result = local_download_copy(path, output_dir);
+    std::cout << "downloading...\n";
+    for (const auto& listed_path : result.listed_paths) {
+        std::cout << "   " << listed_path << "\n";
+    }
+    std::cout << "to " << output_dir << "\n";
+}
+
 void dispatch(int argc, char** argv) {
     if (argc < 2) {
         print_usage_and_exit(2);
@@ -127,6 +163,10 @@ void dispatch(int argc, char** argv) {
     }
     if (command == "finder") {
         handle_finder(args);
+        return;
+    }
+    if (command == "download") {
+        handle_download(args);
         return;
     }
 

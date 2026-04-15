@@ -32,6 +32,10 @@ set(OME_ZARR_C_NATIVE_SOURCES
 add_library(ome_zarr_native STATIC ${OME_ZARR_C_NATIVE_SOURCES})
 target_include_directories(ome_zarr_native PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/cpp/native)
 
+find_library(BLOSC_LIBRARY NAMES blosc REQUIRED)
+find_library(ZSTD_LIBRARY NAMES zstd REQUIRED)
+target_link_libraries(ome_zarr_native PUBLIC ${BLOSC_LIBRARY} ${ZSTD_LIBRARY})
+
 if(MSVC)
     target_compile_options(ome_zarr_native PRIVATE /O2 /permissive-)
 else()
