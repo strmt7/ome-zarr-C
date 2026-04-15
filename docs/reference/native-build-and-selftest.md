@@ -95,6 +95,8 @@ Examples:
 ```bash
 ./build-cpp/ome_zarr_native_cli cli create-plan --method astronaut
 ./build-cpp/ome_zarr_native_cli cli scale-factors --downscale 2 --max-layer 4
+./build-cpp/ome_zarr_native_cli data create-plan \
+  --version 0.5 --base-shape 1,3,512,512 --smallest-shape 1,3,64,64
 ./build-cpp/ome_zarr_native_cli format detect --multiscales-version 0.5
 ./build-cpp/ome_zarr_native_cli format matches --version 0.5 --multiscales-version 0.5
 ./build-cpp/ome_zarr_native_cli format zarr-format --version 0.5
@@ -104,6 +106,13 @@ Examples:
   --path B/3 --rows A,B,C --columns 1,2,3
 ./build-cpp/ome_zarr_native_cli format validate-well \
   --path B/3 --row-index 1 --column-index 2 --rows A,B,C --columns 1,2,3
+./build-cpp/ome_zarr_native_cli io subpath --path /tmp/demo.zarr --subpath labels/0 --file
+./build-cpp/ome_zarr_native_cli utils view-plan \
+  --path /tmp/demo/image.zarr --port 8013 --discovered-count 1
+./build-cpp/ome_zarr_native_cli utils finder-plan \
+  --path /tmp/demo/images --port 8012
+./build-cpp/ome_zarr_native_cli writer image-plan \
+  --axes t,c,y,x --scaler-present --scaler-max-layer 4 --scaler-method local_mean
 ```
 
 This does not yet replace the full historical Python CLI. It is the first real
@@ -118,4 +127,12 @@ For a fast iteration comparison on the touched `format` hotspot:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
+```
+
+For a fast iteration comparison on the touched `utils` hotspot:
+
+```bash
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --match utils \
+  --native-match utils
 ```

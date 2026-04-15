@@ -24,6 +24,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--suite", default="public-api")
     parser.add_argument("--match", required=True)
+    parser.add_argument("--python-match")
+    parser.add_argument("--native-match")
     parser.add_argument("--build-dir", type=Path, default=DEFAULT_BUILD_DIR)
     parser.add_argument("--python", type=Path, default=DEFAULT_PYTHON)
     parser.add_argument("--python-timeout", type=int, default=180)
@@ -68,12 +70,14 @@ def _load_native_results(path: Path) -> dict[str, float]:
 def _build_markdown(
     *,
     suite: str,
-    match: str,
+    python_match: str,
+    native_match: str,
     pyperf_pairs: dict[str, dict[str, float]],
     native_results: dict[str, float],
 ) -> str:
     lines = [
-        f"# Iteration benchmark comparison: `{suite}` / `{match}`",
+        "# Iteration benchmark comparison: "
+        f"`{suite}` / `{python_match}` vs native `{native_match}`",
         "",
         "Python-visible harness timings come from the bounded `pyperf` suite.",
         "Standalone native timings come from `ome_zarr_native_bench_core` "
@@ -122,6 +126,8 @@ def _build_markdown(
 
 def main() -> int:
     args = _parse_args()
+    python_match = args.python_match or args.match
+    native_match = args.native_match or args.match
     native_bench = args.build_dir / "ome_zarr_native_bench_core"
     if not args.python.exists():
         raise SystemExit(f"Python executable not found: {args.python}")
@@ -144,7 +150,7 @@ def main() -> int:
             "--suite",
             args.suite,
             "--match",
-            args.match,
+            python_match,
             "--verify-only",
         ]
         _run(verify_cmd, timeout=args.python_timeout)
@@ -156,7 +162,7 @@ def main() -> int:
             "--suite",
             args.suite,
             "--match",
-            args.match,
+            python_match,
             "--fast",
             "--quiet",
             "--processes",
@@ -177,7 +183,7 @@ def main() -> int:
         native_cmd = [
             str(native_bench),
             "--match",
-            args.match,
+            native_match,
             "--quick",
             "--json-output",
             str(native_json),
@@ -189,7 +195,8 @@ def main() -> int:
 
         markdown = _build_markdown(
             suite=args.suite,
-            match=args.match,
+            python_match=python_match,
+            native_match=native_match,
             pyperf_pairs=pyperf_pairs,
             native_results=native_results,
         )
@@ -204,6 +211,8 @@ def main() -> int:
                     {
                         "suite": args.suite,
                         "match": args.match,
+                        "python_match": python_match,
+                        "native_match": native_match,
                         "pyperf_us_per_op": pyperf_pairs,
                         "native_us_per_op": native_results,
                         "native_stdout": native_run.stdout,

@@ -331,6 +331,78 @@ std::uint64_t bench_io_subpath(std::size_t iteration) {
     return static_cast<std::uint64_t>(path.size());
 }
 
+std::uint64_t bench_utils_path_helpers(std::size_t iteration) {
+    if (iteration % 3U == 0U) {
+        auto parts = std::vector<std::vector<std::string>>{
+            {"root", "a", "b"},
+            {"root", "a", "c"},
+        };
+        const auto common = strip_common_prefix(parts);
+        return static_cast<std::uint64_t>(common.size() + parts.front().size());
+    }
+    if (iteration % 3U == 1U) {
+        auto parts = std::vector<std::vector<std::string>>{{"only"}};
+        const auto common = strip_common_prefix(parts);
+        return static_cast<std::uint64_t>(common.size() + parts.front().size());
+    }
+    auto parts = std::vector<std::vector<std::string>>{{}, {}};
+    try {
+        static_cast<void>(strip_common_prefix(parts));
+    } catch (const std::runtime_error&) {
+        return 1U;
+    }
+    return 0U;
+}
+
+std::uint64_t bench_utils_finder(std::size_t iteration) {
+    const auto plan = utils_finder_plan(
+        "/tmp/demo_" + std::to_string(iteration % 8U) + "/images",
+        8012);
+    const auto row = utils_finder_row(
+        8012,
+        plan.server_dir,
+        "plate/A/1/0",
+        "coins",
+        "plate/A/1",
+        "2026-04-15T00:00:00");
+    return static_cast<std::uint64_t>(
+        plan.parent_path.size() +
+        plan.server_dir.size() +
+        plan.csv_path.size() +
+        plan.source_uri.size() +
+        plan.url.size() +
+        row.file_path.size() +
+        row.name.size() +
+        row.folders.size() +
+        row.uploaded.size());
+}
+
+std::uint64_t bench_utils_view(std::size_t iteration) {
+    const auto plan = utils_view_plan(
+        "/tmp/image_" + std::to_string(iteration % 8U) + ".zarr",
+        8013,
+        false,
+        1);
+    return static_cast<std::uint64_t>(
+        plan.parent_dir.size() + plan.image_name.size() + plan.url.size());
+}
+
+std::uint64_t bench_data_create_plan(std::size_t iteration) {
+    const auto plan = create_zarr_plan(
+        iteration % 2U == 0U ? "0.5" : "0.4",
+        {1, 3, 512, 512},
+        {1, 3, 64, 64},
+        {});
+    return static_cast<std::uint64_t>(
+        plan.axes.size() +
+        plan.chunks.size() +
+        plan.channels.size() +
+        plan.labels_axes.size() +
+        plan.source_image.size() +
+        plan.random_label_count +
+        plan.size_c);
+}
+
 std::uint64_t bench_reader_plate_levels(std::size_t) {
     const auto plans = reader_plate_level_plans(
         {"A", "B", "C"},
@@ -455,6 +527,7 @@ int main(int argc, char** argv) {
              }},
             {"conversions_roundtrip", 1, bench_conversions_roundtrip},
             {"csv_props_by_id", 8, bench_csv_props},
+            {"data.create_plan", 1, bench_data_create_plan},
             {"dask_zoom_plan", 1, bench_dask_zoom},
             {"data_circle_points", 16, bench_data_circle_points},
             {"format.dispatch", 1, bench_format_dispatch},
@@ -464,7 +537,9 @@ int main(int argc, char** argv) {
             {"io_subpath", 1, bench_io_subpath},
             {"reader_plate_levels", 4, bench_reader_plate_levels},
             {"scale_build_pyramid", 8, bench_scale_build_pyramid},
-            {"utils_view_plan", 1, bench_utils_view_plan},
+            {"utils.finder", 1, bench_utils_finder},
+            {"utils.path_helpers", 1, bench_utils_path_helpers},
+            {"utils.view", 1, bench_utils_view},
             {"writer_image_plan", 1, bench_writer_image_plan},
         };
 

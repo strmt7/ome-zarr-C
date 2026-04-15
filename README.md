@@ -290,9 +290,17 @@ Example native CLI calls against already-native surfaces:
 ```bash
 ./build-cpp/ome_zarr_native_cli cli create-plan --method coins
 ./build-cpp/ome_zarr_native_cli cli scale-factors --downscale 2 --max-layer 4
+./build-cpp/ome_zarr_native_cli data create-plan \
+  --version 0.5 --base-shape 1,3,512,512 --smallest-shape 1,3,64,64
 ./build-cpp/ome_zarr_native_cli format detect --multiscales-version 0.5
 ./build-cpp/ome_zarr_native_cli format generate-well \
   --path B/3 --rows A,B,C --columns 1,2,3
+./build-cpp/ome_zarr_native_cli utils view-plan \
+  --path /tmp/demo/image.zarr --port 8013 --discovered-count 1
+./build-cpp/ome_zarr_native_cli utils finder-plan \
+  --path /tmp/demo/images --port 8012
+./build-cpp/ome_zarr_native_cli writer image-plan \
+  --axes t,c,y,x --scaler-present --scaler-max-layer 4 --scaler-method local_mean
 ```
 
 Run the current proven-safe local verification lane:
