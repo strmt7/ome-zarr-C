@@ -300,74 +300,6 @@ py::object parse_csv_value(const std::string& value, const std::string& col_type
     }
 }
 
-py::str strip_common_prefix(py::list parts) {
-    std::vector<std::vector<std::string>> native_parts;
-    native_parts.reserve(py::len(parts));
-    for (const py::handle& part_handle : parts) {
-        py::list part = py::cast<py::list>(part_handle);
-        std::vector<std::string> native_part;
-        native_part.reserve(py::len(part));
-        for (const py::handle& token : part) {
-            native_part.push_back(py::cast<std::string>(token));
-        }
-        native_parts.push_back(std::move(native_part));
-    }
-
-    try {
-        const auto common = ome_zarr_c::native_code::strip_common_prefix(native_parts);
-        for (std::size_t path_index = 0; path_index < native_parts.size(); ++path_index) {
-            py::list trimmed;
-            for (const auto& token : native_parts[path_index]) {
-                trimmed.append(py::str(token));
-            }
-            parts[path_index] = trimmed;
-        }
-        return py::str(common);
-    } catch (const std::runtime_error& exc) {
-        const std::string message = exc.what();
-        if (message.empty()) {
-            ome_zarr_c::bindings::raise_plain_exception(
-                ome_zarr_c::bindings::repr_joined_lines(parts));
-        }
-        ome_zarr_c::bindings::raise_plain_exception(message);
-    }
-}
-
-py::list splitall(py::object path) {
-    py::object current = path;
-    if (!py::isinstance<py::str>(path)) {
-        py::object os_path = py::module_::import("os").attr("path");
-        py::tuple parts = py::cast<py::tuple>(os_path.attr("split")(path));
-        if (ome_zarr_c::bindings::objects_equal(parts[0], path)) {
-            py::list direct;
-            direct.append(parts[0]);
-            return direct;
-        }
-        if (ome_zarr_c::bindings::objects_equal(parts[1], path)) {
-            py::list direct;
-            direct.append(parts[1]);
-            return direct;
-        }
-
-        py::list result;
-        const auto native_parts = ome_zarr_c::native_code::splitall(
-            py::cast<std::string>(py::str(parts[0])));
-        for (const auto& part : native_parts) {
-            result.append(py::str(part));
-        }
-        result.append(py::str(parts[1]));
-        return result;
-    }
-
-    py::list result;
-    const auto native_parts =
-        ome_zarr_c::native_code::splitall(py::cast<std::string>(py::str(current)));
-    for (const auto& part : native_parts) {
-        result.append(py::str(part));
-    }
-    return result;
-}
-
 py::object get_valid_axes(
     py::object ndim = py::none(),
     py::object axes = py::none(),
@@ -732,8 +664,6 @@ void register_basic_bindings(py::module_& m) {
     m.def("int_to_rgba_255", &int_to_rgba_255);
     m.def("rgba_to_int", &rgba_to_int);
     m.def("parse_csv_value", &parse_csv_value);
-    m.def("strip_common_prefix", &strip_common_prefix);
-    m.def("splitall", &splitall);
     m.def("_get_valid_axes",
           &get_valid_axes,
           py::arg("ndim") = py::none(),

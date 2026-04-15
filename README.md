@@ -74,10 +74,6 @@ differential tests on this runtime:
   - coordinate-transformation generation and validation
 - `ome_zarr_c.csv`
   - `parse_csv_value`
-- `ome_zarr_c.utils`
-  - `strip_common_prefix`
-  - `splitall`
-  - `find_multiscales`
 - `ome_zarr_c.writer`
   - `_blosc_compressor`
   - `_get_valid_axes`
@@ -478,7 +474,6 @@ Still-slower paths in the same completed snapshot:
 
 - `format.matches`: `0.824x`
 - `format.well_and_coord`: `0.705x`
-- `utils.find_multiscales`: `0.879x`
 - `writer.resolve_storage_options_batch`: `0.901x`
 - `scaler.nearest_rgb`: `0.944x`
 

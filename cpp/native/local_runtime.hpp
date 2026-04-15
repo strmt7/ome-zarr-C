@@ -11,6 +11,7 @@ struct LocalFindMultiscalesResult {
     bool metadata_missing;
     bool logged_no_wells;
     std::string logged_no_wells_path;
+    std::vector<std::string> printed_messages;
     std::vector<UtilsDiscoveredImage> images;
 };
 
