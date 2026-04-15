@@ -20,6 +20,7 @@
 #include "../native/csv.hpp"
 #include "../native/io.hpp"
 #include "../native/local_runtime.hpp"
+#include "../native/reader_oracle.hpp"
 #include "../native/utils.hpp"
 
 namespace {
@@ -51,6 +52,7 @@ struct Options {
     std::string format_version;
     std::string create_subpath;
     std::string cases_json;
+    std::string scenario;
     bool has_path = false;
     bool has_value = false;
     bool has_col_type = false;
@@ -68,6 +70,7 @@ struct Options {
     bool has_format_version = false;
     bool has_create_subpath = false;
     bool has_cases_json = false;
+    bool has_scenario = false;
     std::size_t loops = 1;
 };
 
@@ -102,7 +105,13 @@ std::size_t parse_positive_integer(const char* text, const char* flag_name) {
         << "  make-circle --target-shape-json JSON --circle-shape-json JSON "
            "--offset-json JSON --value NUMBER --dtype DTYPE [--loops N]\n"
         << "  rgb-to-5d --shape-json JSON --values-json JSON --dtype DTYPE "
-           "[--loops N]\n";
+           "[--loops N]\n"
+        << "  reader-matches --scenario image|hcs [--loops N]\n"
+        << "  reader-node-ops --scenario image [--loops N]\n"
+        << "  reader-signature --scenario image|plate|well|units|raw|ignored|"
+           "omero-edge-0|omero-edge-1|omero-edge-2|omero-edge-3 [--loops N]\n"
+        << "  reader-image-surface [--loops N]\n"
+        << "  reader-plate-surface [--loops N]\n";
     std::exit(code);
 }
 
@@ -265,6 +274,14 @@ Options parse_options(const int argc, char** argv) {
             }
             options.cases_json = argv[++index];
             options.has_cases_json = true;
+            continue;
+        }
+        if (arg == "--scenario") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --scenario");
+            }
+            options.scenario = argv[++index];
+            options.has_scenario = true;
             continue;
         }
         if (arg == "--help" || arg == "-h") {
@@ -757,6 +774,55 @@ json run_rgb_to_5d(const Options& options) {
     return make_ok_payload(payload);
 }
 
+json run_reader_matches(const Options& options) {
+    if (!options.has_scenario) {
+        throw ExitError("reader-matches requires --scenario");
+    }
+    ordered_json payload{};
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        payload = reader_probe_matches(options.scenario);
+    }
+    return make_ok_payload(payload);
+}
+
+json run_reader_node_ops(const Options& options) {
+    if (!options.has_scenario) {
+        throw ExitError("reader-node-ops requires --scenario");
+    }
+    ordered_json payload{};
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        payload = reader_probe_node_ops(options.scenario);
+    }
+    return make_ok_payload(payload);
+}
+
+json run_reader_signature(const Options& options) {
+    if (!options.has_scenario) {
+        throw ExitError("reader-signature requires --scenario");
+    }
+    ordered_json payload{};
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        payload = reader_probe_signature(options.scenario);
+    }
+    return make_ok_payload(payload);
+}
+
+json run_reader_image_surface(const Options& options) {
+    ordered_json payload{};
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        payload = reader_probe_image_surface();
+    }
+    return make_ok_payload(payload);
+}
+
+json run_reader_plate_surface(const Options& options) {
+    ordered_json payload{};
+    for (std::size_t iteration = 0; iteration < options.loops; ++iteration) {
+        payload = reader_probe_plate_surface();
+    }
+    return make_ok_payload(payload);
+}
+
 std::string python_like_parts_repr(
     const std::vector<std::vector<std::string>>& parts) {
     std::string rendered;
@@ -1058,6 +1124,16 @@ int main(int argc, char** argv) {
             payload = run_make_circle(options);
         } else if (options.command == "rgb-to-5d") {
             payload = run_rgb_to_5d(options);
+        } else if (options.command == "reader-matches") {
+            payload = run_reader_matches(options);
+        } else if (options.command == "reader-node-ops") {
+            payload = run_reader_node_ops(options);
+        } else if (options.command == "reader-signature") {
+            payload = run_reader_signature(options);
+        } else if (options.command == "reader-image-surface") {
+            payload = run_reader_image_surface(options);
+        } else if (options.command == "reader-plate-surface") {
+            payload = run_reader_plate_surface(options);
         } else {
             throw ExitError("Unknown command: " + options.command);
         }

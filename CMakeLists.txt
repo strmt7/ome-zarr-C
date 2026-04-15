@@ -61,6 +61,7 @@ set(OME_ZARR_C_NATIVE_SOURCES
     cpp/native/local_runtime.cpp
     cpp/native/python_random.cpp
     cpp/native/reader.cpp
+    cpp/native/reader_oracle.cpp
     cpp/native/scale.cpp
     cpp/native/scale_runtime.cpp
     cpp/native/utils.cpp

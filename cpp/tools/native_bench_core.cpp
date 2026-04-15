@@ -28,6 +28,7 @@
 #include "../native/io.hpp"
 #include "../native/local_runtime.hpp"
 #include "../native/reader.hpp"
+#include "../native/reader_oracle.hpp"
 #include "../native/scale.hpp"
 #include "../native/scale_runtime.hpp"
 #include "../native/utils.hpp"
@@ -976,6 +977,27 @@ std::uint64_t bench_reader_plate_levels(std::size_t) {
     return static_cast<std::uint64_t>(plans.size() + plans.front().tile_paths.size());
 }
 
+std::uint64_t bench_reader_matches(std::size_t iteration) {
+    const auto payload =
+        reader_probe_matches(iteration % 2U == 0U ? "image" : "hcs").dump();
+    return static_cast<std::uint64_t>(payload.size());
+}
+
+std::uint64_t bench_reader_node_ops(std::size_t) {
+    const auto payload = reader_probe_node_ops("image").dump();
+    return static_cast<std::uint64_t>(payload.size());
+}
+
+std::uint64_t bench_reader_image_surface(std::size_t) {
+    const auto payload = reader_probe_image_surface().dump();
+    return static_cast<std::uint64_t>(payload.size());
+}
+
+std::uint64_t bench_reader_plate_surface(std::size_t) {
+    const auto payload = reader_probe_plate_surface().dump();
+    return static_cast<std::uint64_t>(payload.size());
+}
+
 std::uint64_t bench_scale_build_pyramid(std::size_t) {
     const auto levels = scale_levels_from_ints({"t", "c", "y", "x"}, 4);
     const auto plan = build_pyramid_plan({1, 3, 2048, 2048}, {"t", "c", "y", "x"}, levels);
@@ -1115,6 +1137,10 @@ int main(int argc, char** argv) {
             {"local.info_stats", 1, bench_local_info_stats},
             {"local.scale_nearest", 32, bench_local_scale_nearest},
             {"local.view_prepare", 1, bench_local_view_prepare},
+            {"reader.image_surface", 1, bench_reader_image_surface},
+            {"reader.matches", 1, bench_reader_matches},
+            {"reader.node_ops", 1, bench_reader_node_ops},
+            {"reader.plate_surface", 1, bench_reader_plate_surface},
             {"reader_plate_levels", 4, bench_reader_plate_levels},
             {"scale_build_pyramid", 8, bench_scale_build_pyramid},
             {"utils.finder", 1, bench_utils_finder},
