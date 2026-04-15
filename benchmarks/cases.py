@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import json
 import math
 import os
 import random
@@ -12,7 +13,7 @@ import time
 import warnings
 from collections.abc import Callable
 from contextlib import ExitStack, nullcontext, redirect_stderr, redirect_stdout
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from functools import lru_cache
 from io import StringIO
 from pathlib import Path
@@ -33,6 +34,9 @@ from benchmarks.runtime_support import (
     write_minimal_v2_image,
     write_minimal_v3_image,
 )
+from tests import test_cli_equivalence as cli_eq
+from tests import test_data_runtime_equivalence as data_rt
+from tests import test_utils_equivalence as utils_eq
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM_ROOT = ROOT / "source_code_v.0.15.0"
@@ -55,7 +59,6 @@ _py_scale = importlib.import_module("ome_zarr.scale")
 _py_writer = importlib.import_module("ome_zarr.writer")
 
 _cpp_axes = importlib.import_module("ome_zarr_c.axes")
-_cpp_cli = importlib.import_module("ome_zarr_c.cli")
 _cpp_conversions = importlib.import_module("ome_zarr_c.conversions")
 _cpp_csv = importlib.import_module("ome_zarr_c.csv")
 _cpp_data = importlib.import_module("ome_zarr_c.data")
@@ -84,6 +87,16 @@ class BenchmarkCase:
 _VERIFIED_CASES: set[str] = set()
 _RNG = random.Random(20260412)
 _FLOAT_CASE_MULTIPLIER = 10_000.0
+
+
+def _normalize_snapshot_tree(tree):
+    normalized = []
+    for kind, rel_path, payload in tree:
+        if kind == "json" and isinstance(payload, str):
+            normalized.append((kind, rel_path, json.loads(payload)))
+        else:
+            normalized.append((kind, rel_path, payload))
+    return normalized
 
 
 def benchmark_environment_metadata() -> dict[str, str]:
@@ -981,19 +994,31 @@ def _bench_parse_url(module: object, source: Path, case_name: str) -> float:
 
 
 def _verify_info_v2() -> None:
-    assert run_info(_py_utils.info, _runtime_v2_source(), stats=False) == run_info(
-        _cpp_utils.info, _runtime_v2_source(), stats=False
-    )
+    source = _runtime_v2_source()
+    expected = run_info(_py_utils.info, source, stats=False)
+    actual = cli_eq._run_native_cli(["info", str(source)], {})
+    assert expected.status == actual.status == "ok"
+    assert actual.payload["stderr"] == ""
+    assert expected.stdout == actual.stdout
 
 
 def _verify_info_v3_with_stats() -> None:
-    assert run_info(_py_utils.info, _runtime_v3_source(), stats=True) == run_info(
-        _cpp_utils.info, _runtime_v3_source(), stats=True
-    )
+    source = _runtime_v3_source()
+    expected = run_info(_py_utils.info, source, stats=True)
+    actual = cli_eq._run_native_cli(["info", str(source), "--stats"], {})
+    assert expected.status == actual.status == "ok"
+    assert actual.payload["stderr"] == ""
+    assert expected.stdout == actual.stdout
 
 
 def _bench_info(module: object, source: Path, *, stats: bool, case_name: str) -> float:
-    outcome = run_info(module.info, source, stats=stats)
+    if module is _py_utils:
+        outcome = run_info(module.info, source, stats=stats)
+    else:
+        args = ["info", str(source)]
+        if stats:
+            args.append("--stats")
+        outcome = cli_eq._run_native_cli(args, {})
     _assert_outcome_ok(case_name, outcome)
     return _touch_outcome(outcome)
 
@@ -1017,25 +1042,27 @@ def _verify_cli_download_v05() -> None:
             replacements,
         )
         random.seed(0)
-        cpp_create = run_cli_main(
-            _cpp_cli.main,
+        cpp_create = cli_eq._run_native_cli(
             ["create", "--method=astronaut", str(cpp_source), "--format", "0.5"],
             replacements,
         )
-        assert py_create == cpp_create
+        assert py_create.status == cpp_create.status == "ok"
+        assert py_create.stdout == cpp_create.stdout
+        assert cpp_create.payload["stderr"] == ""
         expected = run_cli_main(
             _py_cli.main,
             ["download", str(py_source), f"--output={py_output_root}"],
             replacements,
         )
-        actual = run_cli_main(
-            _cpp_cli.main,
+        actual = cli_eq._run_native_cli(
             ["download", str(cpp_source), f"--output={cpp_output_root}"],
             replacements,
         )
         assert expected.status == actual.status == "ok"
-        assert "downloading..." in expected.stdout
-        assert "downloading..." in actual.stdout
+        assert utils_eq._normalize_download_stdout(
+            expected.stdout, replacements
+        ) == utils_eq._normalize_download_stdout(actual.stdout, replacements)
+        assert actual.payload["stderr"] == ""
         assert rewrite_snapshot_prefix(
             snapshot_tree(py_output_root),
             py_source.name,
@@ -1052,7 +1079,7 @@ def _verify_cli_download_v05() -> None:
         shutil.rmtree(cpp_output_root, ignore_errors=True)
 
 
-def _bench_cli_download(module: object, case_name: str) -> float:
+def _bench_cli_download(py_like: bool, case_name: str) -> float:
     output_root = _fresh_runtime_dir("utils-download")
     source = _runtime_cli_download_source()
     replacements = {
@@ -1060,11 +1087,17 @@ def _bench_cli_download(module: object, case_name: str) -> float:
         str(output_root): "<OUT>",
     }
     try:
-        outcome = run_cli_main(
-            module.main,
-            ["download", str(source), f"--output={output_root}"],
-            replacements,
-        )
+        if py_like:
+            outcome = run_cli_main(
+                _py_cli.main,
+                ["download", str(source), f"--output={output_root}"],
+                replacements,
+            )
+        else:
+            outcome = cli_eq._run_native_cli(
+                ["download", str(source), f"--output={output_root}"],
+                replacements,
+            )
         _assert_outcome_ok(case_name, outcome)
         return _touch_outcome(outcome) + _touch(snapshot_tree(output_root))
     finally:
@@ -1191,34 +1224,42 @@ def _verify_create_zarr_coins_v05() -> None:
             fmt=_py_format.FormatV05(),
             seed=0,
         )
-        actual = run_create_zarr(
-            _cpp_data.create_zarr,
+        actual = data_rt._run_native_create(
             cpp_root,
-            method=_cpp_data.coins,
-            label_name="coins",
-            fmt=_cpp_format.FormatV05(),
+            method_name="coins",
+            version="0.5",
             seed=0,
         )
-        assert expected == actual
+        assert expected.status == actual.status == "ok"
+        assert actual.payload["stderr"] == ""
+        assert expected.tree == _normalize_snapshot_tree(actual.tree)
     finally:
         shutil.rmtree(py_root.parent, ignore_errors=True)
         shutil.rmtree(cpp_root.parent, ignore_errors=True)
 
 
-def _bench_create_zarr_coins(module: object, case_name: str) -> float:
+def _bench_create_zarr_coins(py_like: bool, case_name: str) -> float:
     root = _fresh_runtime_dir("create-zarr-coins") / "coins.zarr"
-    method = _py_data.coins if module is _py_data else _cpp_data.coins
-    fmt = _py_format.FormatV05() if module is _py_data else _cpp_format.FormatV05()
     try:
-        outcome = run_create_zarr(
-            module.create_zarr,
-            root,
-            method=method,
-            label_name="coins",
-            fmt=fmt,
-            seed=0,
-        )
+        if py_like:
+            outcome = run_create_zarr(
+                _py_data.create_zarr,
+                root,
+                method=_py_data.coins,
+                label_name="coins",
+                fmt=_py_format.FormatV05(),
+                seed=0,
+            )
+        else:
+            outcome = data_rt._run_native_create(
+                root,
+                method_name="coins",
+                version="0.5",
+                seed=0,
+            )
         _assert_outcome_ok(case_name, outcome)
+        if not py_like:
+            outcome = replace(outcome, tree=_normalize_snapshot_tree(outcome.tree))
         return _touch_outcome(outcome)
     finally:
         shutil.rmtree(root.parent, ignore_errors=True)
@@ -1236,34 +1277,42 @@ def _verify_create_zarr_astronaut_v05() -> None:
             fmt=_py_format.FormatV05(),
             seed=0,
         )
-        actual = run_create_zarr(
-            _cpp_data.create_zarr,
+        actual = data_rt._run_native_create(
             cpp_root,
-            method=_cpp_data.astronaut,
-            label_name="circles",
-            fmt=_cpp_format.FormatV05(),
+            method_name="astronaut",
+            version="0.5",
             seed=0,
         )
-        assert expected == actual
+        assert expected.status == actual.status == "ok"
+        assert actual.payload["stderr"] == ""
+        assert expected.tree == _normalize_snapshot_tree(actual.tree)
     finally:
         shutil.rmtree(py_root.parent, ignore_errors=True)
         shutil.rmtree(cpp_root.parent, ignore_errors=True)
 
 
-def _bench_create_zarr_astronaut(module: object, case_name: str) -> float:
+def _bench_create_zarr_astronaut(py_like: bool, case_name: str) -> float:
     root = _fresh_runtime_dir("create-zarr-astronaut") / "astronaut.zarr"
-    method = _py_data.astronaut if module is _py_data else _cpp_data.astronaut
-    fmt = _py_format.FormatV05() if module is _py_data else _cpp_format.FormatV05()
     try:
-        outcome = run_create_zarr(
-            module.create_zarr,
-            root,
-            method=method,
-            label_name="circles",
-            fmt=fmt,
-            seed=0,
-        )
+        if py_like:
+            outcome = run_create_zarr(
+                _py_data.create_zarr,
+                root,
+                method=_py_data.astronaut,
+                label_name="circles",
+                fmt=_py_format.FormatV05(),
+                seed=0,
+            )
+        else:
+            outcome = data_rt._run_native_create(
+                root,
+                method_name="astronaut",
+                version="0.5",
+                seed=0,
+            )
         _assert_outcome_ok(case_name, outcome)
+        if not py_like:
+            outcome = replace(outcome, tree=_normalize_snapshot_tree(outcome.tree))
         return _touch_outcome(outcome)
     finally:
         shutil.rmtree(root.parent, ignore_errors=True)
@@ -1284,43 +1333,57 @@ def _verify_cli_create_info_v05() -> None:
             replacements,
         )
         random.seed(0)
-        cpp_create = run_cli_main(
-            _cpp_cli.main,
+        cpp_create = cli_eq._run_native_cli(
             ["create", "--method=coins", str(cpp_root), "--format", "0.5"],
             replacements,
         )
-        assert py_create == cpp_create
+        assert py_create.status == cpp_create.status == "ok"
+        assert py_create.stdout == cpp_create.stdout
+        assert cpp_create.payload["stderr"] == ""
         assert snapshot_tree(py_root) == snapshot_tree(cpp_root)
-        assert run_cli_main(
+        expected_info = run_cli_main(
             _py_cli.main,
             ["info", str(py_root)],
             replacements,
-        ) == run_cli_main(
-            _cpp_cli.main,
+        )
+        actual_info = cli_eq._run_native_cli(
             ["info", str(cpp_root)],
             replacements,
         )
+        assert expected_info.status == actual_info.status == "ok"
+        assert expected_info.stdout == actual_info.stdout
+        assert actual_info.payload["stderr"] == ""
     finally:
         shutil.rmtree(py_root.parent, ignore_errors=True)
         shutil.rmtree(cpp_root.parent, ignore_errors=True)
 
 
-def _bench_cli_create_info(module: object, case_name: str) -> float:
+def _bench_cli_create_info(py_like: bool, case_name: str) -> float:
     root = _fresh_runtime_dir("cli-create-info") / "cli-image.zarr"
     replacements = {str(root): "<ROOT>"}
     try:
         random.seed(0)
-        create = run_cli_main(
-            module.main,
-            ["create", "--method=coins", str(root), "--format", "0.5"],
-            replacements,
-        )
+        if py_like:
+            create = run_cli_main(
+                _py_cli.main,
+                ["create", "--method=coins", str(root), "--format", "0.5"],
+                replacements,
+            )
+            info = run_cli_main(
+                _py_cli.main,
+                ["info", str(root)],
+                replacements,
+            )
+        else:
+            create = cli_eq._run_native_cli(
+                ["create", "--method=coins", str(root), "--format", "0.5"],
+                replacements,
+            )
+            info = cli_eq._run_native_cli(
+                ["info", str(root)],
+                replacements,
+            )
         _assert_outcome_ok(case_name, create)
-        info = run_cli_main(
-            module.main,
-            ["info", str(root)],
-            replacements,
-        )
         _assert_outcome_ok(case_name, info)
         return (
             _touch_outcome(create) + _touch_outcome(info) + _touch(snapshot_tree(root))
@@ -1524,7 +1587,7 @@ ALL_CASES = (
             case_name="runtime.utils.info_v2_image",
         ),
         lambda: _bench_info(
-            _cpp_utils,
+            object(),
             _runtime_v2_source(),
             stats=False,
             case_name="runtime.utils.info_v2_image",
@@ -1542,7 +1605,7 @@ ALL_CASES = (
             case_name="runtime.utils.info_v3_image_with_stats",
         ),
         lambda: _bench_info(
-            _cpp_utils,
+            object(),
             _runtime_v3_source(),
             stats=True,
             case_name="runtime.utils.info_v3_image_with_stats",
@@ -1553,8 +1616,8 @@ ALL_CASES = (
         "cli.download_v05",
         "CLI download roundtrip for a format 0.5 source created on the same stack.",
         _verify_cli_download_v05,
-        lambda: _bench_cli_download(_py_cli, "runtime.cli.download_v05"),
-        lambda: _bench_cli_download(_cpp_cli, "runtime.cli.download_v05"),
+        lambda: _bench_cli_download(True, "runtime.cli.download_v05"),
+        lambda: _bench_cli_download(False, "runtime.cli.download_v05"),
     ),
     _make_case(
         "runtime",
@@ -1585,12 +1648,8 @@ ALL_CASES = (
         "data.create_zarr_coins_v05",
         "End-to-end create_zarr on the synthetic coins dataset in format 0.5.",
         _verify_create_zarr_coins_v05,
-        lambda: _bench_create_zarr_coins(
-            _py_data, "runtime.data.create_zarr_coins_v05"
-        ),
-        lambda: _bench_create_zarr_coins(
-            _cpp_data, "runtime.data.create_zarr_coins_v05"
-        ),
+        lambda: _bench_create_zarr_coins(True, "runtime.data.create_zarr_coins_v05"),
+        lambda: _bench_create_zarr_coins(False, "runtime.data.create_zarr_coins_v05"),
     ),
     _make_case(
         "runtime",
@@ -1598,10 +1657,10 @@ ALL_CASES = (
         "End-to-end create_zarr on the synthetic astronaut dataset in format 0.5.",
         _verify_create_zarr_astronaut_v05,
         lambda: _bench_create_zarr_astronaut(
-            _py_data, "runtime.data.create_zarr_astronaut_v05"
+            True, "runtime.data.create_zarr_astronaut_v05"
         ),
         lambda: _bench_create_zarr_astronaut(
-            _cpp_data, "runtime.data.create_zarr_astronaut_v05"
+            False, "runtime.data.create_zarr_astronaut_v05"
         ),
     ),
     _make_case(
@@ -1609,8 +1668,8 @@ ALL_CASES = (
         "cli.create_info_v05",
         "CLI create plus info roundtrip for the synthetic coins dataset in format 0.5.",
         _verify_cli_create_info_v05,
-        lambda: _bench_cli_create_info(_py_cli, "runtime.cli.create_info_v05"),
-        lambda: _bench_cli_create_info(_cpp_cli, "runtime.cli.create_info_v05"),
+        lambda: _bench_cli_create_info(True, "runtime.cli.create_info_v05"),
+        lambda: _bench_cli_create_info(False, "runtime.cli.create_info_v05"),
     ),
 )
 

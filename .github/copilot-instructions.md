@@ -22,6 +22,10 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
   the corresponding Python-visible binding path as shrink-only debt. Remove
   redundant `setup.py` sources and direct `cpp/bindings/` dependencies on
   standalone runtime modules instead of keeping duplicate product paths alive.
+- For runtime surfaces already replaced by standalone native code, remove the
+  matching wrapper exports, pybind registrations, and stale test/benchmark
+  references in the same slice unless a remaining oracle-only dependency is
+  explicitly justified and still exercised.
 - Ruff is Python-only. Never target `cpp/` or C/C++ files with Ruff; use
   native checks, compiler/test validation, and C++-appropriate tooling
   instead.

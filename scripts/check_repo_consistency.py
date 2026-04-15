@@ -20,6 +20,12 @@ STALE_NATIVE_CLI_PATTERN = re.compile(
     r"ome_zarr_native_cli\s+(?:cli\s+|data\s+create-plan|format\s+|io\s+subpath|utils\s+(?:view-plan|finder-plan)|writer\s+image-plan)",
     re.IGNORECASE,
 )
+REMOVED_RUNTIME_PATTERN = re.compile(
+    r"\b(?:ome_zarr_c\.cli|cpp/bindings/cli_bindings\.cpp|"
+    r"tests/test_scaler_runtime_equivalence\.py|"
+    r"tests/test_utils_download_runtime\.py|"
+    r"tests/test_utils_info_equivalence\.py)\b"
+)
 
 
 def read_text(path: Path) -> str:
@@ -176,6 +182,11 @@ def main() -> int:
         if STALE_NATIVE_CLI_PATTERN.search(text) is not None:
             issues.append(
                 "Stale plan-only native CLI reference remains in "
+                f"{path.relative_to(ROOT)}"
+            )
+        if REMOVED_RUNTIME_PATTERN.search(text) is not None:
+            issues.append(
+                "Removed transitional runtime surface is still referenced in "
                 f"{path.relative_to(ROOT)}"
             )
         for line in text.splitlines():

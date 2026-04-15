@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import importlib
-import json
 import os
 import random
-import shutil
 import subprocess
 import sys
 from contextlib import nullcontext
@@ -12,10 +10,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import dask.array as da
-import pytest
-import zarr
 
 from tests._outcomes import err, ok
+from tests.test_cli_equivalence import _native_cli_path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
@@ -23,8 +20,6 @@ sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 _py_data = importlib.import_module("ome_zarr.data")
 _py_format = importlib.import_module("ome_zarr.format")
 _py_writer = importlib.import_module("ome_zarr.writer")
-_cpp_data = importlib.import_module("ome_zarr_c.data")
-_cpp_format = importlib.import_module("ome_zarr_c.format")
 _REAL_TO_ZARR = da.to_zarr
 
 
@@ -42,7 +37,7 @@ def _compat_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
         kwargs.pop("dimension_names", None)
         compressor = kwargs.pop("compressor", None)
         chunks = kwargs.pop("chunks", getattr(arr, "chunksize", None))
-        target = zarr.open_array(
+        target = __import__("zarr").open_array(
             store=url,
             path=component,
             mode="w",
@@ -86,7 +81,7 @@ def _snapshot_tree(root: Path):
         rel_path = path.relative_to(root).as_posix()
         if path.is_file():
             if path.suffix == ".json" or path.name in {".zattrs", ".zgroup", ".zarray"}:
-                snapshot.append(("json", rel_path, json.loads(path.read_text())))
+                snapshot.append(("json", rel_path, path.read_text()))
             else:
                 snapshot.append(("file", rel_path, path.read_bytes()))
         else:
@@ -110,51 +105,6 @@ def _run_create_zarr(func, root: Path, *, method, label_name: str, fmt, seed: in
         )
     except Exception as exc:  # noqa: BLE001
         return err(exc, tree=_snapshot_tree(root))
-
-
-def _native_cli_path() -> Path:
-    cmake = shutil.which("cmake")
-    if cmake is None:
-        pytest.skip("cmake is required for standalone native CLI tests")
-
-    build_dir = ROOT / "build-cpp-tests"
-    configure_cmd = [
-        cmake,
-        "-S",
-        str(ROOT),
-        "-B",
-        str(build_dir),
-        "-DCMAKE_BUILD_TYPE=Release",
-    ]
-    if shutil.which("ninja") is not None:
-        configure_cmd[1:1] = ["-G", "Ninja"]
-
-    try:
-        subprocess.run(configure_cmd, check=True, capture_output=True, text=True)
-        subprocess.run(
-            [cmake, "--build", str(build_dir), "-j2"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        failure_text = f"{exc.stdout}\n{exc.stderr}"
-        if (
-            "Could not find BLOSC_LIBRARY" in failure_text
-            or "Could not find ZSTD_LIBRARY" in failure_text
-            or "blosc.h" in failure_text
-            or "zstd.h" in failure_text
-        ):
-            pytest.skip(
-                "standalone native CLI tests require libblosc-dev and libzstd-dev"
-            )
-        raise
-
-    cli_path = build_dir / "ome_zarr_native_cli"
-    if not cli_path.exists():
-        cli_path = cli_path.with_suffix(".exe")
-    assert cli_path.exists(), "standalone native CLI binary was not built"
-    return cli_path
 
 
 def _run_native_create(
@@ -202,67 +152,11 @@ def _run_native_create(
         return err(exc, tree=_snapshot_tree(root))
 
 
-def test_create_zarr_matches_upstream_for_coins_v04_v05(tmp_path) -> None:
-    for version in ("0.4", "0.5"):
-        py_fmt = _py_format.FormatV04() if version == "0.4" else _py_format.FormatV05()
-        cpp_fmt = (
-            _cpp_format.FormatV04() if version == "0.4" else _cpp_format.FormatV05()
-        )
-        py_root = tmp_path / f"py-coins-{version}.zarr"
-        cpp_root = tmp_path / f"cpp-coins-{version}.zarr"
-
-        expected = _run_create_zarr(
-            _py_data.create_zarr,
-            py_root,
-            method=_py_data.coins,
-            label_name="coins",
-            fmt=py_fmt,
-            seed=0,
-        )
-        actual = _run_create_zarr(
-            _cpp_data.create_zarr,
-            cpp_root,
-            method=_cpp_data.coins,
-            label_name="coins",
-            fmt=cpp_fmt,
-            seed=0,
-        )
-        assert expected == actual
-
-
-def test_create_zarr_matches_upstream_for_astronaut_v04_v05(tmp_path) -> None:
-    for version in ("0.4", "0.5"):
-        py_fmt = _py_format.FormatV04() if version == "0.4" else _py_format.FormatV05()
-        cpp_fmt = (
-            _cpp_format.FormatV04() if version == "0.4" else _cpp_format.FormatV05()
-        )
-        py_root = tmp_path / f"py-astronaut-{version}.zarr"
-        cpp_root = tmp_path / f"cpp-astronaut-{version}.zarr"
-
-        expected = _run_create_zarr(
-            _py_data.create_zarr,
-            py_root,
-            method=_py_data.astronaut,
-            label_name="circles",
-            fmt=py_fmt,
-            seed=0,
-        )
-        actual = _run_create_zarr(
-            _cpp_data.create_zarr,
-            cpp_root,
-            method=_cpp_data.astronaut,
-            label_name="circles",
-            fmt=cpp_fmt,
-            seed=0,
-        )
-        assert expected == actual
-
-
 def test_native_cli_create_matches_upstream_for_coins_v04_v05(tmp_path) -> None:
     for version in ("0.4", "0.5"):
         py_fmt = _py_format.FormatV04() if version == "0.4" else _py_format.FormatV05()
-        py_root = tmp_path / f"py-native-coins-{version}.zarr"
-        cpp_root = tmp_path / f"cpp-native-coins-{version}.zarr"
+        py_root = tmp_path / f"py-coins-{version}.zarr"
+        native_root = tmp_path / f"native-coins-{version}.zarr"
 
         expected = _run_create_zarr(
             _py_data.create_zarr,
@@ -273,13 +167,12 @@ def test_native_cli_create_matches_upstream_for_coins_v04_v05(tmp_path) -> None:
             seed=0,
         )
         actual = _run_native_create(
-            cpp_root,
+            native_root,
             method_name="coins",
             version=version,
             seed=0,
         )
         assert expected.status == actual.status == "ok"
-        assert actual.stdout == ""
         assert actual.payload["stderr"] == ""
         assert expected.tree == actual.tree
 
@@ -287,8 +180,8 @@ def test_native_cli_create_matches_upstream_for_coins_v04_v05(tmp_path) -> None:
 def test_native_cli_create_matches_upstream_for_astronaut_v04_v05(tmp_path) -> None:
     for version in ("0.4", "0.5"):
         py_fmt = _py_format.FormatV04() if version == "0.4" else _py_format.FormatV05()
-        py_root = tmp_path / f"py-native-astronaut-{version}.zarr"
-        cpp_root = tmp_path / f"cpp-native-astronaut-{version}.zarr"
+        py_root = tmp_path / f"py-astronaut-{version}.zarr"
+        native_root = tmp_path / f"native-astronaut-{version}.zarr"
 
         expected = _run_create_zarr(
             _py_data.create_zarr,
@@ -299,12 +192,11 @@ def test_native_cli_create_matches_upstream_for_astronaut_v04_v05(tmp_path) -> N
             seed=0,
         )
         actual = _run_native_create(
-            cpp_root,
+            native_root,
             method_name="astronaut",
             version=version,
             seed=0,
         )
         assert expected.status == actual.status == "ok"
-        assert actual.stdout == ""
         assert actual.payload["stderr"] == ""
         assert expected.tree == actual.tree

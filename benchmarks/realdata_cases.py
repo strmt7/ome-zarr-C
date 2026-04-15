@@ -25,18 +25,40 @@ def _reader_summary(io_module, reader_module, path):
     ]
 
 
+def _native_info_stdout(path) -> str:
+    outcome = utils_eq._run_native_cli(["info", str(path)])
+    if outcome.status != "ok":
+        raise AssertionError(
+            f"native info failed for {path}: "
+            f"{outcome.error_type} {outcome.error_message}"
+        )
+    if outcome.payload["stderr"] != "":
+        raise AssertionError(f"native info emitted stderr for {path}")
+    return outcome.stdout
+
+
+def _python_info_stdout(path) -> str:
+    outcome = run_info(utils_eq._py_utils.info, path, stats=False)
+    if outcome.status != "ok":
+        raise AssertionError(
+            f"python info failed for {path}: "
+            f"{outcome.error_type} {outcome.error_message}"
+        )
+    return outcome.stdout
+
+
 def _verify_examples_image_surface() -> None:
     path = ensure_fixture("examples_image")
     core_cases._assert_parity(
         "realdata.examples_image_surface",
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
-            "info": run_info(utils_eq._py_utils.info, path, stats=False),
+            "info": _python_info_stdout(path),
             "reader": _reader_summary(io_eq._py_io, reader_eq._py_reader, path),
         },
         {
             "parse_url": run_parse_url(io_eq._cpp_io.parse_url, str(path)),
-            "info": run_info(utils_eq._cpp_utils.info, path, stats=False),
+            "info": _native_info_stdout(path),
             "reader": _reader_summary(io_eq._cpp_io, reader_eq._cpp_reader, path),
         },
     )
@@ -44,10 +66,15 @@ def _verify_examples_image_surface() -> None:
 
 def _bench_examples_image_surface(io_module, utils_module, reader_module) -> float:
     path = ensure_fixture("examples_image")
+    info_value = (
+        _python_info_stdout(path)
+        if utils_module is utils_eq._py_utils
+        else _native_info_stdout(path)
+    )
     return core_cases._touch(
         {
             "parse_url": run_parse_url(io_module.parse_url, str(path)),
-            "info": run_info(utils_module.info, path, stats=False),
+            "info": info_value,
             "reader": _reader_summary(io_module, reader_module, path),
         }
     )
@@ -59,12 +86,12 @@ def _verify_examples_plate_surface() -> None:
         "realdata.examples_plate_surface",
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
-            "info": run_info(utils_eq._py_utils.info, path, stats=False),
+            "info": _python_info_stdout(path),
             "reader": _reader_summary(io_eq._py_io, reader_eq._py_reader, path),
         },
         {
             "parse_url": run_parse_url(io_eq._cpp_io.parse_url, str(path)),
-            "info": run_info(utils_eq._cpp_utils.info, path, stats=False),
+            "info": _native_info_stdout(path),
             "reader": _reader_summary(io_eq._cpp_io, reader_eq._cpp_reader, path),
         },
     )
@@ -72,10 +99,15 @@ def _verify_examples_plate_surface() -> None:
 
 def _bench_examples_plate_surface(io_module, utils_module, reader_module) -> float:
     path = ensure_fixture("examples_plate")
+    info_value = (
+        _python_info_stdout(path)
+        if utils_module is utils_eq._py_utils
+        else _native_info_stdout(path)
+    )
     return core_cases._touch(
         {
             "parse_url": run_parse_url(io_module.parse_url, str(path)),
-            "info": run_info(utils_module.info, path, stats=False),
+            "info": info_value,
             "reader": _reader_summary(io_module, reader_module, path),
         }
     )
@@ -87,12 +119,12 @@ def _verify_bia_tonsil3_surface() -> None:
         "realdata.bia_tonsil3_surface",
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
-            "info": run_info(utils_eq._py_utils.info, path, stats=False),
+            "info": _python_info_stdout(path),
             "reader": _reader_summary(io_eq._py_io, reader_eq._py_reader, path),
         },
         {
             "parse_url": run_parse_url(io_eq._cpp_io.parse_url, str(path)),
-            "info": run_info(utils_eq._cpp_utils.info, path, stats=False),
+            "info": _native_info_stdout(path),
             "reader": _reader_summary(io_eq._cpp_io, reader_eq._cpp_reader, path),
         },
     )
@@ -100,10 +132,15 @@ def _verify_bia_tonsil3_surface() -> None:
 
 def _bench_bia_tonsil3_surface(io_module, utils_module, reader_module) -> float:
     path = ensure_fixture("bia_tonsil3")
+    info_value = (
+        _python_info_stdout(path)
+        if utils_module is utils_eq._py_utils
+        else _native_info_stdout(path)
+    )
     return core_cases._touch(
         {
             "parse_url": run_parse_url(io_module.parse_url, str(path)),
-            "info": run_info(utils_module.info, path, stats=False),
+            "info": info_value,
             "reader": _reader_summary(io_module, reader_module, path),
         }
     )
@@ -115,12 +152,12 @@ def _verify_bia_156_42_surface() -> None:
         "realdata.bia_156_42_surface",
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
-            "info": run_info(utils_eq._py_utils.info, path, stats=False),
+            "info": _python_info_stdout(path),
             "reader": _reader_summary(io_eq._py_io, reader_eq._py_reader, path),
         },
         {
             "parse_url": run_parse_url(io_eq._cpp_io.parse_url, str(path)),
-            "info": run_info(utils_eq._cpp_utils.info, path, stats=False),
+            "info": _native_info_stdout(path),
             "reader": _reader_summary(io_eq._cpp_io, reader_eq._cpp_reader, path),
         },
     )
@@ -128,10 +165,15 @@ def _verify_bia_156_42_surface() -> None:
 
 def _bench_bia_156_42_surface(io_module, utils_module, reader_module) -> float:
     path = ensure_fixture("bia_156_42")
+    info_value = (
+        _python_info_stdout(path)
+        if utils_module is utils_eq._py_utils
+        else _native_info_stdout(path)
+    )
     return core_cases._touch(
         {
             "parse_url": run_parse_url(io_module.parse_url, str(path)),
-            "info": run_info(utils_module.info, path, stats=False),
+            "info": info_value,
             "reader": _reader_summary(io_module, reader_module, path),
         }
     )

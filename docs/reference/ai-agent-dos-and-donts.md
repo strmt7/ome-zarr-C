@@ -48,6 +48,10 @@ porting work.
   later slices instead of adding fresh semantics there. Remove matching
   `setup.py` sources and direct `cpp/bindings/` dependencies on standalone
   runtime modules once they are no longer needed for oracle work.
+- When a standalone-native runtime replacement already exists, delete the
+  matching wrapper exports, pybind registrations, obsolete runtime tests, and
+  stale benchmark references in the same slice unless a remaining oracle-only
+  dependency is still active and can be stated precisely.
 - Use Ruff only for Python or Markdown-like files. If linting a subset, pass
   those paths explicitly and keep `cpp/` out of the Ruff target list.
 - Start with the smallest sufficient context slice and broaden only when the
