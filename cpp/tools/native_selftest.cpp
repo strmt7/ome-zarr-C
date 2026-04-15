@@ -15,6 +15,8 @@
 #include <variant>
 #include <vector>
 
+#include <zstd.h>
+
 #include "../native/axes.hpp"
 #include "../native/cli.hpp"
 #include "../native/conversions.hpp"
@@ -32,6 +34,22 @@
 namespace {
 
 using namespace ome_zarr_c::native_code;
+
+std::vector<char> zstd_compress_bytes(const std::vector<char>& payload) {
+    std::vector<char> compressed(ZSTD_compressBound(payload.size()));
+    const auto written = ZSTD_compress(
+        compressed.data(),
+        compressed.size(),
+        payload.data(),
+        payload.size(),
+        0);
+    if (ZSTD_isError(written) != 0U) {
+        throw std::runtime_error(
+            std::string("ZSTD_compress failed: ") + ZSTD_getErrorName(written));
+    }
+    compressed.resize(static_cast<std::size_t>(written));
+    return compressed;
+}
 
 template <typename Left, typename Right>
 void require_eq(const Left& left, const Right& right, std::string_view message) {
@@ -564,8 +582,17 @@ void test_io_and_utils() {
         array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},{"name":"zstd","configuration":{"level":0,"checksum":false}}],"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
     }
     {
-        std::ofstream chunk(fixture_root / "image-v3.zarr" / "s0" / "c" / "0" / "0");
-        chunk << "chunk";
+        const std::vector<char> raw = {
+            5, 0, 0, 0,
+            6, 0, 0, 0,
+            7, 0, 0, 0,
+            8, 0, 0, 0,
+        };
+        const auto compressed = zstd_compress_bytes(raw);
+        std::ofstream chunk(
+            fixture_root / "image-v3.zarr" / "s0" / "c" / "0" / "0",
+            std::ios::binary);
+        chunk.write(compressed.data(), static_cast<std::streamsize>(compressed.size()));
     }
 
     std::filesystem::create_directories(
@@ -599,6 +626,14 @@ void test_io_and_utils() {
         (fixture_root / "image.zarr").generic_string() + " [zgroup]",
         "native local info repr");
     require_eq(native_info.back(), std::string("   - (2, 2)"), "native local info shape");
+
+    const auto native_info_stats = local_info_lines(
+        (fixture_root / "image-v3.zarr").generic_string(),
+        true);
+    require_eq(
+        native_info_stats.back(),
+        std::string("   - (2, 2) minmax=(np.int32(5), np.int32(8))"),
+        "native local info stats");
 
     const auto finder_result =
         local_finder_csv((fixture_root / "finder-root").generic_string(), 8012);

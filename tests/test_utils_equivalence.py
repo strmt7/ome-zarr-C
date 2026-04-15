@@ -838,6 +838,18 @@ def test_native_cli_info_matches_upstream(tmp_path) -> None:
     assert actual.stdout == expected.stdout
 
 
+def test_native_cli_info_stats_matches_upstream(tmp_path) -> None:
+    image = tmp_path / "image.zarr"
+    write_minimal_v3_image(image)
+
+    expected = run_info(_py_utils.info, image, stats=True)
+    actual = _run_native_cli(["info", str(image), "--stats"])
+
+    assert expected.status == actual.status == "ok"
+    assert actual.payload["stderr"] == ""
+    assert actual.stdout == expected.stdout
+
+
 def test_native_cli_finder_matches_upstream_dry_run_outputs(tmp_path) -> None:
     py_data = tmp_path / "py-case" / "data"
     cpp_data = tmp_path / "cpp-case" / "data"

@@ -68,12 +68,8 @@ void handle_info(const std::vector<std::string>& args) {
     if (path.empty()) {
         throw ExitError("info requires a path argument");
     }
-    if (stats) {
-        throw ExitError(
-            "info --stats is not implemented in the standalone native runtime yet");
-    }
 
-    for (const auto& line : local_info_lines(path)) {
+    for (const auto& line : local_info_lines(path, stats)) {
         std::cout << line << "\n";
     }
 }
