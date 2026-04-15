@@ -44,7 +44,6 @@ ext_modules = [
             "cpp/bindings/basic_bindings.cpp",
             "cpp/bindings/dask_utils_bindings.cpp",
             "cpp/bindings/format_bindings.cpp",
-            "cpp/bindings/io_bindings.cpp",
             "cpp/bindings/module.cpp",
             "cpp/bindings/reader_bindings.cpp",
             "cpp/bindings/scale_bindings.cpp",

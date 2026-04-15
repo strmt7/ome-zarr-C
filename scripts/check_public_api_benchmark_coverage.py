@@ -54,10 +54,27 @@ EXCLUDED = {
     "ome_zarr.format.Format.validate_well_dict": (
         "abstract base contract; benchmark concrete implementations instead"
     ),
-    "ome_zarr.reader.Spec.matches": (
-        "abstract static contract; benchmark concrete spec predicates instead"
-    ),
 }
+
+IO_WRAPPER_RETIRED = (
+    "Standalone product no longer ships the Python io wrapper; "
+    "parity is covered by dedicated native probe/runtime checks"
+)
+
+EXCLUDED.update(
+    {
+        "ome_zarr.io.parse_url": (IO_WRAPPER_RETIRED),
+        "ome_zarr.io.ZarrLocation.basename": (IO_WRAPPER_RETIRED),
+        "ome_zarr.io.ZarrLocation.create": (IO_WRAPPER_RETIRED),
+        "ome_zarr.io.ZarrLocation.exists": (IO_WRAPPER_RETIRED),
+        "ome_zarr.io.ZarrLocation.load": (IO_WRAPPER_RETIRED),
+        "ome_zarr.io.ZarrLocation.parts": (IO_WRAPPER_RETIRED),
+        "ome_zarr.io.ZarrLocation.subpath": (IO_WRAPPER_RETIRED),
+        "ome_zarr.reader.Spec.matches": (
+            "abstract static contract; benchmark concrete spec predicates instead"
+        ),
+    }
+)
 
 COVERAGE = {
     "ome_zarr.cli.create": ["cli.create_wrapper"],
@@ -109,16 +126,6 @@ COVERAGE = {
     "ome_zarr.format.FormatV02.matches": ["format.matches"],
     "ome_zarr.format.FormatV03.matches": ["format.matches"],
     "ome_zarr.format.FormatV05.matches": ["format.matches"],
-    "ome_zarr.io.parse_url": [
-        "runtime.io.parse_url_v2_image",
-        "runtime.io.parse_url_v3_image",
-    ],
-    "ome_zarr.io.ZarrLocation.basename": ["io.location_methods"],
-    "ome_zarr.io.ZarrLocation.create": ["io.create_load"],
-    "ome_zarr.io.ZarrLocation.exists": ["io.location_methods"],
-    "ome_zarr.io.ZarrLocation.load": ["io.create_load"],
-    "ome_zarr.io.ZarrLocation.parts": ["io.location_methods"],
-    "ome_zarr.io.ZarrLocation.subpath": ["io.location_methods"],
     "ome_zarr.reader.Label.matches": ["reader.matches"],
     "ome_zarr.reader.Labels.matches": ["reader.matches"],
     "ome_zarr.reader.Multiscales.array": ["reader.image_surface"],

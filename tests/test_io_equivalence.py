@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from pathlib import Path
 
 import zarr
 
+from tests import test_utils_equivalence as utils_eq
 from tests._outcomes import err, ok
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,8 +15,6 @@ sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_format = importlib.import_module("ome_zarr.format")
 _py_io = importlib.import_module("ome_zarr.io")
-_cpp_format = importlib.import_module("ome_zarr_c.format")
-_cpp_io = importlib.import_module("ome_zarr_c.io")
 
 
 def _write_minimal_v2_image(root: Path) -> None:
@@ -104,19 +104,52 @@ def _run_parse_url(parse_url, path, *, mode="r", fmt=None):
         return err(exc)
 
 
+def _run_native_io_signature(path, *, mode="r", fmt_version: str | None = None):
+    args = ["io-signature", "--path", os.fspath(path), "--mode", mode]
+    if fmt_version is not None:
+        args.extend(["--format-version", fmt_version])
+    outcome = utils_eq._run_native_probe(args)
+    if outcome.status == "ok":
+        return ok(value=outcome.value)
+    return err(outcome.error_type(outcome.error_message))
+
+
+def _run_native_io_create_signature(
+    path,
+    *,
+    mode="r",
+    fmt_version: str | None = None,
+    subpath: str = "",
+):
+    args = [
+        "io-signature",
+        "--path",
+        os.fspath(path),
+        "--mode",
+        mode,
+        "--create-subpath",
+        subpath,
+    ]
+    if fmt_version is not None:
+        args.extend(["--format-version", fmt_version])
+    outcome = utils_eq._run_native_probe(args)
+    if outcome.status == "ok":
+        return ok(value=outcome.value)
+    return err(outcome.error_type(outcome.error_message))
+
+
 def test_parse_url_matches_upstream_for_missing_path(tmp_path) -> None:
     expected = _run_parse_url(_py_io.parse_url, tmp_path / "missing.zarr")
-    actual = _run_parse_url(_cpp_io.parse_url, tmp_path / "missing.zarr")
+    actual = _run_native_io_signature(tmp_path / "missing.zarr")
     assert expected == actual
 
 
 def test_parse_url_matches_upstream_for_write_mode_creation(tmp_path) -> None:
     py_fmt = _py_format.FormatV05()
-    cpp_fmt = _cpp_format.FormatV05()
     path = tmp_path / "created.zarr"
 
     expected = _run_parse_url(_py_io.parse_url, path, mode="w", fmt=py_fmt)
-    actual = _run_parse_url(_cpp_io.parse_url, path, mode="w", fmt=cpp_fmt)
+    actual = _run_native_io_signature(path, mode="w", fmt_version=py_fmt.version)
     assert expected == actual
 
 
@@ -125,7 +158,7 @@ def test_zarr_location_matches_upstream_for_minimal_v2_image(tmp_path) -> None:
     _write_minimal_v2_image(root)
 
     expected = _run_parse_url(_py_io.parse_url, root)
-    actual = _run_parse_url(_cpp_io.parse_url, root)
+    actual = _run_native_io_signature(root)
     assert expected == actual
 
 
@@ -134,7 +167,7 @@ def test_zarr_location_matches_upstream_for_minimal_v3_image(tmp_path) -> None:
     _write_minimal_v3_image(root)
 
     expected = _run_parse_url(_py_io.parse_url, root)
-    actual = _run_parse_url(_cpp_io.parse_url, root)
+    actual = _run_native_io_signature(root)
     assert expected == actual
 
 
@@ -143,12 +176,11 @@ def test_zarr_location_create_and_equality_match_upstream(tmp_path) -> None:
     _write_minimal_v2_image(root)
 
     py_loc = _py_io.parse_url(root)
-    cpp_loc = _cpp_io.parse_url(root)
     assert py_loc is not None
-    assert cpp_loc is not None
 
     py_child = py_loc.create("labels")
-    cpp_child = cpp_loc.create("labels")
-    assert _location_signature(py_child) == _location_signature(cpp_child)
+    native_child = _run_native_io_create_signature(root, subpath="labels")
+    assert native_child == ok(value=_location_signature(py_child))
 
-    assert (py_loc == py_loc.create("")) == (cpp_loc == cpp_loc.create(""))
+    native_same = _run_native_io_create_signature(root, subpath="")
+    assert native_same == ok(value=_location_signature(py_loc.create("")))

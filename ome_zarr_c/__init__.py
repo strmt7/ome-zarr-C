@@ -17,7 +17,6 @@ from .format import (
     format_from_version,
     format_implementations,
 )
-from .io import ZarrLocation, parse_url
 from .reader import (
     OMERO,
     Label,
@@ -51,6 +50,4 @@ __all__ = [
     "detect_format",
     "format_from_version",
     "format_implementations",
-    "parse_url",
-    "ZarrLocation",
 ]
