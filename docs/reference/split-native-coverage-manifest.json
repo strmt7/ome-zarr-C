@@ -19,10 +19,10 @@
     {"upstream_file": "csv.py", "qualname": "csv_to_zarr", "binding_files": [], "native_files": ["cpp/native/csv.cpp", "cpp/native/local_runtime.cpp", "cpp/tools/native_cli.cpp"]},
     {"upstream_file": "csv.py", "qualname": "dict_to_zarr", "binding_files": [], "native_files": ["cpp/native/local_runtime.cpp", "cpp/tools/native_oracle_probe.cpp", "cpp/tools/native_bench_core.cpp"]},
 
-    {"upstream_file": "data.py", "qualname": "coins", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp"]},
-    {"upstream_file": "data.py", "qualname": "astronaut", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp", "cpp/native/scale.cpp"]},
-    {"upstream_file": "data.py", "qualname": "make_circle", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp"]},
-    {"upstream_file": "data.py", "qualname": "rgb_to_5d", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp"]},
+    {"upstream_file": "data.py", "qualname": "coins", "binding_files": [], "native_files": ["cpp/native/data.cpp", "cpp/native/create_runtime.cpp", "cpp/tools/native_cli.cpp"]},
+    {"upstream_file": "data.py", "qualname": "astronaut", "binding_files": [], "native_files": ["cpp/native/data.cpp", "cpp/native/create_runtime.cpp", "cpp/tools/native_cli.cpp"]},
+    {"upstream_file": "data.py", "qualname": "make_circle", "binding_files": [], "native_files": ["cpp/native/data.cpp", "cpp/tools/native_oracle_probe.cpp"]},
+    {"upstream_file": "data.py", "qualname": "rgb_to_5d", "binding_files": [], "native_files": ["cpp/native/data.cpp", "cpp/tools/native_oracle_probe.cpp"]},
 
     {"upstream_file": "format.py", "qualname": "format_from_version", "binding_files": ["cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/format.cpp"]},
     {"upstream_file": "format.py", "qualname": "format_implementations", "binding_files": ["cpp/bindings/format_bindings.cpp"], "native_files": ["cpp/native/format.cpp"]},

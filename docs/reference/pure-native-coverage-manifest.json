@@ -30,10 +30,10 @@
     {"upstream_file": "dask_utils.py", "qualname": "downscale_nearest", "boundary_files": ["cpp/bindings/dask_utils_bindings.cpp", "ome_zarr_c/dask_utils.py"], "native_files": ["cpp/native/dask_utils.cpp"]},
     {"entry_type": "non_callable_scaffold", "upstream_file": "dask_utils.py", "boundary_files": ["cpp/bindings/dask_utils_bindings.cpp", "ome_zarr_c/dask_utils.py"], "native_files": ["cpp/native/dask_utils.cpp"]},
 
-    {"upstream_file": "data.py", "qualname": "make_circle", "boundary_files": ["cpp/bindings/data_bindings.cpp", "ome_zarr_c/data.py"], "native_files": ["cpp/native/data.cpp"]},
-    {"upstream_file": "data.py", "qualname": "rgb_to_5d", "boundary_files": ["cpp/bindings/data_bindings.cpp", "ome_zarr_c/data.py"], "native_files": ["cpp/native/data.cpp"]},
-    {"upstream_file": "data.py", "qualname": "coins", "boundary_files": ["cpp/bindings/data_bindings.cpp", "ome_zarr_c/data.py"], "native_files": ["cpp/native/data.cpp"]},
-    {"upstream_file": "data.py", "qualname": "astronaut", "boundary_files": ["cpp/bindings/data_bindings.cpp", "ome_zarr_c/data.py"], "native_files": ["cpp/native/data.cpp"]},
+    {"upstream_file": "data.py", "qualname": "make_circle", "boundary_files": [], "native_files": ["cpp/native/data.cpp", "cpp/tools/native_oracle_probe.cpp"]},
+    {"upstream_file": "data.py", "qualname": "rgb_to_5d", "boundary_files": [], "native_files": ["cpp/native/data.cpp", "cpp/tools/native_oracle_probe.cpp"]},
+    {"upstream_file": "data.py", "qualname": "coins", "boundary_files": [], "native_files": ["cpp/native/data.cpp", "cpp/native/create_runtime.cpp", "cpp/tools/native_cli.cpp"]},
+    {"upstream_file": "data.py", "qualname": "astronaut", "boundary_files": [], "native_files": ["cpp/native/data.cpp", "cpp/native/create_runtime.cpp", "cpp/tools/native_cli.cpp"]},
 
     {"upstream_file": "format.py", "qualname": "format_from_version", "boundary_files": ["cpp/bindings/format_bindings.cpp", "ome_zarr_c/format.py"], "native_files": ["cpp/native/format.cpp"]},
     {"upstream_file": "format.py", "qualname": "format_implementations", "boundary_files": ["cpp/bindings/format_bindings.cpp", "ome_zarr_c/format.py"], "native_files": ["cpp/native/format.cpp"]},
@@ -180,7 +180,7 @@
     {"upstream_file": "writer.py", "qualname": "write_image", "boundary_files": ["cpp/bindings/writer_bindings.cpp", "ome_zarr_c/writer.py"], "native_files": ["cpp/native/writer.cpp", "cpp/native/format.cpp", "cpp/native/scale.cpp"]},
 
     {"entry_type": "non_callable_scaffold", "upstream_file": "cli.py", "boundary_files": [], "native_files": ["cpp/native/cli.cpp", "cpp/tools/native_cli.cpp"]},
-    {"entry_type": "non_callable_scaffold", "upstream_file": "data.py", "boundary_files": ["cpp/bindings/data_bindings.cpp", "ome_zarr_c/data.py"], "native_files": ["cpp/native/data.cpp", "cpp/native/format.cpp", "cpp/native/writer.cpp"]},
+    {"entry_type": "non_callable_scaffold", "upstream_file": "data.py", "boundary_files": [], "native_files": ["cpp/native/data.cpp", "cpp/native/format.cpp", "cpp/native/writer.cpp"]},
     {"entry_type": "non_callable_scaffold", "upstream_file": "io.py", "boundary_files": ["cpp/bindings/io_bindings.cpp", "ome_zarr_c/io.py"], "native_files": ["cpp/native/io.cpp"]},
     {"entry_type": "non_callable_scaffold", "upstream_file": "reader.py", "boundary_files": ["cpp/bindings/reader_bindings.cpp", "ome_zarr_c/reader.py"], "native_files": ["cpp/native/reader.cpp", "cpp/native/io.cpp", "cpp/native/format.cpp"]},
     {"entry_type": "non_callable_scaffold", "upstream_file": "types.py", "boundary_files": ["ome_zarr_c/types.py"], "native_files": []},

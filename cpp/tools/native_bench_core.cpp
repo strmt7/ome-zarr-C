@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -11,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 #include <zstd.h>
@@ -405,6 +407,65 @@ std::uint64_t bench_dask_zoom(std::size_t iteration) {
 
 std::uint64_t bench_data_circle_points(std::size_t) {
     return static_cast<std::uint64_t>(circle_points(256, 256).size());
+}
+
+std::uint64_t bench_data_make_circle(std::size_t iteration) {
+    const std::array<std::tuple<std::size_t, std::size_t, std::uint16_t>, 3> cases = {{
+        {8U, 8U, 1U},
+        {9U, 5U, 7U},
+        {12U, 16U, 2U},
+    }};
+    const auto& [height, width, value] = cases.at(iteration % cases.size());
+    std::vector<std::uint16_t> target(height * width, 0U);
+    const auto points = circle_points(height, width);
+    for (const auto& point : points) {
+        target[point.y * width + point.x] = value;
+    }
+    std::uint64_t total = 0U;
+    for (const auto entry : target) {
+        total += entry;
+    }
+    return total;
+}
+
+std::uint64_t bench_data_rgb_to_5d(std::size_t iteration) {
+    if (iteration % 2U == 0U) {
+        const std::size_t height = 4U;
+        const std::size_t width = 4U;
+        std::vector<std::uint16_t> source(height * width);
+        for (std::size_t index = 0; index < source.size(); ++index) {
+            source[index] = static_cast<std::uint16_t>(index);
+        }
+        const auto output_shape = std::vector<std::size_t>{1U, 1U, 1U, height, width};
+        std::uint64_t checksum = static_cast<std::uint64_t>(output_shape.size());
+        for (const auto value : source) {
+            checksum += value;
+        }
+        return checksum;
+    }
+
+    const std::size_t height = 4U;
+    const std::size_t width = 5U;
+    const std::size_t channels = 3U;
+    std::vector<std::uint16_t> source(height * width * channels);
+    for (std::size_t index = 0; index < source.size(); ++index) {
+        source[index] = static_cast<std::uint16_t>(index);
+    }
+    std::vector<std::uint16_t> target(height * width * channels);
+    for (std::size_t channel = 0; channel < channels; ++channel) {
+        for (std::size_t y = 0; y < height; ++y) {
+            for (std::size_t x = 0; x < width; ++x) {
+                const auto source_index = (y * width * channels) + (x * channels) + channel;
+                const auto target_index = (channel * height * width) + (y * width) + x;
+                target[target_index] = source[source_index];
+            }
+        }
+    }
+    std::uint64_t checksum = 0U;
+    for (const auto value : target) {
+        checksum += value;
+    }
+    return checksum;
 }
 
 std::uint64_t bench_format_matches(std::size_t iteration) {
@@ -894,6 +955,8 @@ int main(int argc, char** argv) {
             {"csv_props_by_id", 8, bench_csv_props},
             {"data.create_plan", 1, bench_data_create_plan},
             {"dask_zoom_plan", 1, bench_dask_zoom},
+            {"data.make_circle_batch", 16, bench_data_make_circle},
+            {"data.rgb_to_5d_batch", 16, bench_data_rgb_to_5d},
             {"data_circle_points", 16, bench_data_circle_points},
             {"format.dispatch", 1, bench_format_dispatch},
             {"format.matches", 1, bench_format_matches},

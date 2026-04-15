@@ -6,7 +6,6 @@ except ImportError:
     __version__ = "0+unknown"
 
 from .axes import KNOWN_AXES, Axes
-from .data import CHANNEL_DIMENSION, astronaut, coins, make_circle, rgb_to_5d
 from .format import (
     CurrentFormat,
     Format,
@@ -34,7 +33,6 @@ from .reader import (
 
 __all__ = [
     "Axes",
-    "CHANNEL_DIMENSION",
     "CurrentFormat",
     "Format",
     "FormatV01",
@@ -53,13 +51,9 @@ __all__ = [
     "Spec",
     "Well",
     "__version__",
-    "astronaut",
-    "coins",
     "detect_format",
     "format_from_version",
     "format_implementations",
-    "make_circle",
     "parse_url",
-    "rgb_to_5d",
     "ZarrLocation",
 ]

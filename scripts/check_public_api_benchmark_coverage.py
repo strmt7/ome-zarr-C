@@ -71,8 +71,8 @@ COVERAGE = {
     "ome_zarr.csv.csv_to_zarr": ["csv.csv_to_zarr"],
     "ome_zarr.csv.dict_to_zarr": ["csv.dict_to_zarr"],
     "ome_zarr.csv.parse_csv_value": ["csv.parse_csv_value"],
-    "ome_zarr.data.astronaut": ["macro.data.astronaut"],
-    "ome_zarr.data.coins": ["macro.data.coins"],
+    "ome_zarr.data.astronaut": ["runtime.data.create_zarr_astronaut_v05"],
+    "ome_zarr.data.coins": ["runtime.data.create_zarr_coins_v05"],
     "ome_zarr.data.create_zarr": [
         "runtime.data.create_zarr_coins_v05",
         "runtime.data.create_zarr_astronaut_v05",

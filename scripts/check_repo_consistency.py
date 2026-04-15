@@ -25,6 +25,7 @@ REMOVED_RUNTIME_PATTERN = re.compile(
     r"ome_zarr_c\.utils|cpp/bindings/utils_bindings\.cpp|"
     r"ome_zarr_c\.csv|cpp/bindings/csv_bindings\.cpp|"
     r"ome_zarr_c\.conversions|"
+    r"ome_zarr_c\.data|cpp/bindings/data_bindings\.cpp|"
     r"tests/test_scaler_runtime_equivalence\.py|"
     r"tests/test_utils_download_runtime\.py|"
     r"tests/test_utils_info_equivalence\.py)\b"
@@ -47,7 +48,6 @@ def main() -> int:
     cmake_file = ROOT / "CMakeLists.txt"
     iteration_compare_script = ROOT / "scripts/compare_iteration_benchmarks.py"
     setup_py = ROOT / "setup.py"
-    data_bindings = ROOT / "cpp/bindings/data_bindings.cpp"
 
     for required in (
         standalone_doc,
@@ -66,7 +66,6 @@ def main() -> int:
     docs_index_text = read_text(ROOT / "docs/index.md")
     readme_text = read_text(ROOT / "README.md")
     setup_text = read_text(setup_py)
-    data_bindings_text = read_text(data_bindings)
 
     if "docs/reference/standalone-cpp-target.md" not in agents_text:
         issues.append(
@@ -174,11 +173,8 @@ def main() -> int:
             "setup.py still builds standalone-native Python-random emulation "
             "into the Python extension."
         )
-    if '#include "../native/create_runtime.hpp"' in data_bindings_text:
-        issues.append(
-            "cpp/bindings/data_bindings.cpp still depends on standalone-native "
-            "create runtime."
-        )
+    if "cpp/bindings/data_bindings.cpp" in setup_text:
+        issues.append("setup.py still builds the removed transitional data bindings.")
 
     for path in TEXT_FILES:
         text = read_text(path)

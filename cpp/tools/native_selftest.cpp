@@ -417,6 +417,16 @@ void test_dask_scale_and_data() {
     require_eq(points.front().y, std::size_t{1}, "circle point y");
     require_eq(points.front().x, std::size_t{1}, "circle point x");
 
+    {
+        std::vector<std::uint16_t> target(64, 0U);
+        for (const auto& point : circle_points(8, 8)) {
+            target[point.y * 8U + point.x] = 5U;
+        }
+        require_eq(target[0], std::uint16_t{0}, "circle corner");
+        require_eq(target[2 + 8], std::uint16_t{5}, "circle edge");
+        require_eq(target[4 + 4 * 8], std::uint16_t{5}, "circle center");
+    }
+
     require_vector_eq(
         rgb_to_5d_shape({4, 5}),
         std::vector<std::size_t>{1, 1, 4, 5},
@@ -429,6 +439,30 @@ void test_dask_scale_and_data() {
         rgb_channel_order({4, 5, 3}),
         std::vector<std::size_t>{0, 1, 2},
         "rgb channel order");
+    {
+        const std::size_t height = 2U;
+        const std::size_t width = 3U;
+        const std::size_t channels = 3U;
+        std::vector<std::uint16_t> source(height * width * channels);
+        for (std::size_t index = 0; index < source.size(); ++index) {
+            source[index] = static_cast<std::uint16_t>(index);
+        }
+        std::vector<std::uint16_t> reordered(height * width * channels);
+        for (std::size_t channel = 0; channel < channels; ++channel) {
+            for (std::size_t y = 0; y < height; ++y) {
+                for (std::size_t x = 0; x < width; ++x) {
+                    const auto source_index =
+                        (y * width * channels) + (x * channels) + channel;
+                    const auto target_index =
+                        (channel * height * width) + (y * width) + x;
+                    reordered[target_index] = source[source_index];
+                }
+            }
+        }
+        require_eq(reordered[0], std::uint16_t{0}, "rgb reorder first");
+        require_eq(reordered[1], std::uint16_t{3}, "rgb reorder row-major");
+        require_eq(reordered[6], std::uint16_t{1}, "rgb reorder channel split");
+    }
     require_throws<std::invalid_argument>(
         [] { static_cast<void>(rgb_to_5d_shape({1})); },
         "invalid rgb_to_5d shape should fail");

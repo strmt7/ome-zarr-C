@@ -870,11 +870,17 @@ def _verify_data_make_circle() -> None:
         _assert_equal(
             f"data.make_circle[{h},{w},{value},{dtype}]",
             data_eq._run_make_circle(data_eq._py_data.make_circle, h, w, value, dtype),
-            data_eq._run_make_circle(data_eq._cpp_data.make_circle, h, w, value, dtype),
+            data_eq._run_native_make_circle(
+                target_shape=(h, w),
+                circle_shape=(h, w),
+                offset=(0, 0),
+                value=value,
+                dtype=dtype,
+            ),
         )
 
 
-def _bench_data_make_circle(module) -> float:
+def _bench_data_make_circle_python() -> float:
     total = 0.0
     for h, w, value, dtype in [
         (8, 8, 1, np.float64),
@@ -882,7 +888,7 @@ def _bench_data_make_circle(module) -> float:
         (12, 16, 2, np.uint8),
     ]:
         total += _touch_outcome(
-            data_eq._run_make_circle(module.make_circle, h, w, value, dtype)
+            data_eq._run_make_circle(data_eq._py_data.make_circle, h, w, value, dtype)
         )
     return total
 
@@ -896,18 +902,20 @@ def _verify_data_rgb_to_5d() -> None:
         _assert_equal(
             f"data.rgb_to_5d[{pixels.shape}]",
             data_eq._run_rgb_to_5d(data_eq._py_data.rgb_to_5d, pixels),
-            data_eq._run_rgb_to_5d(data_eq._cpp_data.rgb_to_5d, pixels),
+            data_eq._run_native_rgb_to_5d(pixels),
         )
 
 
-def _bench_data_rgb_to_5d(module) -> float:
+def _bench_data_rgb_to_5d_python() -> float:
     total = 0.0
     for pixels in [
         np.arange(16, dtype=np.uint8).reshape(4, 4),
         np.arange(4 * 5 * 3, dtype=np.uint8).reshape(4, 5, 3),
         np.arange(2 * 3 * 4 * 5, dtype=np.uint8).reshape(2, 3, 4, 5),
     ]:
-        total += _touch_outcome(data_eq._run_rgb_to_5d(module.rgb_to_5d, pixels))
+        total += _touch_outcome(
+            data_eq._run_rgb_to_5d(data_eq._py_data.rgb_to_5d, pixels)
+        )
     return total
 
 
@@ -2178,21 +2186,37 @@ PUBLIC_API_CASES = (
         lambda: _bench_csv_csv_to_zarr(True),
         lambda: _bench_csv_csv_to_zarr(False),
     ),
-    core_cases._make_case(
-        "data",
-        "make_circle",
-        "Synthetic disk painting into preallocated arrays.",
-        _verify_data_make_circle,
-        lambda: _bench_data_make_circle(data_eq._py_data),
-        lambda: _bench_data_make_circle(data_eq._cpp_data),
+    core_cases.BenchmarkCase(
+        group="data",
+        name="make_circle",
+        description="Synthetic disk painting into preallocated arrays.",
+        verify=_verify_data_make_circle,
+        python_timer=core_cases._make_timer(
+            "data.make_circle",
+            _verify_data_make_circle,
+            _bench_data_make_circle_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            case_id="data.make_circle",
+            verify=_verify_data_make_circle,
+            native_match="data.make_circle_batch",
+        ),
     ),
-    core_cases._make_case(
-        "data",
-        "rgb_to_5d",
-        "RGB-like array normalization into 5D OME-Zarr layout.",
-        _verify_data_rgb_to_5d,
-        lambda: _bench_data_rgb_to_5d(data_eq._py_data),
-        lambda: _bench_data_rgb_to_5d(data_eq._cpp_data),
+    core_cases.BenchmarkCase(
+        group="data",
+        name="rgb_to_5d",
+        description="RGB-like array normalization into 5D OME-Zarr layout.",
+        verify=_verify_data_rgb_to_5d,
+        python_timer=core_cases._make_timer(
+            "data.rgb_to_5d",
+            _verify_data_rgb_to_5d,
+            _bench_data_rgb_to_5d_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            case_id="data.rgb_to_5d",
+            verify=_verify_data_rgb_to_5d,
+            native_match="data.rgb_to_5d_batch",
+        ),
     ),
     core_cases._make_case(
         "format",
