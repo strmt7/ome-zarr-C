@@ -16,6 +16,8 @@ from functools import lru_cache
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from benchmarks.runtime_support import (
     run_download,
     run_info,
@@ -37,7 +39,8 @@ _cpp_utils = importlib.import_module("ome_zarr_c.utils")
 @lru_cache(maxsize=1)
 def _native_cli_path() -> Path:
     cmake = shutil.which("cmake")
-    assert cmake is not None, "cmake is required for standalone native CLI tests"
+    if cmake is None:
+        pytest.skip("cmake is required for standalone native CLI tests")
 
     build_dir = ROOT / "build-cpp-tests"
     configure_cmd = [
@@ -51,13 +54,26 @@ def _native_cli_path() -> Path:
     if shutil.which("ninja") is not None:
         configure_cmd[1:1] = ["-G", "Ninja"]
 
-    subprocess.run(configure_cmd, check=True, capture_output=True, text=True)
-    subprocess.run(
-        [cmake, "--build", str(build_dir), "-j2"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        subprocess.run(configure_cmd, check=True, capture_output=True, text=True)
+        subprocess.run(
+            [cmake, "--build", str(build_dir), "-j2"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        failure_text = f"{exc.stdout}\n{exc.stderr}"
+        if (
+            "Could not find BLOSC_LIBRARY" in failure_text
+            or "Could not find ZSTD_LIBRARY" in failure_text
+            or "blosc.h" in failure_text
+            or "zstd.h" in failure_text
+        ):
+            pytest.skip(
+                "standalone native CLI tests require libblosc-dev and libzstd-dev"
+            )
+        raise
 
     cli_path = build_dir / "ome_zarr_native_cli"
     if not cli_path.exists():
