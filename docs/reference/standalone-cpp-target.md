@@ -43,6 +43,9 @@ Target end state:
    that difference to identify boundary overhead rather than guessing.
 5. Keep the current state and target state documented separately so repo docs
    stay truthful while the migration is in progress.
+6. Keep the standalone-native toolchain on the latest pinned stable versions
+   recorded in `docs/reference/native-dependency-manifest.json` instead of
+   accepting older distro package versions by accident.
 
 ## Immediate migration priorities
 

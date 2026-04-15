@@ -2,6 +2,7 @@
 build/
 build-cpp/
 build-cpp-tests/
+.native-toolchain/
 dist/
 *.so
 *.egg-info/

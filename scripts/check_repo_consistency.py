@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -31,6 +32,19 @@ REMOVED_RUNTIME_PATTERN = re.compile(
     r"tests/test_utils_download_runtime\.py|"
     r"tests/test_utils_info_equivalence\.py)\b"
 )
+STALE_DISTRO_NATIVE_DEPS_PATTERN = re.compile(
+    r"\b(?:libblosc-dev|libzstd-dev)\b",
+    re.IGNORECASE,
+)
+
+
+def _read_define_int(text: str, macro_name: str) -> int:
+    match = re.search(
+        rf"^#define\s+{re.escape(macro_name)}\s+(\d+)\b", text, re.MULTILINE
+    )
+    if match is None:
+        raise ValueError(f"Missing macro {macro_name}")
+    return int(match.group(1))
 
 
 def read_text(path: Path) -> str:
@@ -48,6 +62,8 @@ def main() -> int:
     native_selftest = ROOT / "cpp/tools/native_selftest.cpp"
     cmake_file = ROOT / "CMakeLists.txt"
     iteration_compare_script = ROOT / "scripts/compare_iteration_benchmarks.py"
+    native_dependency_manifest = ROOT / "docs/reference/native-dependency-manifest.json"
+    native_toolchain_installer = ROOT / "scripts/install_latest_native_toolchain.sh"
     setup_py = ROOT / "setup.py"
 
     for required in (
@@ -59,6 +75,8 @@ def main() -> int:
         native_selftest,
         cmake_file,
         iteration_compare_script,
+        native_dependency_manifest,
+        native_toolchain_installer,
     ):
         if not required.exists():
             issues.append(f"Missing required file: {required.relative_to(ROOT)}")
@@ -67,6 +85,9 @@ def main() -> int:
     docs_index_text = read_text(ROOT / "docs/index.md")
     readme_text = read_text(ROOT / "README.md")
     setup_text = read_text(setup_py)
+    cmake_text = read_text(cmake_file)
+    native_dev_text = read_text(native_dev_doc)
+    manifest = json.loads(read_text(native_dependency_manifest))
 
     if "docs/reference/standalone-cpp-target.md" not in agents_text:
         issues.append(
@@ -80,6 +101,8 @@ def main() -> int:
         issues.append("docs/index.md is missing the standalone C++ target doc.")
     if "docs/reference/native-build-and-selftest.md" not in docs_index_text:
         issues.append("docs/index.md is missing the native build/self-test doc.")
+    if "docs/reference/native-dependency-manifest.json" not in docs_index_text:
+        issues.append("docs/index.md is missing the native dependency manifest.")
     if "transitional parity workspace" not in readme_text:
         issues.append(
             "README.md no longer states the current transitional workspace status."
@@ -108,6 +131,10 @@ def main() -> int:
         issues.append("README.md is missing the native CLI csv_to_labels example.")
     if "ome_zarr_native_bench_core" not in readme_text:
         issues.append("README.md is missing the native core benchmark command.")
+    if "docs/reference/native-dependency-manifest.json" not in readme_text:
+        issues.append("README.md is missing the native dependency manifest reference.")
+    if "install_latest_native_toolchain.sh" not in readme_text:
+        issues.append("README.md is missing the native toolchain installer reference.")
     if "scripts/compare_iteration_benchmarks.py" not in readme_text:
         issues.append("README.md is missing the iteration benchmark helper command.")
     if "--paired-case utils.download=local.download" not in readme_text:
@@ -176,6 +203,73 @@ def main() -> int:
         )
     if "cpp/bindings/data_bindings.cpp" in setup_text:
         issues.append("setup.py still builds the removed transitional data bindings.")
+    if "install_latest_native_toolchain.sh" not in native_dev_text:
+        issues.append(
+            "native-build-and-selftest.md is missing the native toolchain installer."
+        )
+
+    expected_cmake_minimum = (
+        "cmake_minimum_required(VERSION "
+        f"{manifest['native_build']['cmake_minimum_version']})"
+    )
+    if expected_cmake_minimum not in cmake_text:
+        issues.append(
+            "CMakeLists.txt does not use the manifest-pinned minimum CMake version."
+        )
+    if (
+        f"set(CMAKE_CXX_STANDARD {manifest['native_build']['cxx_standard']})"
+        not in cmake_text
+    ):
+        issues.append("CMakeLists.txt does not use the manifest-pinned C++ standard.")
+
+    tinyxml2_text = read_text(ROOT / "third_party/tinyxml2/tinyxml2.h")
+    cpp_httplib_text = read_text(ROOT / "third_party/cpp-httplib/httplib.h")
+    nlohmann_text = read_text(ROOT / "third_party/nlohmann/json.hpp")
+
+    manifest_tinyxml2 = tuple(
+        int(part)
+        for part in manifest["vendored_headers"]["tinyxml2"]["version"].split(".")
+    )
+    repo_tinyxml2 = (
+        _read_define_int(tinyxml2_text, "TINYXML2_MAJOR_VERSION"),
+        _read_define_int(tinyxml2_text, "TINYXML2_MINOR_VERSION"),
+        _read_define_int(tinyxml2_text, "TINYXML2_PATCH_VERSION"),
+    )
+    if repo_tinyxml2 != manifest_tinyxml2:
+        issues.append(
+            "third_party/tinyxml2 version does not match "
+            "the native dependency manifest."
+        )
+
+    httplib_match = re.search(
+        r'^#define\s+CPPHTTPLIB_VERSION\s+"([^"]+)"',
+        cpp_httplib_text,
+        re.MULTILINE,
+    )
+    if (
+        httplib_match is None
+        or httplib_match.group(1)
+        != manifest["vendored_headers"]["cpp-httplib"]["version"]
+    ):
+        issues.append(
+            "third_party/cpp-httplib version does not match "
+            "the native dependency manifest."
+        )
+
+    repo_nlohmann = (
+        _read_define_int(nlohmann_text, "NLOHMANN_JSON_VERSION_MAJOR"),
+        _read_define_int(nlohmann_text, "NLOHMANN_JSON_VERSION_MINOR"),
+        _read_define_int(nlohmann_text, "NLOHMANN_JSON_VERSION_PATCH"),
+    )
+    manifest_nlohmann = tuple(
+        int(part)
+        for part in manifest["vendored_headers"]["nlohmann/json"]["version"].split(".")
+    )
+    if repo_nlohmann != manifest_nlohmann:
+        issues.append(
+            "third_party/nlohmann/json version does not match "
+            "the native dependency manifest."
+        )
 
     for path in TEXT_FILES:
         text = read_text(path)
@@ -187,6 +281,11 @@ def main() -> int:
         if REMOVED_RUNTIME_PATTERN.search(text) is not None:
             issues.append(
                 "Removed transitional runtime surface is still referenced in "
+                f"{path.relative_to(ROOT)}"
+            )
+        if STALE_DISTRO_NATIVE_DEPS_PATTERN.search(text) is not None:
+            issues.append(
+                "Stale distro-native dependency reference remains in "
                 f"{path.relative_to(ROOT)}"
             )
         for line in text.splitlines():

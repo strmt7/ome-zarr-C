@@ -19,33 +19,53 @@ Python still exists elsewhere in the repository for parity proofs against the
 frozen upstream release, but it is not required to compile or run these native
 targets.
 
+## Pinned Native Stack
+
+Pinned latest native stack as of `2026-04-15`:
+
+- CMake `4.3.1`
+- Ninja `1.13.2`
+- C++ standard `23`
+- Zstd `1.5.7`
+- zlib `1.3.2`
+- LZ4 `1.10.0`
+- c-blosc `1.21.6`
+- vendored `cpp-httplib` `0.42.0`
+- vendored `nlohmann/json` `3.12.0`
+- vendored `tinyxml2` `11.0.0`
+
+The repo source of truth for those versions is
+`docs/reference/native-dependency-manifest.json`.
+
 ## Host prerequisites
 
-Install a modern C++ toolchain plus CMake and Ninja.
+Install a working compiler plus the small bootstrap prerequisites, then use the
+repo installer to fetch and install the pinned latest native toolchain.
 
 Typical Ubuntu or Debian example:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build libblosc-dev libzstd-dev
+sudo apt-get install -y build-essential curl unzip
+./scripts/install_latest_native_toolchain.sh /usr/local
 ```
 
 ## Configure And Build
 
 ```bash
 cd /opt/omeroconvertedc/ome-zarr-C
-cmake -S . -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build-cpp -j2
+/usr/local/bin/cmake -S . -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
+/usr/local/bin/cmake --build build-cpp -j2
 ```
 
 Optional local host tuning:
 
 ```bash
-cmake -S . -B build-cpp -G Ninja \
+/usr/local/bin/cmake -S . -B build-cpp -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DOME_ZARR_C_NATIVE_ENABLE_LTO=ON \
   -DOME_ZARR_C_NATIVE_MARCH_NATIVE=ON
-cmake --build build-cpp -j2
+/usr/local/bin/cmake --build build-cpp -j2
 ```
 
 These tuning flags are for local benchmarking or deployment on a known host.

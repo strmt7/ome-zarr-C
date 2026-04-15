@@ -31,6 +31,10 @@
 - Prefer newer stable dependency versions when they unlock stronger native
   techniques or performance gains, but treat the upgrade as provisional until
   parity and benchmark validation are rerun successfully on that exact stack.
+- For the standalone native path, treat
+  `docs/reference/native-dependency-manifest.json` as the source of truth for
+  the latest pinned tool and library versions. Do not quietly rely on older
+  host packages when the manifest specifies newer native releases.
 - Do not put Python objects, Python attribute dispatch, or Python C-API-driven
   semantics into C++ implementation code unless the boundary can be proven
   unavoidable for the Python-visible contract.
