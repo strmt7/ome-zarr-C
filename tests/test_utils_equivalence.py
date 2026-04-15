@@ -20,6 +20,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import zarr
 
 from benchmarks.runtime_support import (
     run_download,
@@ -37,6 +38,7 @@ sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_utils = importlib.import_module("ome_zarr.utils")
 _cpp_utils = importlib.import_module("ome_zarr_c.utils")
+_py_csv = importlib.import_module("ome_zarr.csv")
 
 
 @lru_cache(maxsize=1)
@@ -247,6 +249,40 @@ def _build_simple_view_tree(root: Path) -> None:
     image = root / "image.zarr"
     image.mkdir(parents=True)
     (image / ".zattrs").write_text(json.dumps({"multiscales": [{}]}))
+
+
+def _write_csv_rows(path: Path, rows: list[list[str]]) -> None:
+    lines = []
+    for row in rows:
+        lines.append(",".join(row))
+    path.write_text("\n".join(lines) + "\n")
+
+
+def _build_csv_labels_tree(
+    root: Path,
+    root_attrs: dict,
+    subgroup_attrs: dict[str, dict] | None = None,
+) -> None:
+    root_group = zarr.open_group(str(root), mode="w")
+    root_group.attrs.update(json.loads(json.dumps(root_attrs)))
+    for rel_path, attrs in (subgroup_attrs or {}).items():
+        subgroup = zarr.open_group(str(root / rel_path), mode="w")
+        if attrs:
+            subgroup.attrs.update(json.loads(json.dumps(attrs)))
+
+
+def _run_py_csv_to_zarr(
+    csv_path: Path,
+    csv_id: str,
+    csv_keys: str,
+    zarr_path: Path,
+    zarr_id: str,
+):
+    try:
+        _py_csv.csv_to_zarr(str(csv_path), csv_id, csv_keys, str(zarr_path), zarr_id)
+        return ok(tree=snapshot_json_tree(zarr_path))
+    except Exception as exc:  # noqa: BLE001
+        return err(exc, tree=snapshot_json_tree(zarr_path))
 
 
 def _run_finder(
@@ -975,3 +1011,124 @@ def test_native_cli_view_serves_validator_target_and_records_browser_url(
     stdout, stderr = process.communicate()
     assert stdout == ""
     assert stderr == ""
+
+
+def test_native_cli_csv_to_labels_matches_upstream_for_image_root(tmp_path) -> None:
+    py_root = tmp_path / "py-case" / "image.zarr"
+    cpp_root = tmp_path / "cpp-case" / "image.zarr"
+    py_csv = py_root.parent / "props.csv"
+    cpp_csv = cpp_root.parent / "props.csv"
+
+    root_attrs = {"multiscales": [{"version": "0.4"}]}
+    subgroup_attrs = {
+        "labels/0": {
+            "image-label": {
+                "properties": [
+                    {"cell_id": 1, "name": "before"},
+                    {"cell_id": "2"},
+                ]
+            }
+        }
+    }
+
+    _build_csv_labels_tree(py_root, root_attrs, subgroup_attrs)
+    _build_csv_labels_tree(cpp_root, root_attrs, subgroup_attrs)
+    _write_csv_rows(py_csv, [["cell_id", "score", "alive"], ["1", "4.5", "1"]])
+    _write_csv_rows(cpp_csv, [["cell_id", "score", "alive"], ["1", "4.5", "1"]])
+
+    expected = _run_py_csv_to_zarr(
+        py_csv, "cell_id", "score#d,alive#b", py_root, "cell_id"
+    )
+    actual = _run_native_cli(
+        [
+            "csv_to_labels",
+            str(cpp_csv),
+            "cell_id",
+            "score#d,alive#b",
+            str(cpp_root),
+            "cell_id",
+        ]
+    )
+
+    assert expected.status == actual.status == "ok"
+    assert actual.payload["stderr"] == ""
+    assert actual.stdout == f"csv_to_labels {cpp_csv} {cpp_root}\n"
+    assert expected.tree == snapshot_json_tree(cpp_root)
+
+
+def test_native_cli_csv_to_labels_matches_upstream_for_plate_missing_label_group(
+    tmp_path,
+) -> None:
+    py_root = tmp_path / "py-case" / "plate.zarr"
+    cpp_root = tmp_path / "cpp-case" / "plate.zarr"
+    py_csv = py_root.parent / "props.csv"
+    cpp_csv = cpp_root.parent / "props.csv"
+
+    root_attrs = {"plate": {"wells": [{"path": "A/1"}, {"path": "B/2"}]}}
+    subgroup_attrs = {
+        "A/1/0/labels/0": {
+            "image-label": {"properties": [{"well_id": "A1", "seed": 1}]}
+        }
+    }
+
+    _build_csv_labels_tree(py_root, root_attrs, subgroup_attrs)
+    _build_csv_labels_tree(cpp_root, root_attrs, subgroup_attrs)
+    _write_csv_rows(py_csv, [["well_id", "gene"], ["A1", "TP53"]])
+    _write_csv_rows(cpp_csv, [["well_id", "gene"], ["A1", "TP53"]])
+
+    expected = _run_py_csv_to_zarr(py_csv, "well_id", "gene", py_root, "well_id")
+    actual = _run_native_cli(
+        [
+            "csv_to_labels",
+            str(cpp_csv),
+            "well_id",
+            "gene",
+            str(cpp_root),
+            "well_id",
+        ]
+    )
+
+    assert expected.status == actual.status == "ok"
+    assert actual.payload["stderr"] == ""
+    assert actual.stdout == f"csv_to_labels {cpp_csv} {cpp_root}\n"
+    assert expected.tree == snapshot_json_tree(cpp_root)
+
+
+def test_native_cli_csv_to_labels_missing_csv_id_message_matches_upstream(
+    tmp_path,
+) -> None:
+    py_root = tmp_path / "py-case" / "image.zarr"
+    cpp_root = tmp_path / "cpp-case" / "image.zarr"
+    py_csv = py_root.parent / "props.csv"
+    cpp_csv = cpp_root.parent / "props.csv"
+
+    _build_csv_labels_tree(
+        py_root,
+        {"multiscales": [{"version": "0.4"}]},
+        {"labels/0": {"image-label": {"properties": [{"cell_id": 1}]}}},
+    )
+    _build_csv_labels_tree(
+        cpp_root,
+        {"multiscales": [{"version": "0.4"}]},
+        {"labels/0": {"image-label": {"properties": [{"cell_id": 1}]}}},
+    )
+    _write_csv_rows(py_csv, [["wrong_id", "score"], ["1", "4.5"]])
+    _write_csv_rows(cpp_csv, [["wrong_id", "score"], ["1", "4.5"]])
+
+    expected = _run_py_csv_to_zarr(py_csv, "cell_id", "score#d", py_root, "cell_id")
+    actual = _run_native_cli(
+        [
+            "csv_to_labels",
+            str(cpp_csv),
+            "cell_id",
+            "score#d",
+            str(cpp_root),
+            "cell_id",
+        ]
+    )
+
+    assert expected.status == "err"
+    assert actual.status == "err"
+    assert actual.stdout == f"csv_to_labels {cpp_csv} {cpp_root}\n"
+    assert actual.payload["stderr"].strip() == expected.error_message
+    assert expected.tree == snapshot_json_tree(cpp_root)

@@ -33,6 +33,7 @@
 #include "../../third_party/cpp-httplib/httplib.h"
 #include "../../third_party/nlohmann/json.hpp"
 #include "../../third_party/tinyxml2/tinyxml2.h"
+#include "csv.hpp"
 #include "io.hpp"
 
 namespace ome_zarr_c::native_code {
@@ -107,6 +108,177 @@ json load_json_or_empty(const fs::path& path) {
         return json::object();
     }
     return load_json_file(metadata_path.value());
+}
+
+struct GroupAttrsState {
+    fs::path metadata_path;
+    bool uses_zarr_json = false;
+    json payload = json::object();
+    json attrs = json::object();
+};
+
+GroupAttrsState load_group_attrs_state(
+    const fs::path& path,
+    const bool create_if_missing) {
+    const auto metadata_path = metadata_json_path(path);
+    if (metadata_path.has_value()) {
+        GroupAttrsState state{};
+        state.metadata_path = metadata_path.value();
+        state.uses_zarr_json = state.metadata_path.filename() == "zarr.json";
+        state.payload = load_json_file(state.metadata_path);
+        if (state.uses_zarr_json) {
+            if (state.payload.contains("attributes") &&
+                state.payload["attributes"].is_object()) {
+                state.attrs = state.payload["attributes"];
+            } else {
+                state.attrs = json::object();
+            }
+        } else {
+            state.attrs = state.payload;
+        }
+        return state;
+    }
+
+    if (!create_if_missing) {
+        return {};
+    }
+
+    fs::create_directories(path);
+    GroupAttrsState state{};
+    state.metadata_path = path / "zarr.json";
+    state.uses_zarr_json = true;
+    state.payload = json{
+        {"attributes", json::object()},
+        {"zarr_format", 3},
+        {"node_type", "group"},
+    };
+    state.attrs = json::object();
+    return state;
+}
+
+void persist_group_attrs_state(GroupAttrsState& state) {
+    if (state.metadata_path.empty()) {
+        throw std::runtime_error("Group metadata path is not initialized");
+    }
+    if (state.uses_zarr_json) {
+        state.payload["attributes"] = state.attrs;
+    } else {
+        state.payload = state.attrs;
+    }
+    write_json_file(state.metadata_path, state.payload);
+}
+
+std::vector<std::vector<std::string>> read_csv_rows_native(const fs::path& path) {
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        throw std::runtime_error("Unable to open CSV file: " + path.string());
+    }
+
+    const std::string content{
+        std::istreambuf_iterator<char>(stream),
+        std::istreambuf_iterator<char>()};
+
+    std::vector<std::vector<std::string>> rows;
+    std::vector<std::string> row;
+    std::string field;
+    bool in_quotes = false;
+    bool field_touched = false;
+
+    const auto flush_row = [&]() {
+        if (row.empty() && field.empty() && !field_touched) {
+            rows.emplace_back();
+        } else {
+            row.push_back(field);
+            rows.push_back(std::move(row));
+        }
+        row = {};
+        field.clear();
+        field_touched = false;
+    };
+
+    for (std::size_t index = 0; index < content.size(); ++index) {
+        const char ch = content[index];
+        if (ch == '"') {
+            field_touched = true;
+            if (in_quotes && index + 1 < content.size() && content[index + 1] == '"') {
+                field.push_back('"');
+                index += 1;
+            } else {
+                in_quotes = !in_quotes;
+            }
+            continue;
+        }
+        if (!in_quotes && ch == ',') {
+            row.push_back(field);
+            field.clear();
+            field_touched = false;
+            continue;
+        }
+        if (!in_quotes && (ch == '\n' || ch == '\r')) {
+            flush_row();
+            if (ch == '\r' && index + 1 < content.size() && content[index + 1] == '\n') {
+                index += 1;
+            }
+            continue;
+        }
+        field_touched = true;
+        field.push_back(ch);
+    }
+
+    if (!content.empty() &&
+        (content.back() == '\n' || content.back() == '\r')) {
+        return rows;
+    }
+    if (!row.empty() || !field.empty() || field_touched) {
+        row.push_back(field);
+        rows.push_back(std::move(row));
+    }
+
+    return rows;
+}
+
+json csv_value_to_json(const CsvValue& value) {
+    if (const auto* text = std::get_if<std::string>(&value)) {
+        return *text;
+    }
+    if (const auto* number = std::get_if<double>(&value)) {
+        return *number;
+    }
+    if (const auto* integer = std::get_if<std::int64_t>(&value)) {
+        return *integer;
+    }
+    return std::get<bool>(value);
+}
+
+std::string python_like_string(const json& value) {
+    if (value.is_null()) {
+        return "None";
+    }
+    if (value.is_string()) {
+        return value.get<std::string>();
+    }
+    if (value.is_boolean()) {
+        return value.get<bool>() ? "True" : "False";
+    }
+    if (value.is_number_integer()) {
+        return std::to_string(value.get<std::int64_t>());
+    }
+    if (value.is_number_unsigned()) {
+        return std::to_string(value.get<std::uint64_t>());
+    }
+    if (value.is_number_float()) {
+        const double number = value.get<double>();
+        if (std::isnan(number)) {
+            return "nan";
+        }
+        if (std::isinf(number)) {
+            return number > 0.0 ? "inf" : "-inf";
+        }
+        std::ostringstream output;
+        output << number;
+        return output.str();
+    }
+    return value.dump();
 }
 
 std::optional<fs::path> array_metadata_path(const fs::path& path) {
@@ -1503,6 +1675,100 @@ LocalDownloadResult local_download_copy(
         generic_path_string(destination_root),
         {source.filename().generic_string()},
     };
+}
+
+LocalCsvToLabelsResult local_csv_to_labels(
+    const std::string& csv_path,
+    const std::string& csv_id,
+    const std::string& csv_keys,
+    const std::string& zarr_path,
+    const std::string& zarr_id) {
+    const auto rows = read_csv_rows_native(csv_path);
+    const auto specs = parse_csv_key_specs(csv_keys);
+
+    CsvPropsById props_by_id;
+    try {
+        props_by_id = csv_props_by_id(rows, csv_id, specs);
+    } catch (const std::invalid_argument&) {
+        std::ostringstream header_repr;
+        header_repr << "[";
+        if (!rows.empty()) {
+            const auto& header = rows.front();
+            for (std::size_t index = 0; index < header.size(); ++index) {
+                if (index > 0) {
+                    header_repr << ", ";
+                }
+                header_repr << "'" << header[index] << "'";
+            }
+        }
+        header_repr << "]";
+        throw std::invalid_argument(
+            "csv_id '" + csv_id + "' should match acsv column name: " +
+            header_repr.str());
+    }
+
+    auto root_state = load_group_attrs_state(fs::path(zarr_path), true);
+    const json root_attrs =
+        root_state.attrs.is_object() ? root_state.attrs : json::object();
+    const bool has_plate =
+        root_attrs.contains("plate") && root_attrs["plate"].is_object();
+    const bool has_multiscales = root_attrs.contains("multiscales");
+
+    std::vector<std::string> well_paths;
+    if (has_plate) {
+        const auto wells_iter = root_attrs["plate"].find("wells");
+        if (wells_iter != root_attrs["plate"].end() && wells_iter->is_array()) {
+            for (const auto& well : *wells_iter) {
+                if (well.is_object() && well.contains("path") && well["path"].is_string()) {
+                    well_paths.push_back(well["path"].get<std::string>());
+                }
+            }
+        }
+    }
+
+    const auto label_paths = csv_label_paths(
+        has_plate,
+        has_multiscales,
+        zarr_path,
+        well_paths);
+
+    LocalCsvToLabelsResult result{};
+    for (const auto& label_path : label_paths) {
+        auto label_state = load_group_attrs_state(fs::path(label_path), true);
+        json& attrs = label_state.attrs;
+        if (!attrs.is_object() || !attrs.contains("image-label") ||
+            !attrs["image-label"].is_object() ||
+            !attrs["image-label"].contains("properties") ||
+            !attrs["image-label"]["properties"].is_array()) {
+            persist_group_attrs_state(label_state);
+            continue;
+        }
+
+        bool changed = false;
+        for (auto& props_dict : attrs["image-label"]["properties"]) {
+            if (!props_dict.is_object()) {
+                continue;
+            }
+            const auto props_id = python_like_string(
+                props_dict.contains(zarr_id) ? props_dict[zarr_id] : json(nullptr));
+            const auto match = props_by_id.find(props_id);
+            if (match == props_by_id.end()) {
+                continue;
+            }
+            for (const auto& [key, value] : match->second) {
+                props_dict[key] = csv_value_to_json(value);
+            }
+            result.updated_properties += 1U;
+            changed = true;
+        }
+        persist_group_attrs_state(label_state);
+        result.touched_label_groups += 1U;
+        if (!changed) {
+            continue;
+        }
+    }
+
+    return result;
 }
 
 }  // namespace ome_zarr_c::native_code
