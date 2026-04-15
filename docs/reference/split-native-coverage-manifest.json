@@ -67,9 +67,9 @@
     {"upstream_file": "scale.py", "qualname": "Scaler.zoom", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
     {"upstream_file": "scale.py", "qualname": "_build_pyramid", "binding_files": ["cpp/bindings/scale_bindings.cpp"], "native_files": ["cpp/native/scale.cpp"]},
 
-    {"upstream_file": "utils.py", "qualname": "find_multiscales", "binding_files": ["cpp/bindings/utils_bindings.cpp"], "native_files": ["cpp/native/utils.cpp"]},
-    {"upstream_file": "utils.py", "qualname": "splitall", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/utils.cpp"]},
-    {"upstream_file": "utils.py", "qualname": "strip_common_prefix", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/utils.cpp"]},
+    {"upstream_file": "utils.py", "qualname": "find_multiscales", "binding_files": [], "native_files": ["cpp/native/local_runtime.cpp", "cpp/native/utils.cpp", "cpp/tools/native_cli.cpp", "cpp/tools/native_oracle_probe.cpp"]},
+    {"upstream_file": "utils.py", "qualname": "splitall", "binding_files": [], "native_files": ["cpp/native/utils.cpp", "cpp/tools/native_oracle_probe.cpp"]},
+    {"upstream_file": "utils.py", "qualname": "strip_common_prefix", "binding_files": [], "native_files": ["cpp/native/utils.cpp", "cpp/tools/native_oracle_probe.cpp"]},
 
     {"upstream_file": "writer.py", "qualname": "_get_valid_axes", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},
     {"upstream_file": "writer.py", "qualname": "_extract_dims_from_axes", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/writer.cpp"]},

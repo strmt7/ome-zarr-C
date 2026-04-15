@@ -1454,7 +1454,18 @@ LocalFindMultiscalesResult local_find_multiscales(const std::string& input_path)
     if (zattrs.contains("bioformats2raw.layout") &&
         zattrs["bioformats2raw.layout"].is_number_integer() &&
         zattrs["bioformats2raw.layout"].get<std::int64_t>() == 3) {
-        result.images = bioformats_images(path_to_zattrs);
+        const fs::path xml_path = path_to_zattrs / "OME" / "METADATA.ome.xml";
+        if (!fs::exists(xml_path)) {
+            result.printed_messages.push_back(
+                "[Errno 2] No such file or directory: '" +
+                generic_path_string(xml_path) + "'");
+            return result;
+        }
+        try {
+            result.images = bioformats_images(path_to_zattrs);
+        } catch (const std::exception& exc) {
+            result.printed_messages.push_back(exc.what());
+        }
         return result;
     }
 

@@ -66,7 +66,6 @@ _cpp_dask_utils = importlib.import_module("ome_zarr_c.dask_utils")
 _cpp_format = importlib.import_module("ome_zarr_c.format")
 _cpp_io = importlib.import_module("ome_zarr_c.io")
 _cpp_scale = importlib.import_module("ome_zarr_c.scale")
-_cpp_utils = importlib.import_module("ome_zarr_c.utils")
 _cpp_writer = importlib.import_module("ome_zarr_c.writer")
 
 

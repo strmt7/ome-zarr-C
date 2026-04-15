@@ -10,7 +10,6 @@ void register_format_bindings(py::module_& m);
 void register_io_bindings(py::module_& m);
 void register_reader_bindings(py::module_& m);
 void register_scale_bindings(py::module_& m);
-void register_utils_bindings(py::module_& m);
 void register_writer_bindings(py::module_& m);
 
 PYBIND11_MODULE(_core, m) {
@@ -22,6 +21,5 @@ PYBIND11_MODULE(_core, m) {
     register_io_bindings(m);
     register_reader_bindings(m);
     register_scale_bindings(m);
-    register_utils_bindings(m);
     register_writer_bindings(m);
 }

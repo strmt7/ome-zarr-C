@@ -33,7 +33,6 @@ from .reader import (
     Spec,
     Well,
 )
-from .utils import find_multiscales, splitall, strip_common_prefix
 
 __all__ = [
     "Axes",
@@ -61,7 +60,6 @@ __all__ = [
     "coins",
     "detect_format",
     "dict_to_zarr",
-    "find_multiscales",
     "format_from_version",
     "format_implementations",
     "int_to_rgba",
@@ -71,7 +69,5 @@ __all__ = [
     "parse_url",
     "rgba_to_int",
     "rgb_to_5d",
-    "splitall",
-    "strip_common_prefix",
     "ZarrLocation",
 ]

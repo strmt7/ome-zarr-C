@@ -68,7 +68,7 @@ def _bench_examples_image_surface(io_module, utils_module, reader_module) -> flo
     path = ensure_fixture("examples_image")
     info_value = (
         _python_info_stdout(path)
-        if utils_module is utils_eq._py_utils
+        if utils_module == "python"
         else _native_info_stdout(path)
     )
     return core_cases._touch(
@@ -101,7 +101,7 @@ def _bench_examples_plate_surface(io_module, utils_module, reader_module) -> flo
     path = ensure_fixture("examples_plate")
     info_value = (
         _python_info_stdout(path)
-        if utils_module is utils_eq._py_utils
+        if utils_module == "python"
         else _native_info_stdout(path)
     )
     return core_cases._touch(
@@ -134,7 +134,7 @@ def _bench_bia_tonsil3_surface(io_module, utils_module, reader_module) -> float:
     path = ensure_fixture("bia_tonsil3")
     info_value = (
         _python_info_stdout(path)
-        if utils_module is utils_eq._py_utils
+        if utils_module == "python"
         else _native_info_stdout(path)
     )
     return core_cases._touch(
@@ -167,7 +167,7 @@ def _bench_bia_156_42_surface(io_module, utils_module, reader_module) -> float:
     path = ensure_fixture("bia_156_42")
     info_value = (
         _python_info_stdout(path)
-        if utils_module is utils_eq._py_utils
+        if utils_module == "python"
         else _native_info_stdout(path)
     )
     return core_cases._touch(
@@ -186,10 +186,10 @@ REALDATA_CASES = [
         "Real-data parse_url/info/reader benchmark on a small example OME-Zarr image.",
         _verify_examples_image_surface,
         lambda: _bench_examples_image_surface(
-            io_eq._py_io, utils_eq._py_utils, reader_eq._py_reader
+            io_eq._py_io, "python", reader_eq._py_reader
         ),
         lambda: _bench_examples_image_surface(
-            io_eq._cpp_io, utils_eq._cpp_utils, reader_eq._cpp_reader
+            io_eq._cpp_io, "native", reader_eq._cpp_reader
         ),
     ),
     core_cases._make_case(
@@ -198,10 +198,10 @@ REALDATA_CASES = [
         "Real-data parse_url/info/reader benchmark on a small example OME-Zarr plate.",
         _verify_examples_plate_surface,
         lambda: _bench_examples_plate_surface(
-            io_eq._py_io, utils_eq._py_utils, reader_eq._py_reader
+            io_eq._py_io, "python", reader_eq._py_reader
         ),
         lambda: _bench_examples_plate_surface(
-            io_eq._cpp_io, utils_eq._cpp_utils, reader_eq._cpp_reader
+            io_eq._cpp_io, "native", reader_eq._cpp_reader
         ),
     ),
     core_cases._make_case(
@@ -213,10 +213,10 @@ REALDATA_CASES = [
         ),
         _verify_bia_tonsil3_surface,
         lambda: _bench_bia_tonsil3_surface(
-            io_eq._py_io, utils_eq._py_utils, reader_eq._py_reader
+            io_eq._py_io, "python", reader_eq._py_reader
         ),
         lambda: _bench_bia_tonsil3_surface(
-            io_eq._cpp_io, utils_eq._cpp_utils, reader_eq._cpp_reader
+            io_eq._cpp_io, "native", reader_eq._cpp_reader
         ),
     ),
 ]
@@ -232,10 +232,10 @@ if _include_large_fixture():
             ),
             _verify_bia_156_42_surface,
             lambda: _bench_bia_156_42_surface(
-                io_eq._py_io, utils_eq._py_utils, reader_eq._py_reader
+                io_eq._py_io, "python", reader_eq._py_reader
             ),
             lambda: _bench_bia_156_42_surface(
-                io_eq._cpp_io, utils_eq._cpp_utils, reader_eq._cpp_reader
+                io_eq._cpp_io, "native", reader_eq._cpp_reader
             ),
         )
     )

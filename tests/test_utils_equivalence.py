@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import http.client
 import importlib
 import io
@@ -37,7 +38,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_utils = importlib.import_module("ome_zarr.utils")
-_cpp_utils = importlib.import_module("ome_zarr_c.utils")
 _py_csv = importlib.import_module("ome_zarr.csv")
 
 
@@ -104,6 +104,50 @@ def _run_native_cli(args: list[str]):
         RuntimeError(completed.stderr.strip() or completed.stdout.strip()),
         stdout=completed.stdout,
         payload=payload,
+    )
+
+
+@lru_cache(maxsize=1)
+def _native_probe_path() -> Path:
+    probe_path = _native_cli_path().with_name("ome_zarr_native_probe")
+    if not probe_path.exists():
+        probe_path = probe_path.with_suffix(".exe")
+    assert probe_path.exists(), "standalone native probe binary was not built"
+    return probe_path
+
+
+def _run_native_probe(args: list[str]):
+    completed = subprocess.run(
+        [str(_native_probe_path()), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return err(
+            RuntimeError(completed.stderr.strip() or completed.stdout.strip()),
+            stdout=completed.stdout,
+            payload={"returncode": completed.returncode, "stderr": completed.stderr},
+        )
+
+    payload = json.loads(completed.stdout)
+    raw_records = payload.get("records")
+    records = None if raw_records is None else [tuple(record) for record in raw_records]
+    stdout_text = payload.get("stdout", "")
+    if payload.get("status") == "ok":
+        return ok(
+            value=payload.get("value"),
+            payload=payload.get("payload"),
+            stdout=stdout_text,
+            records=records,
+        )
+
+    error_type_name = payload.get("error_type", "Exception")
+    error_type = getattr(builtins, error_type_name, Exception)
+    return err(
+        error_type(payload.get("error_message", "")),
+        stdout=stdout_text,
+        records=records,
     )
 
 
@@ -207,6 +251,49 @@ def _run_find_multiscales(func, path):
         logger.removeHandler(handler)
         logger.setLevel(previous_level)
         logger.propagate = previous_propagate
+
+
+def _run_native_strip_common_prefix(parts):
+    payload = json.dumps([list(path) for path in parts])
+    result = _run_native_probe(["strip-common-prefix", "--parts-json", payload])
+    if result.status == "ok":
+        return ok(value=result.value, payload=result.payload)
+    return err(
+        result.error_type(result.error_message),
+        payload=[list(path) for path in parts],
+    )
+
+
+def _run_native_splitall(path):
+    return _run_native_probe(["splitall", "--path", os.fspath(path)])
+
+
+def _normalize_find_multiscales_rows(rows):
+    normalized = []
+    for row in rows:
+        normalized.append([os.fspath(row[0]), str(row[1]), str(row[2])])
+    return normalized
+
+
+def _normalize_outcome_records(records):
+    if records is None:
+        return None
+    return [(int(level), str(message)) for level, message in records]
+
+
+def _run_native_find_multiscales(path):
+    outcome = _run_native_probe(["find-multiscales", "--path", os.fspath(path)])
+    if outcome.status == "ok":
+        return ok(
+            value=_normalize_find_multiscales_rows(outcome.value),
+            stdout=outcome.stdout,
+            records=_normalize_outcome_records(outcome.records),
+        )
+    return err(
+        outcome.error_type(outcome.error_message),
+        stdout=outcome.stdout,
+        records=_normalize_outcome_records(outcome.records),
+    )
 
 
 def _snapshot_tree(root: Path):
@@ -485,19 +572,35 @@ def _run_view(
 
 def _assert_strip_case(parts) -> None:
     expected = _run_strip_common_prefix(_py_utils.strip_common_prefix, parts)
-    actual = _run_strip_common_prefix(_cpp_utils.strip_common_prefix, parts)
+    actual = _run_native_strip_common_prefix(parts)
     assert expected == actual
 
 
 def _assert_splitall_case(path) -> None:
-    expected = _run_splitall(_py_utils.splitall, path)
-    actual = _run_splitall(_cpp_utils.splitall, path)
+    expected = _run_splitall(_py_utils.splitall, os.fspath(path))
+    actual = _run_native_splitall(path)
     assert expected == actual
 
 
 def _assert_find_multiscales_case(path) -> None:
-    expected = _run_find_multiscales(_py_utils.find_multiscales, path)
-    actual = _run_find_multiscales(_cpp_utils.find_multiscales, path)
+    oracle_path = Path(path) if isinstance(path, str) else path
+    expected = _run_find_multiscales(_py_utils.find_multiscales, oracle_path)
+    expected = (
+        ok(
+            value=_normalize_find_multiscales_rows(expected.value)
+            if expected.status == "ok"
+            else expected.value,
+            stdout=expected.stdout,
+            records=_normalize_outcome_records(expected.records),
+        )
+        if expected.status == "ok"
+        else err(
+            expected.error_type(expected.error_message),
+            stdout=expected.stdout,
+            records=_normalize_outcome_records(expected.records),
+        )
+    )
+    actual = _run_native_find_multiscales(path)
     assert expected == actual
 
 

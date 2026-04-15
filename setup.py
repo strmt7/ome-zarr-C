@@ -50,7 +50,6 @@ ext_modules = [
             "cpp/bindings/module.cpp",
             "cpp/bindings/reader_bindings.cpp",
             "cpp/bindings/scale_bindings.cpp",
-            "cpp/bindings/utils_bindings.cpp",
             "cpp/bindings/writer_bindings.cpp",
             "cpp/native/axes.cpp",
             "cpp/native/cli.cpp",

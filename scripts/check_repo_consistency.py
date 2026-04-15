@@ -22,6 +22,7 @@ STALE_NATIVE_CLI_PATTERN = re.compile(
 )
 REMOVED_RUNTIME_PATTERN = re.compile(
     r"\b(?:ome_zarr_c\.cli|cpp/bindings/cli_bindings\.cpp|"
+    r"ome_zarr_c\.utils|cpp/bindings/utils_bindings\.cpp|"
     r"tests/test_scaler_runtime_equivalence\.py|"
     r"tests/test_utils_download_runtime\.py|"
     r"tests/test_utils_info_equivalence\.py)\b"

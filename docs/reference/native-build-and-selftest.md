@@ -9,6 +9,7 @@ This path exercises `cpp/native/` directly:
 
 - native static library: `ome_zarr_native`
 - native CLI executable: `ome_zarr_native_cli`
+- native oracle probe executable: `ome_zarr_native_probe`
 - native self-test executable: `ome_zarr_native_selftest`
 - native benchmark executables:
   - `ome_zarr_native_bench_format`
@@ -57,6 +58,7 @@ Run the standalone native self-test directly:
 ```bash
 ./build-cpp/ome_zarr_native_selftest
 ./build-cpp/ome_zarr_native_cli --help
+./build-cpp/ome_zarr_native_probe --help
 ```
 
 Or through CTest:
@@ -114,12 +116,10 @@ Current scope:
 - `view`: standalone local validator-serving runtime with real browser launch and CORS-enabled HTTP serving
 - `csv_to_labels`: standalone local CSV-to-label-properties mutation for image and plate roots
 
-This still does not replace the full historical Python CLI. The native product
-path is being expanded command by command, and every new standalone command
-must be parity-checked against the frozen Python oracle before it is treated as
-acceptable.
-
-The largest remaining standalone-native runtime gap is `scale`.
+This still does not replace the full historical Python package/library surface.
+The native runtime path is already expanded command by command, and every
+standalone command must be parity-checked against the frozen Python oracle
+before it is treated as acceptable.
 
 The native benchmark layer measures pure C++ semantic cost. Use the Python
 benchmark suite separately when you need end-to-end parity-harness timing or

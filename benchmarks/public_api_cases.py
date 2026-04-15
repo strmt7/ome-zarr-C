@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import io
+import json
 import math
 import os
 import random
@@ -105,6 +106,53 @@ def _run_native_cli(args: list[str], replacements: dict[str, str] | None = None)
     return err(RuntimeError(outcome.error_message), stdout=outcome.stdout)
 
 
+def _native_bench_timer(
+    *,
+    case_id: str,
+    verify,
+    native_match: str,
+):
+    def timer(loops: int) -> float:
+        core_cases._verify_once(case_id, verify)
+        bench_path = utils_eq._native_cli_path().with_name("ome_zarr_native_bench_core")
+        if not bench_path.exists():
+            bench_path = bench_path.with_suffix(".exe")
+        if not bench_path.exists():
+            raise AssertionError("standalone native benchmark binary was not built")
+
+        with tempfile.TemporaryDirectory(prefix="ome-zarr-c-native-bench-") as temp_dir:
+            json_path = Path(temp_dir) / "native.json"
+            completed = subprocess.run(
+                [
+                    str(bench_path),
+                    "--match",
+                    native_match,
+                    "--rounds",
+                    "1",
+                    "--iterations",
+                    str(max(1, loops)),
+                    "--json-output",
+                    str(json_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            del completed
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+
+        results = payload["results"]
+        if len(results) != 1:
+            raise AssertionError(
+                "Expected one native benchmark result for "
+                f"{native_match!r}, got {results!r}"
+            )
+        item = results[0]
+        return float(item["median_us_per_op"]) * float(item["iterations"]) / 1_000_000.0
+
+    return timer
+
+
 def _run_utils_download(func, source: Path, output_dir: Path):
     stream = io.StringIO()
     with warnings.catch_warnings(record=True) as caught:
@@ -142,7 +190,12 @@ def _run_python_view(path: Path, *, port: int, force: bool):
     )
     if outcome.status != "ok":
         return outcome
-    return ok(url=outcome.browser_calls[0], body=(path / ".zattrs").read_bytes())
+    return ok(
+        value={
+            "url": outcome.browser_calls[0],
+            "body": (path / ".zattrs").read_bytes(),
+        }
+    )
 
 
 def _run_native_view(path: Path, *, port: int, force: bool):
@@ -166,9 +219,9 @@ def _run_native_view(path: Path, *, port: int, force: bool):
             return err(
                 RuntimeError(stderr.strip() or stdout.strip()),
                 stdout=stdout,
-                stderr=stderr,
+                payload={"stderr": stderr},
             )
-        return ok(url=browser_log.read_text(), body=body)
+        return ok(value={"url": browser_log.read_text(), "body": body})
     except Exception as exc:  # noqa: BLE001
         return err(exc)
     finally:
@@ -1329,19 +1382,14 @@ def _verify_utils_path_helpers() -> None:
     }
     right = {
         "strip": [
-            utils_eq._run_strip_common_prefix(
-                utils_eq._cpp_utils.strip_common_prefix, parts
-            )
-            for parts in parts_cases
+            utils_eq._run_native_strip_common_prefix(parts) for parts in parts_cases
         ],
-        "splitall": [
-            utils_eq._run_splitall(utils_eq._cpp_utils.splitall, path) for path in paths
-        ],
+        "splitall": [utils_eq._run_native_splitall(path) for path in paths],
     }
     _assert_equal("utils.path_helpers", left, right)
 
 
-def _bench_utils_path_helpers(module) -> float:
+def _bench_utils_path_helpers_python() -> float:
     total = 0.0
     for parts in (
         [["root", "a", "b"], ["root", "a", "c"]],
@@ -1349,10 +1397,14 @@ def _bench_utils_path_helpers(module) -> float:
         [[], []],
     ):
         total += _touch_outcome(
-            utils_eq._run_strip_common_prefix(module.strip_common_prefix, parts)
+            utils_eq._run_strip_common_prefix(
+                utils_eq._py_utils.strip_common_prefix, parts
+            )
         )
     for path in ("alpha/beta/gamma", "/tmp/demo/image.zarr", "C:/data/demo.zarr"):
-        total += _touch_outcome(utils_eq._run_splitall(module.splitall, path))
+        total += _touch_outcome(
+            utils_eq._run_splitall(utils_eq._py_utils.splitall, path)
+        )
     return total
 
 
@@ -1362,15 +1414,15 @@ def _verify_utils_find_multiscales() -> None:
         utils_eq._run_find_multiscales(
             utils_eq._py_utils.find_multiscales, "/tmp/demo/image.zarr"
         ),
-        utils_eq._run_find_multiscales(
-            utils_eq._cpp_utils.find_multiscales, "/tmp/demo/image.zarr"
-        ),
+        utils_eq._run_native_find_multiscales("/tmp/demo/image.zarr"),
     )
 
 
-def _bench_utils_find_multiscales(module) -> float:
+def _bench_utils_find_multiscales_python() -> float:
     return _touch_outcome(
-        utils_eq._run_find_multiscales(module.find_multiscales, "/tmp/demo/image.zarr")
+        utils_eq._run_find_multiscales(
+            utils_eq._py_utils.find_multiscales, "/tmp/demo/image.zarr"
+        )
     )
 
 
@@ -1392,8 +1444,8 @@ def _verify_utils_finder_and_view() -> None:
         )
         actual_view = _run_native_view(view_root / "image.zarr", port=8013, force=False)
         assert expected_view.status == actual_view.status == "ok"
-        assert expected_view.url == actual_view.url
-        assert expected_view.body == actual_view.body
+        assert expected_view.value["url"] == actual_view.value["url"]
+        assert expected_view.value["body"] == actual_view.value["body"]
     finally:
         shutil.rmtree(finder_root, ignore_errors=True)
         shutil.rmtree(view_root, ignore_errors=True)
@@ -1439,14 +1491,22 @@ def _verify_utils_download() -> None:
         right = _run_native_cli(["download", str(cpp_source), f"--output={cpp_output}"])
         if left.status != right.status or left.status != "ok":
             _assert_equal("utils.download.status", left, right)
+        left_replacements = {
+            str(py_source): "<SOURCE>",
+            str(py_output): "<OUTPUT>",
+        }
+        right_replacements = {
+            str(cpp_source): "<SOURCE>",
+            str(cpp_output): "<OUTPUT>",
+        }
         if utils_eq._normalize_download_stdout(
-            left.stdout, {}
-        ) != utils_eq._normalize_download_stdout(right.stdout, {}):
+            left.stdout, left_replacements
+        ) != utils_eq._normalize_download_stdout(right.stdout, right_replacements):
             raise AssertionError("Benchmark case utils.download lost parity")
         _assert_equal(
             "utils.download.tree",
             left.tree,
-            snapshot_tree(cpp_output / cpp_source.name),
+            snapshot_tree(cpp_output),
         )
     finally:
         shutil.rmtree(py_source.parent, ignore_errors=True)
@@ -2314,21 +2374,37 @@ PUBLIC_API_CASES = (
         lambda: _bench_writer_labels(writer_rt._py_writer, format_eq._py_format),
         lambda: _bench_writer_labels(writer_rt._cpp_writer, format_eq._cpp_format),
     ),
-    core_cases._make_case(
-        "utils",
-        "path_helpers",
-        "Path splitting and common-prefix stripping helpers.",
-        _verify_utils_path_helpers,
-        lambda: _bench_utils_path_helpers(utils_eq._py_utils),
-        lambda: _bench_utils_path_helpers(utils_eq._cpp_utils),
+    core_cases.BenchmarkCase(
+        group="utils",
+        name="path_helpers",
+        description="Path splitting and common-prefix stripping helpers.",
+        verify=_verify_utils_path_helpers,
+        python_timer=core_cases._make_timer(
+            "utils.path_helpers",
+            _verify_utils_path_helpers,
+            _bench_utils_path_helpers_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            case_id="utils.path_helpers",
+            verify=_verify_utils_path_helpers,
+            native_match="utils.path_helpers",
+        ),
     ),
-    core_cases._make_case(
-        "utils",
-        "find_multiscales",
-        "Multiscale path inference helper.",
-        _verify_utils_find_multiscales,
-        lambda: _bench_utils_find_multiscales(utils_eq._py_utils),
-        lambda: _bench_utils_find_multiscales(utils_eq._cpp_utils),
+    core_cases.BenchmarkCase(
+        group="utils",
+        name="find_multiscales",
+        description="Multiscale path inference helper.",
+        verify=_verify_utils_find_multiscales,
+        python_timer=core_cases._make_timer(
+            "utils.find_multiscales",
+            _verify_utils_find_multiscales,
+            _bench_utils_find_multiscales_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            case_id="utils.find_multiscales",
+            verify=_verify_utils_find_multiscales,
+            native_match="local.find_multiscales",
+        ),
     ),
     core_cases._make_case(
         "utils",

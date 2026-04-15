@@ -481,7 +481,6 @@ Still-slower paths in the same completed snapshot:
 
 - `format.matches`: `0.824x`
 - `format.well_and_coord`: `0.705x`
-- `utils.find_multiscales`: `0.879x`
 - `writer.resolve_storage_options_batch`: `0.901x`
 - `scaler.nearest_rgb`: `0.944x`
 

@@ -91,9 +91,19 @@ add_executable(
 )
 target_link_libraries(ome_zarr_native_cli PRIVATE ome_zarr_native)
 
+add_executable(
+    ome_zarr_native_probe
+    cpp/tools/native_oracle_probe.cpp
+)
+target_link_libraries(ome_zarr_native_probe PRIVATE ome_zarr_native)
+
 if(OME_ZARR_C_NATIVE_BUILD_TESTS)
     add_test(
         NAME ome_zarr_native_cli_help
         COMMAND ome_zarr_native_cli --help
+    )
+    add_test(
+        NAME ome_zarr_native_probe_help
+        COMMAND ome_zarr_native_probe --help
     )
 endif()
