@@ -18,7 +18,9 @@ LocalFindMultiscalesResult local_find_multiscales(const std::string& input_path)
 
 std::vector<UtilsDiscoveredImage> local_walk_ome_zarr(const std::string& input_path);
 
-std::vector<std::string> local_info_lines(const std::string& input_path);
+std::vector<std::string> local_info_lines(
+    const std::string& input_path,
+    bool stats = false);
 
 struct LocalFinderResult {
     bool found_any;

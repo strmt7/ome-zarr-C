@@ -317,12 +317,20 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match utils.view \
   --native-match local.view_prepare \
   --paired-case utils.view=local.view_prepare
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite core \
+  --match info_v3_image_with_stats \
+  --python-match info_v3_image_with_stats \
+  --native-match local.info_stats \
+  --paired-case runtime.utils.info_v3_image_with_stats=local.info_stats
 ```
 
 Current standalone native CLI commands:
 
 ```bash
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
+./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr --stats
 ./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
 ./build-cpp/ome_zarr_native_cli download /tmp/demo/image.zarr --output /tmp/out
 ./build-cpp/ome_zarr_native_cli view /tmp/demo/image.zarr --port 8013

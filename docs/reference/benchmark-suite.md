@@ -274,6 +274,13 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match utils.view \
   --native-match local.view_prepare \
   --paired-case utils.view=local.view_prepare
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite core \
+  --match info_v3_image_with_stats \
+  --python-match info_v3_image_with_stats \
+  --native-match local.info_stats \
+  --paired-case runtime.utils.info_v3_image_with_stats=local.info_stats
 ```
 
 The standalone `view` comparison intentionally uses `local.view_prepare` rather

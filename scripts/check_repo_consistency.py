@@ -79,6 +79,8 @@ def main() -> int:
         issues.append("README.md is missing the native CLI command.")
     if "ome_zarr_native_cli info " not in readme_text:
         issues.append("README.md is missing the native CLI info example.")
+    if "ome_zarr_native_cli info /tmp/demo/image.zarr --stats" not in readme_text:
+        issues.append("README.md is missing the native CLI info --stats example.")
     if "ome_zarr_native_cli finder " not in readme_text:
         issues.append("README.md is missing the native CLI finder example.")
     if "ome_zarr_native_cli download " not in readme_text:
@@ -96,6 +98,13 @@ def main() -> int:
     if "--paired-case utils.view=local.view_prepare" not in readme_text:
         issues.append(
             "README.md is missing the native view iteration benchmark example."
+        )
+    if (
+        "--paired-case runtime.utils.info_v3_image_with_stats=local.info_stats"
+        not in readme_text
+    ):
+        issues.append(
+            "README.md is missing the native info --stats iteration benchmark example."
         )
     if "ome_zarr_native_bench_format" in readme_text and not native_bench.exists():
         issues.append(

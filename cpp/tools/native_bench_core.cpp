@@ -13,6 +13,8 @@
 #include <string_view>
 #include <vector>
 
+#include <zstd.h>
+
 #include "../native/axes.hpp"
 #include "../native/cli.hpp"
 #include "../native/conversions.hpp"
@@ -32,6 +34,22 @@ namespace {
 using namespace ome_zarr_c::native_code;
 using Clock = std::chrono::steady_clock;
 namespace fs = std::filesystem;
+
+std::vector<char> zstd_compress_bytes(const std::vector<char>& payload) {
+    std::vector<char> compressed(ZSTD_compressBound(payload.size()));
+    const auto written = ZSTD_compress(
+        compressed.data(),
+        compressed.size(),
+        payload.data(),
+        payload.size(),
+        0);
+    if (ZSTD_isError(written) != 0U) {
+        throw std::runtime_error(
+            std::string("ZSTD_compress failed: ") + ZSTD_getErrorName(written));
+    }
+    compressed.resize(static_cast<std::size_t>(written));
+    return compressed;
+}
 
 struct CaseResult {
     std::string name;
@@ -194,6 +212,28 @@ const fs::path& bench_runtime_fixture_root() {
         {
             std::ofstream array_json(info_v2 / "0" / "zarr.json");
             array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"fill_value":0,"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
+        }
+
+        const fs::path info_v3 = root_path / "info_v3.zarr";
+        fs::create_directories(info_v3 / "s0" / "c" / "0");
+        {
+            std::ofstream zarr_json(info_v3 / "zarr.json");
+            zarr_json << R"({"attributes":{"ome":{"version":"0.5","multiscales":[{"axes":[{"name":"y","type":"space"},{"name":"x","type":"space"}],"datasets":[{"path":"s0","coordinateTransformations":[{"type":"scale","scale":[1,1]}]}]}]}},"zarr_format":3,"node_type":"group"})";
+        }
+        {
+            std::ofstream array_json(info_v3 / "s0" / "zarr.json");
+            array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},{"name":"zstd","configuration":{"level":0,"checksum":false}}],"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
+        }
+        {
+            const std::vector<char> raw = {
+                5, 0, 0, 0,
+                6, 0, 0, 0,
+                7, 0, 0, 0,
+                8, 0, 0, 0,
+            };
+            const auto compressed = zstd_compress_bytes(raw);
+            std::ofstream chunk(info_v3 / "s0" / "c" / "0" / "0", std::ios::binary);
+            chunk.write(compressed.data(), static_cast<std::streamsize>(compressed.size()));
         }
 
         const fs::path finder_root = root_path / "finder_tree";
@@ -451,6 +491,13 @@ std::uint64_t bench_local_info(std::size_t) {
     return static_cast<std::uint64_t>(lines.size());
 }
 
+std::uint64_t bench_local_info_stats(std::size_t) {
+    const auto lines = local_info_lines(
+        (bench_runtime_fixture_root() / "info_v3.zarr").string(),
+        true);
+    return static_cast<std::uint64_t>(lines.size());
+}
+
 std::uint64_t bench_local_finder(std::size_t) {
     const auto result = local_finder_csv(
         (bench_runtime_fixture_root() / "finder_tree").string(),
@@ -622,6 +669,7 @@ int main(int argc, char** argv) {
             {"local.finder", 1, bench_local_finder},
             {"local.find_multiscales", 1, bench_local_find_multiscales},
             {"local.info", 1, bench_local_info},
+            {"local.info_stats", 1, bench_local_info_stats},
             {"local.view_prepare", 1, bench_local_view_prepare},
             {"reader_plate_levels", 4, bench_reader_plate_levels},
             {"scale_build_pyramid", 8, bench_scale_build_pyramid},

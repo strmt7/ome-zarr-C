@@ -1,21 +1,28 @@
 #include "local_runtime.hpp"
 
 #include <algorithm>
+#include <array>
+#include <bit>
+#include <cmath>
 #include <cstdint>
 #include <chrono>
 #include <ctime>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include <sys/stat.h>
@@ -102,6 +109,26 @@ json load_json_or_empty(const fs::path& path) {
     return load_json_file(metadata_path.value());
 }
 
+std::optional<fs::path> array_metadata_path(const fs::path& path) {
+    const fs::path v3_json = path / "zarr.json";
+    if (fs::exists(v3_json)) {
+        return v3_json;
+    }
+    const fs::path v2_array = path / ".zarray";
+    if (fs::exists(v2_array)) {
+        return v2_array;
+    }
+    return std::nullopt;
+}
+
+json load_array_metadata_or_empty(const fs::path& path) {
+    const auto metadata_path = array_metadata_path(path);
+    if (!metadata_path.has_value()) {
+        return json::object();
+    }
+    return load_json_file(metadata_path.value());
+}
+
 json unwrap_ome_namespace(const json& metadata) {
     if (metadata.is_object() &&
         metadata.contains("attributes") &&
@@ -122,6 +149,228 @@ std::string basename_string(const fs::path& path) {
 
 std::string dirname_string(const fs::path& path) {
     return path.parent_path().generic_string();
+}
+
+enum class NumericKind {
+    signed_integer,
+    unsigned_integer,
+    floating_point,
+    boolean,
+};
+
+struct NumericFormat {
+    NumericKind kind;
+    std::size_t item_size;
+    bool little_endian;
+    std::string numpy_repr_name;
+};
+
+struct StatsStrings {
+    std::string min_repr;
+    std::string max_repr;
+};
+
+bool host_is_little_endian() {
+    return std::endian::native == std::endian::little;
+}
+
+std::vector<std::string> split_string(std::string_view text, const char delimiter) {
+    std::vector<std::string> parts;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const auto next = text.find(delimiter, start);
+        if (next == std::string_view::npos) {
+            parts.emplace_back(text.substr(start));
+            break;
+        }
+        parts.emplace_back(text.substr(start, next - start));
+        start = next + 1;
+    }
+    return parts;
+}
+
+NumericFormat v2_numeric_format(const std::string& dtype) {
+    if (dtype.size() < 3) {
+        throw std::invalid_argument("Unsupported v2 dtype: " + dtype);
+    }
+
+    NumericFormat format{};
+    switch (dtype[0]) {
+        case '<':
+            format.little_endian = true;
+            break;
+        case '>':
+            format.little_endian = false;
+            break;
+        case '|':
+            format.little_endian = host_is_little_endian();
+            break;
+        default:
+            throw std::invalid_argument("Unsupported v2 dtype endianness: " + dtype);
+    }
+
+    switch (dtype[1]) {
+        case 'i':
+            format.kind = NumericKind::signed_integer;
+            break;
+        case 'u':
+            format.kind = NumericKind::unsigned_integer;
+            break;
+        case 'f':
+            format.kind = NumericKind::floating_point;
+            break;
+        case 'b':
+            format.kind = NumericKind::boolean;
+            break;
+        default:
+            throw std::invalid_argument("Unsupported v2 dtype kind: " + dtype);
+    }
+
+    format.item_size = static_cast<std::size_t>(std::stoull(dtype.substr(2)));
+    switch (format.kind) {
+        case NumericKind::signed_integer:
+            format.numpy_repr_name = "int" + std::to_string(format.item_size * 8);
+            break;
+        case NumericKind::unsigned_integer:
+            format.numpy_repr_name = "uint" + std::to_string(format.item_size * 8);
+            break;
+        case NumericKind::floating_point:
+            format.numpy_repr_name = "float" + std::to_string(format.item_size * 8);
+            break;
+        case NumericKind::boolean:
+            format.numpy_repr_name = "bool_";
+            format.item_size = 1;
+            break;
+    }
+    return format;
+}
+
+NumericFormat v3_numeric_format(const json& metadata) {
+    if (!metadata.is_object() || !metadata.contains("data_type") ||
+        !metadata["data_type"].is_string()) {
+        throw std::invalid_argument("Missing v3 data_type metadata");
+    }
+
+    NumericFormat format{};
+    const auto data_type = metadata["data_type"].get<std::string>();
+    if (data_type == "bool") {
+        format.kind = NumericKind::boolean;
+        format.item_size = 1;
+        format.little_endian = host_is_little_endian();
+        format.numpy_repr_name = "bool_";
+        return format;
+    }
+
+    if (data_type.rfind("int", 0) == 0) {
+        format.kind = NumericKind::signed_integer;
+        format.numpy_repr_name = data_type;
+    } else if (data_type.rfind("uint", 0) == 0) {
+        format.kind = NumericKind::unsigned_integer;
+        format.numpy_repr_name = data_type;
+    } else if (data_type.rfind("float", 0) == 0) {
+        format.kind = NumericKind::floating_point;
+        format.numpy_repr_name = data_type;
+    } else {
+        throw std::invalid_argument("Unsupported v3 data_type: " + data_type);
+    }
+
+    const auto bit_count = static_cast<std::size_t>(
+        std::stoull(data_type.substr(data_type.find_first_of("0123456789"))));
+    format.item_size = bit_count / 8;
+    format.little_endian = true;
+
+    if (metadata.contains("codecs") && metadata["codecs"].is_array()) {
+        for (const auto& codec : metadata["codecs"]) {
+            if (!codec.is_object() || !codec.contains("name") ||
+                !codec["name"].is_string() ||
+                codec["name"].get<std::string>() != "bytes") {
+                continue;
+            }
+            if (codec.contains("configuration") &&
+                codec["configuration"].is_object() &&
+                codec["configuration"].contains("endian") &&
+                codec["configuration"]["endian"].is_string()) {
+                const auto endian =
+                    codec["configuration"]["endian"].get<std::string>();
+                if (endian == "little") {
+                    format.little_endian = true;
+                } else if (endian == "big") {
+                    format.little_endian = false;
+                }
+            }
+        }
+    }
+
+    return format;
+}
+
+std::vector<std::int64_t> json_int_vector(const json& values) {
+    std::vector<std::int64_t> result;
+    for (const auto& value : values) {
+        result.push_back(value.get<std::int64_t>());
+    }
+    return result;
+}
+
+std::vector<std::int64_t> dataset_shape_vector(const json& metadata) {
+    if (!metadata.is_object()) {
+        return {};
+    }
+    if (metadata.contains("shape") && metadata["shape"].is_array()) {
+        return json_int_vector(metadata["shape"]);
+    }
+    return {};
+}
+
+std::vector<std::int64_t> dataset_chunk_shape_vector(const json& metadata) {
+    if (!metadata.is_object()) {
+        return {};
+    }
+    if (metadata.contains("chunks") && metadata["chunks"].is_array()) {
+        return json_int_vector(metadata["chunks"]);
+    }
+    if (metadata.contains("chunk_grid") && metadata["chunk_grid"].is_object() &&
+        metadata["chunk_grid"].contains("configuration") &&
+        metadata["chunk_grid"]["configuration"].is_object() &&
+        metadata["chunk_grid"]["configuration"].contains("chunk_shape") &&
+        metadata["chunk_grid"]["configuration"]["chunk_shape"].is_array()) {
+        return json_int_vector(metadata["chunk_grid"]["configuration"]["chunk_shape"]);
+    }
+    return {};
+}
+
+std::vector<std::int64_t> chunk_indices_from_relative(
+    const fs::path& relative,
+    const char separator) {
+    std::vector<std::int64_t> indices;
+    if (separator == '.') {
+        const auto parts = split_string(relative.filename().generic_string(), '.');
+        for (const auto& part : parts) {
+            indices.push_back(std::stoll(part));
+        }
+        return indices;
+    }
+    for (const auto& part : relative) {
+        indices.push_back(std::stoll(part.generic_string()));
+    }
+    return indices;
+}
+
+std::size_t chunk_uncompressed_nbytes(
+    const std::vector<std::int64_t>& shape,
+    const std::vector<std::int64_t>& chunk_shape,
+    const std::vector<std::int64_t>& indices,
+    const std::size_t item_size) {
+    if (shape.size() != chunk_shape.size() || shape.size() != indices.size()) {
+        throw std::invalid_argument("Chunk index rank mismatch");
+    }
+    std::size_t elements = 1;
+    for (std::size_t axis = 0; axis < shape.size(); ++axis) {
+        const auto start = indices[axis] * chunk_shape[axis];
+        const auto extent = std::min<std::int64_t>(chunk_shape[axis], shape[axis] - start);
+        elements *= static_cast<std::size_t>(extent);
+    }
+    return elements * item_size;
 }
 
 bool element_name_is_image(const char* name) {
@@ -185,40 +434,6 @@ std::vector<UtilsDiscoveredImage> bioformats_images(
     return images;
 }
 
-std::vector<std::vector<std::int64_t>> dataset_shapes(const fs::path& root, const json& metadata) {
-    std::vector<std::vector<std::int64_t>> shapes;
-    if (!metadata.is_object() || !metadata.contains("multiscales") ||
-        !metadata["multiscales"].is_array() || metadata["multiscales"].empty()) {
-        return shapes;
-    }
-
-    const auto& first = metadata["multiscales"][0];
-    if (!first.is_object() || !first.contains("datasets") || !first["datasets"].is_array()) {
-        return shapes;
-    }
-
-    for (const auto& dataset : first["datasets"]) {
-        if (!dataset.is_object() || !dataset.contains("path") || !dataset["path"].is_string()) {
-            continue;
-        }
-        const fs::path dataset_path = root / dataset["path"].get<std::string>();
-        const auto array_json = load_json_or_empty(dataset_path);
-        if (!array_json.is_object() || !array_json.contains("shape") || !array_json["shape"].is_array()) {
-            continue;
-        }
-        std::vector<std::int64_t> shape;
-        for (const auto& dim : array_json["shape"]) {
-            if (dim.is_number_integer() || dim.is_number_unsigned()) {
-                shape.push_back(dim.get<std::int64_t>());
-            }
-        }
-        if (!shape.empty()) {
-            shapes.push_back(std::move(shape));
-        }
-    }
-    return shapes;
-}
-
 std::string shape_repr(const std::vector<std::int64_t>& shape) {
     std::ostringstream output;
     output << "(";
@@ -233,6 +448,332 @@ std::string shape_repr(const std::vector<std::int64_t>& shape) {
     }
     output << ")";
     return output.str();
+}
+
+struct LocalArraySummary {
+    std::vector<std::int64_t> shape;
+    std::optional<std::string> minmax_repr;
+};
+
+std::vector<char> read_binary_file(const fs::path& path);
+
+std::vector<char> decode_v2_chunk(
+    const std::vector<char>& source_bytes,
+    const json& source_metadata,
+    const fs::path& relative);
+
+std::vector<char> decode_v3_chunk(
+    const std::vector<char>& source_bytes,
+    const json& source_metadata,
+    const fs::path& relative);
+
+template <typename Value, typename Bits = Value>
+Value decode_scalar(const char* data, const bool little_endian) {
+    std::array<unsigned char, sizeof(Bits)> bytes{};
+    std::memcpy(bytes.data(), data, sizeof(Bits));
+    if (sizeof(Bits) > 1 && little_endian != host_is_little_endian()) {
+        std::reverse(bytes.begin(), bytes.end());
+    }
+    Bits bits{};
+    std::memcpy(&bits, bytes.data(), sizeof(Bits));
+    if constexpr (std::is_same_v<Value, float> || std::is_same_v<Value, double>) {
+        return std::bit_cast<Value>(bits);
+    }
+    return static_cast<Value>(bits);
+}
+
+template <typename Value>
+std::string format_integer_scalar(const std::string& numpy_name, const Value value) {
+    return "np." + numpy_name + "(" + std::to_string(value) + ")";
+}
+
+template <typename Value>
+std::string format_float_scalar(const std::string& numpy_name, const Value value) {
+    if (std::isnan(value)) {
+        return "np." + numpy_name + "(nan)";
+    }
+    if (std::isinf(value)) {
+        return "np." + numpy_name + (value > 0 ? "(inf)" : "(-inf)");
+    }
+    std::ostringstream output;
+    output << "np." << numpy_name << "("
+           << std::setprecision(std::numeric_limits<Value>::max_digits10)
+           << value << ")";
+    return output.str();
+}
+
+template <typename Value>
+StatsStrings scalar_stats_strings(
+    const std::vector<char>& bytes,
+    const NumericFormat& format) {
+    if (bytes.size() < sizeof(Value)) {
+        throw std::invalid_argument("Chunk payload shorter than dtype item size");
+    }
+    const std::size_t item_count = bytes.size() / sizeof(Value);
+    Value min_value = decode_scalar<Value>(
+        bytes.data(),
+        format.little_endian);
+    Value max_value = min_value;
+    bool saw_nan = false;
+    for (std::size_t index = 1; index < item_count; ++index) {
+        const Value value = decode_scalar<Value>(
+            bytes.data() + (index * sizeof(Value)),
+            format.little_endian);
+        if constexpr (std::is_floating_point_v<Value>) {
+            if (std::isnan(value)) {
+                saw_nan = true;
+                break;
+            }
+        }
+        if (value < min_value) {
+            min_value = value;
+        }
+        if (value > max_value) {
+            max_value = value;
+        }
+    }
+    if constexpr (std::is_same_v<Value, float> || std::is_same_v<Value, double>) {
+        if (saw_nan || std::isnan(min_value) || std::isnan(max_value)) {
+            return {
+                "np." + format.numpy_repr_name + "(nan)",
+                "np." + format.numpy_repr_name + "(nan)",
+            };
+        }
+        return {
+            format_float_scalar(format.numpy_repr_name, min_value),
+            format_float_scalar(format.numpy_repr_name, max_value),
+        };
+    }
+    if constexpr (std::is_same_v<Value, bool>) {
+        return {
+            min_value ? "np.True_" : "np.False_",
+            max_value ? "np.True_" : "np.False_",
+        };
+    }
+    return {
+        format_integer_scalar(format.numpy_repr_name, min_value),
+        format_integer_scalar(format.numpy_repr_name, max_value),
+    };
+}
+
+template <typename Value>
+void update_minmax(Value chunk_min, Value chunk_max, bool& has_value, Value& global_min, Value& global_max) {
+    if (!has_value) {
+        global_min = chunk_min;
+        global_max = chunk_max;
+        has_value = true;
+        return;
+    }
+    if (chunk_min < global_min) {
+        global_min = chunk_min;
+    }
+    if (chunk_max > global_max) {
+        global_max = chunk_max;
+    }
+}
+
+template <typename Value, typename Bits = Value>
+std::pair<Value, Value> chunk_minmax_values(
+    const std::vector<char>& bytes,
+    const NumericFormat& format) {
+    if (bytes.size() < sizeof(Value)) {
+        throw std::invalid_argument("Chunk payload shorter than dtype item size");
+    }
+    const std::size_t item_count = bytes.size() / sizeof(Value);
+    Value min_value = decode_scalar<Value, Bits>(bytes.data(), format.little_endian);
+    Value max_value = min_value;
+    for (std::size_t index = 1; index < item_count; ++index) {
+        const Value value = decode_scalar<Value, Bits>(
+            bytes.data() + (index * sizeof(Value)),
+            format.little_endian);
+        if constexpr (std::is_floating_point_v<Value>) {
+            if (std::isnan(value)) {
+                return {value, value};
+            }
+        }
+        if (value < min_value) {
+            min_value = value;
+        }
+        if (value > max_value) {
+            max_value = value;
+        }
+    }
+    return {min_value, max_value};
+}
+
+template <typename Value, typename Bits = Value>
+std::optional<std::string> dataset_minmax_repr_typed(
+    const fs::path& dataset_path,
+    const fs::path& chunk_root,
+    const json& metadata,
+    const NumericFormat& format,
+    const bool is_v3) {
+    Value global_min{};
+    Value global_max{};
+    bool has_value = false;
+    bool saw_nan = false;
+
+    for (const auto& entry : fs::recursive_directory_iterator(chunk_root)) {
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+        const auto filename = entry.path().filename().generic_string();
+        if (chunk_root == dataset_path &&
+            (filename == ".zarray" || filename == ".zattrs" || filename == ".zgroup" ||
+             filename == "zarr.json")) {
+            continue;
+        }
+        const auto relative = fs::relative(entry.path(), chunk_root);
+        const auto decoded = is_v3
+            ? decode_v3_chunk(read_binary_file(entry.path()), metadata, relative)
+            : decode_v2_chunk(read_binary_file(entry.path()), metadata, relative);
+        const auto [chunk_min, chunk_max] =
+            chunk_minmax_values<Value, Bits>(decoded, format);
+        if constexpr (std::is_floating_point_v<Value>) {
+            if (std::isnan(chunk_min) || std::isnan(chunk_max)) {
+                saw_nan = true;
+                break;
+            }
+        }
+        update_minmax(chunk_min, chunk_max, has_value, global_min, global_max);
+    }
+
+    if (!has_value && !saw_nan) {
+        return std::nullopt;
+    }
+    if constexpr (std::is_same_v<Value, bool>) {
+        return std::string("(") +
+            (saw_nan ? "np.False_" : (global_min ? "np.True_" : "np.False_")) +
+            ", " +
+            (saw_nan ? "np.False_" : (global_max ? "np.True_" : "np.False_")) +
+            ")";
+    }
+    if constexpr (std::is_floating_point_v<Value>) {
+        if (saw_nan) {
+            return std::string("(np.") + format.numpy_repr_name + "(nan), np." +
+                format.numpy_repr_name + "(nan))";
+        }
+        return std::string("(") +
+            format_float_scalar(format.numpy_repr_name, global_min) +
+            ", " +
+            format_float_scalar(format.numpy_repr_name, global_max) +
+            ")";
+    }
+    return std::string("(") +
+        format_integer_scalar(format.numpy_repr_name, global_min) +
+        ", " +
+        format_integer_scalar(format.numpy_repr_name, global_max) +
+        ")";
+}
+
+std::optional<std::string> dataset_minmax_repr(
+    const fs::path& dataset_path,
+    const json& metadata) {
+    if (!metadata.is_object()) {
+        return std::nullopt;
+    }
+
+    const bool is_v3 = metadata.contains("zarr_format") &&
+        metadata["zarr_format"].is_number_integer() &&
+        metadata["zarr_format"].get<int>() == 3;
+    const fs::path chunk_root = is_v3 && fs::exists(dataset_path / "c")
+        ? dataset_path / "c"
+        : dataset_path;
+
+    const auto format = is_v3
+        ? v3_numeric_format(metadata)
+        : v2_numeric_format(metadata.at("dtype").get<std::string>());
+
+    switch (format.kind) {
+        case NumericKind::signed_integer:
+            switch (format.item_size) {
+                case 1:
+                    return dataset_minmax_repr_typed<std::int8_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                case 2:
+                    return dataset_minmax_repr_typed<std::int16_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                case 4:
+                    return dataset_minmax_repr_typed<std::int32_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                case 8:
+                    return dataset_minmax_repr_typed<std::int64_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                default:
+                    break;
+            }
+            break;
+        case NumericKind::unsigned_integer:
+            switch (format.item_size) {
+                case 1:
+                    return dataset_minmax_repr_typed<std::uint8_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                case 2:
+                    return dataset_minmax_repr_typed<std::uint16_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                case 4:
+                    return dataset_minmax_repr_typed<std::uint32_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                case 8:
+                    return dataset_minmax_repr_typed<std::uint64_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                default:
+                    break;
+            }
+            break;
+        case NumericKind::floating_point:
+            switch (format.item_size) {
+                case 4:
+                    return dataset_minmax_repr_typed<float, std::uint32_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                case 8:
+                    return dataset_minmax_repr_typed<double, std::uint64_t>(
+                        dataset_path, chunk_root, metadata, format, is_v3);
+                default:
+                    break;
+            }
+            break;
+        case NumericKind::boolean:
+            return dataset_minmax_repr_typed<bool, std::uint8_t>(
+                dataset_path, chunk_root, metadata, format, is_v3);
+    }
+    throw std::invalid_argument("Unsupported dataset dtype for stats");
+}
+
+std::vector<LocalArraySummary> dataset_summaries(
+    const fs::path& root,
+    const json& metadata,
+    const bool stats) {
+    std::vector<LocalArraySummary> summaries;
+    if (!metadata.is_object() || !metadata.contains("multiscales") ||
+        !metadata["multiscales"].is_array() || metadata["multiscales"].empty()) {
+        return summaries;
+    }
+
+    const auto& first = metadata["multiscales"][0];
+    if (!first.is_object() || !first.contains("datasets") || !first["datasets"].is_array()) {
+        return summaries;
+    }
+
+    for (const auto& dataset : first["datasets"]) {
+        if (!dataset.is_object() || !dataset.contains("path") || !dataset["path"].is_string()) {
+            continue;
+        }
+        const fs::path dataset_path = root / dataset["path"].get<std::string>();
+        const auto array_json = load_array_metadata_or_empty(dataset_path);
+        const auto shape = dataset_shape_vector(array_json);
+        if (shape.empty()) {
+            continue;
+        }
+        LocalArraySummary summary{};
+        summary.shape = shape;
+        if (stats) {
+            summary.minmax_repr = dataset_minmax_repr(dataset_path, array_json);
+        }
+        summaries.push_back(std::move(summary));
+    }
+
+    return summaries;
 }
 
 std::vector<std::string> multiscales_axes_names(const json& metadata) {
@@ -345,33 +886,125 @@ std::size_t data_type_size(const std::string& data_type) {
     throw std::invalid_argument("Unsupported data_type size: " + data_type);
 }
 
-std::vector<std::int64_t> json_int_vector(const json& values) {
-    std::vector<std::int64_t> result;
-    for (const auto& value : values) {
-        result.push_back(value.get<std::int64_t>());
-    }
-    return result;
+void ensure_blosc_initialized() {
+    static const bool initialized = [] {
+        blosc_init();
+        return true;
+    }();
+    (void)initialized;
 }
 
-std::size_t chunk_uncompressed_nbytes(const fs::path& relative, const json& source_metadata) {
-    const auto shape = json_int_vector(source_metadata.at("shape"));
-    const auto chunk_shape = json_int_vector(
-        source_metadata.at("chunk_grid").at("configuration").at("chunk_shape"));
-    const auto item_size = data_type_size(source_metadata.at("data_type").get<std::string>());
-    std::vector<std::int64_t> indices;
-    for (const auto& part : relative) {
-        indices.push_back(std::stoll(part.generic_string()));
+std::vector<char> decode_zstd_chunk(
+    const std::vector<char>& source_bytes,
+    const std::size_t raw_size) {
+    std::vector<char> raw(raw_size);
+    const auto decompressed = ZSTD_decompress(
+        raw.data(),
+        raw.size(),
+        source_bytes.data(),
+        source_bytes.size());
+    if (ZSTD_isError(decompressed) != 0U) {
+        throw std::runtime_error(
+            "ZSTD decompress failed: " +
+            std::string(ZSTD_getErrorName(decompressed)));
     }
-    if (indices.size() != shape.size()) {
-        throw std::invalid_argument("Chunk index rank mismatch for " + relative.generic_string());
+    raw.resize(static_cast<std::size_t>(decompressed));
+    return raw;
+}
+
+std::vector<char> decode_blosc_chunk(
+    const std::vector<char>& source_bytes,
+    const std::size_t raw_size) {
+    ensure_blosc_initialized();
+    std::vector<char> raw(raw_size);
+    const int decoded = blosc_decompress_ctx(
+        source_bytes.data(),
+        raw.data(),
+        static_cast<int>(raw.size()),
+        1);
+    if (decoded < 0) {
+        throw std::runtime_error("Blosc decompression failed");
     }
-    std::size_t elements = 1;
-    for (std::size_t axis = 0; axis < shape.size(); ++axis) {
-        const auto start = indices[axis] * chunk_shape[axis];
-        const auto extent = std::min<std::int64_t>(chunk_shape[axis], shape[axis] - start);
-        elements *= static_cast<std::size_t>(extent);
+    raw.resize(static_cast<std::size_t>(decoded));
+    return raw;
+}
+
+std::vector<char> decode_v2_chunk(
+    const std::vector<char>& source_bytes,
+    const json& source_metadata,
+    const fs::path& relative) {
+    const auto shape = dataset_shape_vector(source_metadata);
+    const auto chunk_shape = dataset_chunk_shape_vector(source_metadata);
+    const auto indices = chunk_indices_from_relative(
+        relative,
+        source_metadata.value("dimension_separator", ".")[0]);
+    const auto raw_size = chunk_uncompressed_nbytes(
+        shape,
+        chunk_shape,
+        indices,
+        data_type_size(source_metadata.at("dtype").get<std::string>()));
+    if (!source_metadata.contains("compressor") || source_metadata["compressor"].is_null()) {
+        return source_bytes;
     }
-    return elements * item_size;
+    if (!source_metadata["compressor"].is_object() ||
+        !source_metadata["compressor"].contains("id") ||
+        !source_metadata["compressor"]["id"].is_string()) {
+        throw std::invalid_argument("Unsupported v2 compressor metadata");
+    }
+    const auto codec = source_metadata["compressor"]["id"].get<std::string>();
+    if (codec == "zstd") {
+        return decode_zstd_chunk(source_bytes, raw_size);
+    }
+    if (codec == "blosc") {
+        return decode_blosc_chunk(source_bytes, raw_size);
+    }
+    throw std::invalid_argument("Unsupported v2 compressor: " + codec);
+}
+
+std::vector<char> decode_v3_chunk(
+    const std::vector<char>& source_bytes,
+    const json& source_metadata,
+    const fs::path& relative) {
+    const auto shape = dataset_shape_vector(source_metadata);
+    const auto chunk_shape = dataset_chunk_shape_vector(source_metadata);
+    const auto separator = source_metadata.at("chunk_key_encoding")
+                               .at("configuration")
+                               .at("separator")
+                               .get<std::string>();
+    const auto indices = chunk_indices_from_relative(
+        relative,
+        separator == "." ? '.' : '/');
+    const auto raw_size = chunk_uncompressed_nbytes(
+        shape,
+        chunk_shape,
+        indices,
+        data_type_size(source_metadata.at("data_type").get<std::string>()));
+
+    std::vector<char> decoded = source_bytes;
+    if (!source_metadata.contains("codecs") || !source_metadata["codecs"].is_array()) {
+        return decoded;
+    }
+
+    const auto& codecs = source_metadata["codecs"];
+    for (auto it = codecs.rbegin(); it != codecs.rend(); ++it) {
+        if (!it->is_object() || !it->contains("name") || !(*it)["name"].is_string()) {
+            throw std::invalid_argument("Unsupported v3 codec metadata");
+        }
+        const auto codec = (*it)["name"].get<std::string>();
+        if (codec == "bytes") {
+            continue;
+        }
+        if (codec == "zstd") {
+            decoded = decode_zstd_chunk(decoded, raw_size);
+            continue;
+        }
+        if (codec == "blosc") {
+            decoded = decode_blosc_chunk(decoded, raw_size);
+            continue;
+        }
+        throw std::invalid_argument("Unsupported v3 codec: " + codec);
+    }
+    return decoded;
 }
 
 std::vector<char> read_binary_file(const fs::path& path) {
@@ -394,25 +1027,9 @@ std::vector<char> transcode_chunk_to_v2(
     const std::vector<char>& source_bytes,
     const json& source_metadata,
     const fs::path& relative) {
-    const auto raw_size = chunk_uncompressed_nbytes(relative, source_metadata);
-    std::vector<char> raw(raw_size);
-    const auto decompressed = ZSTD_decompress(
-        raw.data(),
-        raw.size(),
-        source_bytes.data(),
-        source_bytes.size());
-    if (ZSTD_isError(decompressed) != 0U) {
-        throw std::runtime_error(
-            "ZSTD decompress failed: " +
-            std::string(ZSTD_getErrorName(decompressed)));
-    }
-    raw.resize(static_cast<std::size_t>(decompressed));
+    const auto raw = decode_v3_chunk(source_bytes, source_metadata, relative);
 
-    static const bool blosc_initialized = [] {
-        blosc_init();
-        return true;
-    }();
-    (void)blosc_initialized;
+    ensure_blosc_initialized();
 
     std::vector<char> encoded(raw.size() + BLOSC_MAX_OVERHEAD);
     const auto type_size = data_type_size(source_metadata.at("data_type").get<std::string>());
@@ -714,7 +1331,7 @@ std::vector<UtilsDiscoveredImage> local_walk_ome_zarr(const std::string& input_p
     return discovered;
 }
 
-std::vector<std::string> local_info_lines(const std::string& input_path) {
+std::vector<std::string> local_info_lines(const std::string& input_path, const bool stats) {
     const fs::path root(input_path);
     if (!fs::exists(root)) {
         throw std::invalid_argument("not a zarr: None");
@@ -730,24 +1347,14 @@ std::vector<std::string> local_info_lines(const std::string& input_path) {
         return {};
     }
 
-    std::string version;
-    if (metadata.contains("version") && metadata["version"].is_string()) {
-        version = metadata["version"].get<std::string>();
-    } else if (metadata["multiscales"].is_array() &&
-               !metadata["multiscales"].empty() &&
-               metadata["multiscales"][0].is_object() &&
-               metadata["multiscales"][0].contains("version") &&
-               metadata["multiscales"][0]["version"].is_string()) {
-        version = metadata["multiscales"][0]["version"].get<std::string>();
-    }
-
     std::vector<std::string> lines = utils_info_header_lines(
         io_repr(generic_path_string(root), true, false),
-        version,
+        metadata_version(metadata),
         {"Multiscales"});
 
-    for (const auto& shape : dataset_shapes(root, metadata)) {
-        lines.push_back(utils_info_data_line(shape_repr(shape), std::nullopt));
+    for (const auto& summary : dataset_summaries(root, metadata, stats)) {
+        lines.push_back(
+            utils_info_data_line(shape_repr(summary.shape), summary.minmax_repr));
     }
 
     return lines;
