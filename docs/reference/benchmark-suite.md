@@ -194,8 +194,9 @@ requested profile.
 For standalone native benchmarking without Python boundary overhead:
 
 ```bash
-cmake -S . -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build-cpp -j2
+./scripts/install_latest_native_toolchain.sh /usr/local
+/usr/local/bin/cmake -S . -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
+/usr/local/bin/cmake --build build-cpp -j2
 ./build-cpp/ome_zarr_native_selftest
 ./build-cpp/ome_zarr_native_bench_format --quick
 ./build-cpp/ome_zarr_native_bench_core --quick
@@ -204,11 +205,11 @@ cmake --build build-cpp -j2
 Optional host-tuned native build:
 
 ```bash
-cmake -S . -B build-cpp -G Ninja \
+/usr/local/bin/cmake -S . -B build-cpp -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DOME_ZARR_C_NATIVE_ENABLE_LTO=ON \
   -DOME_ZARR_C_NATIVE_MARCH_NATIVE=ON
-cmake --build build-cpp -j2
+/usr/local/bin/cmake --build build-cpp -j2
 ./build-cpp/ome_zarr_native_selftest
 ./build-cpp/ome_zarr_native_bench_format --quick
 ./build-cpp/ome_zarr_native_bench_core --quick

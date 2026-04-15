@@ -124,9 +124,12 @@ def _native_cli_path() -> Path:
             or "Could not find ZSTD_LIBRARY" in failure_text
             or "blosc.h" in failure_text
             or "zstd.h" in failure_text
+            or "ome-zarr-C native builds require" in failure_text
+            or "CMake 4.3 or higher is required" in failure_text
         ):
             pytest.skip(
-                "standalone native CLI tests require libblosc-dev and libzstd-dev"
+                "standalone native CLI tests require the latest pinned "
+                "native host toolchain"
             )
         raise
 

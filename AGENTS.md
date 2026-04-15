@@ -162,20 +162,25 @@ benchmark comparison, but it is not the target runtime product.
     standalone native tools plus the Python oracle, do not keep a pybind or
     Python-wrapper version of that surface alive just to satisfy old tests or
     benchmarks. Repoint the tests/benchmarks and delete the binding layer.
+48. For the standalone native toolchain, use the pinned latest-version manifest
+    in `docs/reference/native-dependency-manifest.json` as the source of truth.
+    Do not rely on stale distro package versions for CMake, Ninja, Zstd, or
+    c-blosc when the manifest specifies newer releases.
 
 ## Fast load order
 
 1. `docs/reference/architecture-first-porting.md`
 2. `docs/reference/standalone-cpp-target.md`
 3. `docs/reference/native-build-and-selftest.md`
-4. `docs/reference/pure-native-cpp-policy.md`
-5. `docs/reference/ai-agent-context-routing.md`
-6. `docs/reference/porting-contract.md`
-7. `docs/reference/ai-agent-dos-and-donts.md`
-8. `docs/reference/immutable-parity-proof.md`
-9. `docs/reference/ai-agent-skills.md`
-10. the touched upstream implementation file under `source_code_v.0.15.0/`
-11. the matching wrapper, C++ file, and nearest test module
+4. `docs/reference/native-dependency-manifest.json`
+5. `docs/reference/pure-native-cpp-policy.md`
+6. `docs/reference/ai-agent-context-routing.md`
+7. `docs/reference/porting-contract.md`
+8. `docs/reference/ai-agent-dos-and-donts.md`
+9. `docs/reference/immutable-parity-proof.md`
+10. `docs/reference/ai-agent-skills.md`
+11. the touched upstream implementation file under `source_code_v.0.15.0/`
+12. the matching wrapper, C++ file, and nearest test module
 
 ## Repository map
 
@@ -210,8 +215,9 @@ timeout 180s .venv/bin/python -m pytest -q \
 .venv/bin/python scripts/check_repo_consistency.py
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
-cmake -S . -B /tmp/ome-zarr-c-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build /tmp/ome-zarr-c-cmake -j2 --target ome_zarr_native_selftest
+./scripts/install_latest_native_toolchain.sh /usr/local
+/usr/local/bin/cmake -S . -B /tmp/ome-zarr-c-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release
+/usr/local/bin/cmake --build /tmp/ome-zarr-c-cmake -j2 --target ome_zarr_native_selftest
 ctest --test-dir /tmp/ome-zarr-c-cmake --output-on-failure
 ```
 

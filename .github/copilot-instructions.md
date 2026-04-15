@@ -12,6 +12,10 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Newer stable dependency versions are allowed when they help performance or
   implementation quality, but they must be requalified with parity tests and
   benchmark validation before they are accepted.
+- For the standalone native path, use
+  `docs/reference/native-dependency-manifest.json` as the source of truth for
+  pinned latest tool and library versions instead of whatever older host
+  packages happen to be installed.
 - Treat `origin/main` as the shared source of truth for repo state.
 - Python objects are not allowed in C++ semantic code unless the boundary is
   proven unavoidable and isolated to minimal binding glue.

@@ -212,14 +212,38 @@ The repository now also carries a native-only CMake build for `cpp/native/`
 plus standalone native validation and benchmark tools. This is the direct path
 for measuring pure-native semantic cost without Python boundary overhead.
 
-Typical host prerequisites on Ubuntu or Debian:
+Pinned latest native stack as of `2026-04-15`:
+
+- CMake `4.3.1`
+- Ninja `1.13.2`
+- C++ standard `23`
+- Zstd `1.5.7`
+- zlib `1.3.2`
+- LZ4 `1.10.0`
+- c-blosc `1.21.6`
+- vendored `cpp-httplib` `0.42.0`
+- vendored `nlohmann/json` `3.12.0`
+- vendored `tinyxml2` `11.0.0`
+
+The source-of-truth manifest for those versions is
+`docs/reference/native-dependency-manifest.json`.
+
+Minimal host prerequisites on Ubuntu or Debian:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build libblosc-dev libzstd-dev
+sudo apt-get install -y build-essential curl unzip
+./scripts/install_latest_native_toolchain.sh /usr/local
 ```
 
 Configure and build:
+
+```bash
+/usr/local/bin/cmake -S . -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
+/usr/local/bin/cmake --build build-cpp -j2
+```
+
+Or, once `/usr/local/bin` is first on `PATH`:
 
 ```bash
 cmake -S . -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
