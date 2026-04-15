@@ -15,6 +15,9 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Treat `origin/main` as the shared source of truth for repo state.
 - Python objects are not allowed in C++ semantic code unless the boundary is
   proven unavoidable and isolated to minimal binding glue.
+- Do not expose plan-only or helper-only commands through the shipped
+  standalone native CLI. Public native entrypoints must be real runtime
+  commands or durable product APIs.
 - Ruff is Python-only. Never target `cpp/` or C/C++ files with Ruff; use
   native checks, compiler/test validation, and C++-appropriate tooling
   instead.

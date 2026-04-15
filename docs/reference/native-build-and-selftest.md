@@ -87,37 +87,25 @@ timeout 120s ./build-cpp/ome_zarr_native_bench_core --match format --rounds 6 --
 
 ## Native CLI
 
-The standalone native CLI currently exposes already-native helper and planning
-surfaces directly from `cpp/native/`.
+The standalone native CLI now exposes real runtime commands rather than
+plan-only helper surfaces.
 
-Examples:
+Current commands:
 
 ```bash
-./build-cpp/ome_zarr_native_cli cli create-plan --method astronaut
-./build-cpp/ome_zarr_native_cli cli scale-factors --downscale 2 --max-layer 4
-./build-cpp/ome_zarr_native_cli data create-plan \
-  --version 0.5 --base-shape 1,3,512,512 --smallest-shape 1,3,64,64
-./build-cpp/ome_zarr_native_cli format detect --multiscales-version 0.5
-./build-cpp/ome_zarr_native_cli format matches --version 0.5 --multiscales-version 0.5
-./build-cpp/ome_zarr_native_cli format zarr-format --version 0.5
-./build-cpp/ome_zarr_native_cli format chunk-key-encoding --version 0.5
-./build-cpp/ome_zarr_native_cli format class-name --version 0.4
-./build-cpp/ome_zarr_native_cli format generate-well \
-  --path B/3 --rows A,B,C --columns 1,2,3
-./build-cpp/ome_zarr_native_cli format validate-well \
-  --path B/3 --row-index 1 --column-index 2 --rows A,B,C --columns 1,2,3
-./build-cpp/ome_zarr_native_cli io subpath --path /tmp/demo.zarr --subpath labels/0 --file
-./build-cpp/ome_zarr_native_cli utils view-plan \
-  --path /tmp/demo/image.zarr --port 8013 --discovered-count 1
-./build-cpp/ome_zarr_native_cli utils finder-plan \
-  --path /tmp/demo/images --port 8012
-./build-cpp/ome_zarr_native_cli writer image-plan \
-  --axes t,c,y,x --scaler-present --scaler-max-layer 4 --scaler-method local_mean
+./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
+./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
 ```
 
-This does not yet replace the full historical Python CLI. It is the first real
-native runtime entrypoint for already-native surfaces, and it exists so the
-product path can keep moving away from the Python/pybind runtime.
+Current scope:
+
+- `info`: standalone local metadata traversal for OME-Zarr image roots
+- `finder`: standalone local OME-Zarr discovery plus BioFile Finder CSV output
+
+This still does not replace the full historical Python CLI. The native product
+path is being expanded command by command, and every new standalone command
+must be parity-checked against the frozen Python oracle before it is treated as
+acceptable.
 
 The native benchmark layer measures pure C++ semantic cost. Use the Python
 benchmark suite separately when you need end-to-end parity-harness timing or
@@ -129,10 +117,21 @@ For a fast iteration comparison on the touched `format` hotspot:
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
 ```
 
-For a fast iteration comparison on the touched `utils` hotspot:
+For direct Python-vs-native comparison on the current standalone runtime
+commands:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --match utils \
-  --native-match utils
+  --suite core \
+  --match info_v2_image \
+  --python-match info_v2_image \
+  --native-match local.info \
+  --paired-case runtime.utils.info_v2_image=local.info
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match finder \
+  --python-match finder \
+  --native-match local.finder \
+  --paired-case utils.finder=local.finder
 ```

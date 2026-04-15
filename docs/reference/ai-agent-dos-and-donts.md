@@ -41,6 +41,8 @@ porting work.
 - Use the standalone native build and native benchmark tools when you need to
   measure pure-native semantic cost separately from Python-visible boundary
   overhead.
+- Keep standalone native CLI surfaces limited to real runtime commands or
+  durable product APIs.
 - Use Ruff only for Python or Markdown-like files. If linting a subset, pass
   those paths explicitly and keep `cpp/` out of the Ruff target list.
 - Start with the smallest sufficient context slice and broaden only when the
@@ -62,6 +64,8 @@ porting work.
   product. The target delivery shape is standalone C++.
 - Do not add new semantic logic to a binding-heavy file just because the file
   already exists.
+- Do not ship plan-only or helper-only standalone CLI commands as if they were
+  part of the final product.
 - Do not count a surface as complete if the public path is still blocked by the
   runtime.
 - Do not treat mocked store interactions as proof of real store parity.

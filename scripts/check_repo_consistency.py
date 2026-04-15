@@ -16,6 +16,10 @@ RUFF_CPP_TARGET_PATTERN = re.compile(
     r"\bruff\b.*\b(?:cpp/|\.cpp\b|\.hpp\b|\.cc\b|\.cxx\b|\.h\b)",
     re.IGNORECASE,
 )
+STALE_NATIVE_CLI_PATTERN = re.compile(
+    r"ome_zarr_native_cli\s+(?:cli\s+|data\s+create-plan|format\s+|io\s+subpath|utils\s+(?:view-plan|finder-plan)|writer\s+image-plan)",
+    re.IGNORECASE,
+)
 
 
 def read_text(path: Path) -> str:
@@ -73,6 +77,10 @@ def main() -> int:
         issues.append("README.md is missing the native self-test command.")
     if "ome_zarr_native_cli" not in readme_text:
         issues.append("README.md is missing the native CLI command.")
+    if "ome_zarr_native_cli info " not in readme_text:
+        issues.append("README.md is missing the native CLI info example.")
+    if "ome_zarr_native_cli finder " not in readme_text:
+        issues.append("README.md is missing the native CLI finder example.")
     if "ome_zarr_native_bench_core" not in readme_text:
         issues.append("README.md is missing the native core benchmark command.")
     if "scripts/compare_iteration_benchmarks.py" not in readme_text:
@@ -99,6 +107,11 @@ def main() -> int:
 
     for path in TEXT_FILES:
         text = read_text(path)
+        if STALE_NATIVE_CLI_PATTERN.search(text) is not None:
+            issues.append(
+                "Stale plan-only native CLI reference remains in "
+                f"{path.relative_to(ROOT)}"
+            )
         for line in text.splitlines():
             if "ruff" not in line.lower():
                 continue

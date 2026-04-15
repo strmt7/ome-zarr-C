@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -20,6 +21,7 @@
 #include "../native/data.hpp"
 #include "../native/format.hpp"
 #include "../native/io.hpp"
+#include "../native/local_runtime.hpp"
 #include "../native/reader.hpp"
 #include "../native/scale.hpp"
 #include "../native/utils.hpp"
@@ -29,6 +31,7 @@ namespace {
 
 using namespace ome_zarr_c::native_code;
 using Clock = std::chrono::steady_clock;
+namespace fs = std::filesystem;
 
 struct CaseResult {
     std::string name;
@@ -170,6 +173,39 @@ std::string json_escape(std::string_view text) {
         }
     }
     return output.str();
+}
+
+const fs::path& bench_runtime_fixture_root() {
+    static const fs::path root = [] {
+        const fs::path root_path =
+            fs::temp_directory_path() / "ome_zarr_c_native_bench_runtime";
+        fs::create_directories(root_path);
+
+        const fs::path info_v2 = root_path / "info_v2.zarr";
+        fs::create_directories(info_v2 / "0");
+        {
+            std::ofstream zattrs(info_v2 / ".zattrs");
+            zattrs << R"({"multiscales":[{"version":"0.4","axes":["y","x"],"datasets":[{"path":"0"}]}]})";
+        }
+        {
+            std::ofstream zgroup(info_v2 / ".zgroup");
+            zgroup << R"({"zarr_format":2})";
+        }
+        {
+            std::ofstream array_json(info_v2 / "0" / "zarr.json");
+            array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
+        }
+
+        const fs::path finder_root = root_path / "finder_tree";
+        fs::create_directories(finder_root / "image.zarr");
+        {
+            std::ofstream zattrs(finder_root / "image.zarr" / ".zattrs");
+            zattrs << R"({"multiscales":[{}]})";
+        }
+
+        return root_path;
+    }();
+    return root;
 }
 
 std::uint64_t bench_axes_validate_types(std::size_t) {
@@ -403,6 +439,27 @@ std::uint64_t bench_data_create_plan(std::size_t iteration) {
         plan.size_c);
 }
 
+std::uint64_t bench_local_find_multiscales(std::size_t) {
+    const auto images = local_find_multiscales(
+        (bench_runtime_fixture_root() / "finder_tree" / "image.zarr").string());
+    return static_cast<std::uint64_t>(images.images.size());
+}
+
+std::uint64_t bench_local_info(std::size_t) {
+    const auto lines = local_info_lines(
+        (bench_runtime_fixture_root() / "info_v2.zarr").string());
+    return static_cast<std::uint64_t>(lines.size());
+}
+
+std::uint64_t bench_local_finder(std::size_t) {
+    const auto result = local_finder_csv(
+        (bench_runtime_fixture_root() / "finder_tree").string(),
+        8012);
+    return static_cast<std::uint64_t>(
+        result.rows.size() + result.csv_path.size() + result.source_uri.size() +
+        result.app_url.size());
+}
+
 std::uint64_t bench_reader_plate_levels(std::size_t) {
     const auto plans = reader_plate_level_plans(
         {"A", "B", "C"},
@@ -535,6 +592,9 @@ int main(int argc, char** argv) {
             {"format.v01_init_store", 1, bench_format_v01_init_store},
             {"format.well_and_coord", 2, bench_format_well_and_coord},
             {"io_subpath", 1, bench_io_subpath},
+            {"local.finder", 1, bench_local_finder},
+            {"local.find_multiscales", 1, bench_local_find_multiscales},
+            {"local.info", 1, bench_local_info},
             {"reader_plate_levels", 4, bench_reader_plate_levels},
             {"scale_build_pyramid", 8, bench_scale_build_pyramid},
             {"utils.finder", 1, bench_utils_finder},
