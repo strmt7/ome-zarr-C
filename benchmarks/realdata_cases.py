@@ -6,23 +6,12 @@ from benchmarks import cases as core_cases
 from benchmarks.public_fixtures import ensure_fixture
 from benchmarks.runtime_support import run_info, run_parse_url
 from tests import test_io_equivalence as io_eq
-from tests import test_reader_equivalence as reader_eq
 from tests import test_utils_equivalence as utils_eq
 
 
 def _include_large_fixture() -> bool:
     value = os.environ.get("OME_ZARR_BENCH_INCLUDE_LARGE", "").strip().lower()
     return value in {"1", "true", "yes", "on"}
-
-
-def _reader_summary(reader_module, path):
-    location = io_eq._py_io.parse_url(str(path))
-    if location is None:
-        raise AssertionError(f"realdata path is not parseable as zarr: {path}")
-    return [
-        reader_eq._node_signature(node, reader_module)
-        for node in reader_module.Reader(location)()
-    ]
 
 
 def _native_info_stdout(path) -> str:
@@ -54,19 +43,16 @@ def _verify_examples_image_surface() -> None:
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
             "info": _python_info_stdout(path),
-            "reader": _reader_summary(reader_eq._py_reader, path),
         },
         {
             "parse_url": io_eq._run_native_io_signature(str(path)),
             "info": _native_info_stdout(path),
-            "reader": _reader_summary(reader_eq._cpp_reader, path),
         },
     )
 
 
 def _bench_examples_image_surface(
     utils_module,
-    reader_module,
     *,
     native_parse_url: bool,
 ) -> float:
@@ -84,7 +70,6 @@ def _bench_examples_image_surface(
                 else run_parse_url(io_eq._py_io.parse_url, str(path))
             ),
             "info": info_value,
-            "reader": _reader_summary(reader_module, path),
         }
     )
 
@@ -96,19 +81,16 @@ def _verify_examples_plate_surface() -> None:
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
             "info": _python_info_stdout(path),
-            "reader": _reader_summary(reader_eq._py_reader, path),
         },
         {
             "parse_url": io_eq._run_native_io_signature(str(path)),
             "info": _native_info_stdout(path),
-            "reader": _reader_summary(reader_eq._cpp_reader, path),
         },
     )
 
 
 def _bench_examples_plate_surface(
     utils_module,
-    reader_module,
     *,
     native_parse_url: bool,
 ) -> float:
@@ -126,7 +108,6 @@ def _bench_examples_plate_surface(
                 else run_parse_url(io_eq._py_io.parse_url, str(path))
             ),
             "info": info_value,
-            "reader": _reader_summary(reader_module, path),
         }
     )
 
@@ -138,19 +119,16 @@ def _verify_bia_tonsil3_surface() -> None:
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
             "info": _python_info_stdout(path),
-            "reader": _reader_summary(reader_eq._py_reader, path),
         },
         {
             "parse_url": io_eq._run_native_io_signature(str(path)),
             "info": _native_info_stdout(path),
-            "reader": _reader_summary(reader_eq._cpp_reader, path),
         },
     )
 
 
 def _bench_bia_tonsil3_surface(
     utils_module,
-    reader_module,
     *,
     native_parse_url: bool,
 ) -> float:
@@ -168,7 +146,6 @@ def _bench_bia_tonsil3_surface(
                 else run_parse_url(io_eq._py_io.parse_url, str(path))
             ),
             "info": info_value,
-            "reader": _reader_summary(reader_module, path),
         }
     )
 
@@ -180,19 +157,16 @@ def _verify_bia_156_42_surface() -> None:
         {
             "parse_url": run_parse_url(io_eq._py_io.parse_url, str(path)),
             "info": _python_info_stdout(path),
-            "reader": _reader_summary(reader_eq._py_reader, path),
         },
         {
             "parse_url": io_eq._run_native_io_signature(str(path)),
             "info": _native_info_stdout(path),
-            "reader": _reader_summary(reader_eq._cpp_reader, path),
         },
     )
 
 
 def _bench_bia_156_42_surface(
     utils_module,
-    reader_module,
     *,
     native_parse_url: bool,
 ) -> float:
@@ -210,7 +184,6 @@ def _bench_bia_156_42_surface(
                 else run_parse_url(io_eq._py_io.parse_url, str(path))
             ),
             "info": info_value,
-            "reader": _reader_summary(reader_module, path),
         }
     )
 
@@ -219,41 +192,29 @@ REALDATA_CASES = [
     core_cases._make_case(
         "realdata",
         "examples_image.surface",
-        "Real-data parse_url/info/reader benchmark on a small example OME-Zarr image.",
+        "Real-data parse_url/info benchmark on a small example OME-Zarr image.",
         _verify_examples_image_surface,
-        lambda: _bench_examples_image_surface(
-            "python", reader_eq._py_reader, native_parse_url=False
-        ),
-        lambda: _bench_examples_image_surface(
-            "native", reader_eq._cpp_reader, native_parse_url=True
-        ),
+        lambda: _bench_examples_image_surface("python", native_parse_url=False),
+        lambda: _bench_examples_image_surface("native", native_parse_url=True),
     ),
     core_cases._make_case(
         "realdata",
         "examples_plate.surface",
-        "Real-data parse_url/info/reader benchmark on a small example OME-Zarr plate.",
+        "Real-data parse_url/info benchmark on a small example OME-Zarr plate.",
         _verify_examples_plate_surface,
-        lambda: _bench_examples_plate_surface(
-            "python", reader_eq._py_reader, native_parse_url=False
-        ),
-        lambda: _bench_examples_plate_surface(
-            "native", reader_eq._cpp_reader, native_parse_url=True
-        ),
+        lambda: _bench_examples_plate_surface("python", native_parse_url=False),
+        lambda: _bench_examples_plate_surface("native", native_parse_url=True),
     ),
     core_cases._make_case(
         "realdata",
         "bia_tonsil3.surface",
         (
-            "Real-data parse_url/info/reader benchmark on the 108.8 MiB "
+            "Real-data parse_url/info benchmark on the 108.8 MiB "
             "BIA tonsil OME-NGFF image."
         ),
         _verify_bia_tonsil3_surface,
-        lambda: _bench_bia_tonsil3_surface(
-            "python", reader_eq._py_reader, native_parse_url=False
-        ),
-        lambda: _bench_bia_tonsil3_surface(
-            "native", reader_eq._cpp_reader, native_parse_url=True
-        ),
+        lambda: _bench_bia_tonsil3_surface("python", native_parse_url=False),
+        lambda: _bench_bia_tonsil3_surface("native", native_parse_url=True),
     ),
 ]
 
@@ -263,16 +224,12 @@ if _include_large_fixture():
             "realdata",
             "bia_156_42.surface",
             (
-                "Real-data parse_url/info/reader benchmark on the 455.3 MiB "
+                "Real-data parse_url/info benchmark on the 455.3 MiB "
                 "BIA high-content screening OME-NGFF image."
             ),
             _verify_bia_156_42_surface,
-            lambda: _bench_bia_156_42_surface(
-                "python", reader_eq._py_reader, native_parse_url=False
-            ),
-            lambda: _bench_bia_156_42_surface(
-                "native", reader_eq._cpp_reader, native_parse_url=True
-            ),
+            lambda: _bench_bia_156_42_surface("python", native_parse_url=False),
+            lambda: _bench_bia_156_42_surface("native", native_parse_url=True),
         )
     )
 

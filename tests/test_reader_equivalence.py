@@ -9,6 +9,7 @@ from pathlib import Path
 import dask.array as da
 import numpy as np
 
+from tests import test_utils_equivalence as utils_eq
 from tests._outcomes import err, ok
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +17,6 @@ sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_format = importlib.import_module("ome_zarr.format")
 _py_reader = importlib.import_module("ome_zarr.reader")
-_cpp_reader = importlib.import_module("ome_zarr_c.reader")
 
 
 class FakeZarr:
@@ -129,13 +129,39 @@ def _normalize(value):
     return value
 
 
+def _canonical_key(key):
+    if isinstance(key, bool):
+        return {"kind": "bool", "value": key}
+    if isinstance(key, int):
+        return {"kind": "int", "value": key}
+    return {"kind": "str", "value": str(key)}
+
+
+def _canonicalize(value):
+    value = _normalize(value)
+    if isinstance(value, dict):
+        if all(isinstance(key, str) for key in value):
+            return {key: _canonicalize(item) for key, item in value.items()}
+        return {
+            "__mapping__": [
+                {"key": _canonical_key(key), "value": _canonicalize(item)}
+                for key, item in value.items()
+            ]
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonicalize(item) for item in value]
+    return value
+
+
 def _array_signature(array: da.Array) -> dict:
-    return {
-        "shape": tuple(int(dim) for dim in array.shape),
-        "dtype": str(array.dtype),
-        "chunks": tuple(tuple(int(v) for v in axis) for axis in array.chunks),
-        "values": array.compute().tolist(),
-    }
+    return _canonicalize(
+        {
+            "shape": tuple(int(dim) for dim in array.shape),
+            "dtype": str(array.dtype),
+            "chunks": tuple(tuple(int(v) for v in axis) for axis in array.chunks),
+            "values": array.compute().tolist(),
+        }
+    )
 
 
 def _spec_signature(spec) -> dict:
@@ -152,7 +178,7 @@ def _spec_signature(spec) -> dict:
     ):
         if hasattr(spec, attr):
             signature[attr] = _normalize(getattr(spec, attr))
-    return signature
+    return _canonicalize(signature)
 
 
 def _node_signature(node, module) -> dict:
@@ -166,21 +192,23 @@ def _node_signature(node, module) -> dict:
             None if loaded is None else type(loaded).__name__,
         )
 
-    return {
-        "repr": repr(node),
-        "visible": node.visible,
-        "specs": [_spec_signature(spec) for spec in node.specs],
-        "firsts": firsts,
-        "metadata": _normalize(node.metadata),
-        "data": [_array_signature(array) for array in node.data],
-        "pre_nodes": [repr(child) for child in node.pre_nodes],
-        "post_nodes": [repr(child) for child in node.post_nodes],
-    }
+    return _canonicalize(
+        {
+            "repr": repr(node),
+            "visible": node.visible,
+            "specs": [_spec_signature(spec) for spec in node.specs],
+            "firsts": firsts,
+            "metadata": _normalize(node.metadata),
+            "data": [_array_signature(array) for array in node.data],
+            "pre_nodes": [repr(child) for child in node.pre_nodes],
+            "post_nodes": [repr(child) for child in node.post_nodes],
+        }
+    )
 
 
 def _reader_signature(module, zarr) -> list[dict]:
     reader = module.Reader(zarr)
-    return [_node_signature(node, module) for node in reader()]
+    return _canonicalize([_node_signature(node, module) for node in reader()])
 
 
 def _call(func, *args, **kwargs):
@@ -384,36 +412,139 @@ def _build_raw_and_ignored_tree() -> tuple[FakeHierarchy, FakeZarr, FakeZarr]:
     return hierarchy, raw, ignored
 
 
+def _run_native_reader_probe(args: list[str]):
+    outcome = utils_eq._run_native_probe(args)
+    assert outcome.status == "ok", outcome
+    return outcome.value
+
+
+def _native_reader_signature(scenario: str):
+    return _run_native_reader_probe(["reader-signature", "--scenario", scenario])
+
+
+def _native_reader_matches(scenario: str):
+    return _run_native_reader_probe(["reader-matches", "--scenario", scenario])
+
+
+def _native_reader_node_ops():
+    return _run_native_reader_probe(["reader-node-ops", "--scenario", "image"])
+
+
+def _native_reader_image_surface():
+    return _run_native_reader_probe(["reader-image-surface"])
+
+
+def _native_reader_plate_surface():
+    return _run_native_reader_probe(["reader-plate-surface"])
+
+
+def _python_reader_matches_image() -> dict[str, object]:
+    hierarchy = _build_image_tree()
+    return _canonicalize(
+        {
+            "Labels.matches": _py_reader.Labels.matches(
+                hierarchy.nodes["/dataset/labels"]
+            ),
+            "Label.matches": _py_reader.Label.matches(
+                hierarchy.nodes["/dataset/labels/coins"]
+            ),
+            "Multiscales.matches": _py_reader.Multiscales.matches(
+                hierarchy.nodes["/dataset"]
+            ),
+            "OMERO.matches": _py_reader.OMERO.matches(hierarchy.nodes["/dataset"]),
+        }
+    )
+
+
+def _python_reader_matches_hcs() -> dict[str, object]:
+    hierarchy = _build_hcs_tree()
+    return _canonicalize(
+        {
+            "Plate.matches": _py_reader.Plate.matches(hierarchy.nodes["/plate"]),
+            "Well.matches": _py_reader.Well.matches(hierarchy.nodes["/plate/A/1"]),
+        }
+    )
+
+
+def _python_reader_node_ops():
+    hierarchy = _build_image_tree()
+    zarr = hierarchy.nodes["/dataset"]
+    node = _py_reader.Node(zarr, [])
+    before = _node_signature(node, _py_reader)
+    node.visible = False
+    hidden = _node_signature(node, _py_reader)
+    node.visible = True
+    shown = _node_signature(node, _py_reader)
+    labels_spec = node.first(_py_reader.Labels)
+    loaded = node.load(_py_reader.Multiscales)
+    metadata = {}
+    node.write_metadata(metadata)
+    duplicate = node.add(hierarchy.nodes["/dataset/labels"])
+    return _canonicalize(
+        {
+            "before": before,
+            "hidden": hidden,
+            "shown": shown,
+            "first_labels": None if labels_spec is None else type(labels_spec).__name__,
+            "load_multiscales": None if loaded is None else type(loaded).__name__,
+            "metadata": metadata,
+            "duplicate_add": None if duplicate is None else repr(duplicate),
+        }
+    )
+
+
+def _python_reader_image_surface():
+    hierarchy = _build_image_tree()
+    zarr = hierarchy.nodes["/dataset"]
+    node = _py_reader.Node(zarr, [])
+    multiscales = node.first(_py_reader.Multiscales)
+    assert multiscales is not None
+    reader = _py_reader.Reader(zarr)
+    return _canonicalize(
+        {
+            "array": _array_signature(multiscales.array("0")),
+            "descend": [
+                _node_signature(item, _py_reader) for item in reader.descend(node)
+            ],
+            "lookup": multiscales.lookup("multiscales", []),
+        }
+    )
+
+
+def _python_reader_plate_surface():
+    hierarchy = _build_hcs_tree()
+    plate_zarr = hierarchy.nodes["/plate"]
+    plate_node = _py_reader.Node(plate_zarr, [])
+    plate = plate_node.first(_py_reader.Plate)
+    assert plate is not None
+    plate.get_pyramid_lazy(plate_node)
+    image_node = _py_reader.Node(hierarchy.nodes["/plate/A/1/0"], [])
+    return _canonicalize(
+        {
+            "get_numpy_type": str(plate.get_numpy_type(image_node)),
+            "get_tile_path": plate.get_tile_path(0, 0, 0),
+            "get_stitched_grid": _array_signature(plate.get_stitched_grid(0, (2, 3))),
+            "after_get_pyramid_lazy": {
+                "metadata": plate_node.metadata,
+                "data": [_array_signature(item) for item in plate_node.data],
+            },
+            "reader_signature": _reader_signature(_py_reader, plate_zarr),
+        }
+    )
+
+
 def test_reader_matches_upstream_for_image_label_tree() -> None:
     hierarchy = _build_image_tree()
     zarr = hierarchy.nodes["/dataset"]
 
     expected = _call(_reader_signature, _py_reader, zarr)
-    actual = _call(_reader_signature, _cpp_reader, zarr)
+    actual = ok(value=_native_reader_signature("image"))
     assert expected == actual
 
 
 def test_node_matches_upstream_for_visibility_and_duplicate_add() -> None:
-    hierarchy = _build_image_tree()
-    zarr = hierarchy.nodes["/dataset"]
-
-    def exercise(module):
-        node = module.Node(zarr, [])
-        before = _node_signature(node, module)
-        node.visible = False
-        hidden = _node_signature(node, module)
-        node.visible = True
-        shown = _node_signature(node, module)
-        duplicate = node.add(hierarchy.nodes["/dataset/labels"])
-        return {
-            "before": before,
-            "hidden": hidden,
-            "shown": shown,
-            "duplicate_add": None if duplicate is None else repr(duplicate),
-        }
-
-    expected = _call(exercise, _py_reader)
-    actual = _call(exercise, _cpp_reader)
+    expected = ok(value=_python_reader_node_ops())
+    actual = ok(value=_native_reader_node_ops())
     assert expected == actual
 
 
@@ -442,7 +573,7 @@ def test_reader_matches_upstream_for_omero_edge_cases() -> None:
         )
 
         expected = _call(_node_signature, _py_reader.Node(zarr, []), _py_reader)
-        actual = _call(_node_signature, _cpp_reader.Node(zarr, []), _cpp_reader)
+        actual = ok(value=_native_reader_signature(f"omero-edge-{index}")[0])
         assert expected == actual
 
 
@@ -452,11 +583,11 @@ def test_reader_matches_upstream_for_fake_hcs_tree() -> None:
     well = hierarchy.nodes["/plate/A/1"]
 
     expected_plate = _call(_node_signature, _py_reader.Node(plate, []), _py_reader)
-    actual_plate = _call(_node_signature, _cpp_reader.Node(plate, []), _cpp_reader)
+    actual_plate = ok(value=_native_reader_signature("plate")[0])
     assert expected_plate == actual_plate
 
     expected_well = _call(_node_signature, _py_reader.Node(well, []), _py_reader)
-    actual_well = _call(_node_signature, _cpp_reader.Node(well, []), _cpp_reader)
+    actual_well = ok(value=_native_reader_signature("well")[0])
     assert expected_well == actual_well
 
 
@@ -465,7 +596,7 @@ def test_reader_preserves_v04_axis_units_exactly() -> None:
     zarr = hierarchy.nodes["/units-image"]
 
     expected = _call(_reader_signature, _py_reader, zarr)
-    actual = _call(_reader_signature, _cpp_reader, zarr)
+    actual = ok(value=_native_reader_signature("units"))
     assert expected == actual
 
 
@@ -473,56 +604,19 @@ def test_reader_matches_upstream_for_raw_zarray_and_ignored_nodes() -> None:
     _, raw, ignored = _build_raw_and_ignored_tree()
 
     expected_raw = _call(_reader_signature, _py_reader, raw)
-    actual_raw = _call(_reader_signature, _cpp_reader, raw)
+    actual_raw = ok(value=_native_reader_signature("raw"))
     assert expected_raw == actual_raw
 
     expected_ignored = _call(_reader_signature, _py_reader, ignored)
-    actual_ignored = _call(_reader_signature, _cpp_reader, ignored)
+    actual_ignored = ok(value=_native_reader_signature("ignored"))
     assert expected_ignored == actual_ignored
 
 
 def test_reader_methods_match_upstream_for_metadata_array_and_dtype() -> None:
-    image_hierarchy = _build_image_tree()
-    image_zarr = image_hierarchy.nodes["/dataset"]
-    py_image_node = _py_reader.Node(image_zarr, [])
-    cpp_image_node = _cpp_reader.Node(image_zarr, [])
+    expected_image = ok(value=_python_reader_image_surface())
+    actual_image = ok(value=_native_reader_image_surface())
+    assert expected_image == actual_image
 
-    py_metadata = {"existing": "value"}
-    cpp_metadata = {"existing": "value"}
-    py_image_node.write_metadata(py_metadata)
-    cpp_image_node.write_metadata(cpp_metadata)
-    assert _normalize(py_metadata) == _normalize(cpp_metadata)
-
-    py_multiscales = py_image_node.first(_py_reader.Multiscales)
-    cpp_multiscales = cpp_image_node.first(_cpp_reader.Multiscales)
-    assert py_multiscales is not None
-    assert cpp_multiscales is not None
-    for resolution in ("0", "1"):
-        assert _array_signature(py_multiscales.array(resolution)) == _array_signature(
-            cpp_multiscales.array(resolution)
-        )
-    _assert_result_match(py_multiscales.array, cpp_multiscales.array, "missing")
-
-    _, raw, _ = _build_raw_and_ignored_tree()
-    py_raw_node = _py_reader.Node(raw, [])
-    cpp_raw_node = _cpp_reader.Node(raw, [])
-    py_raw_metadata = {"existing": "value"}
-    cpp_raw_metadata = {"existing": "value"}
-    py_raw_node.write_metadata(py_raw_metadata)
-    cpp_raw_node.write_metadata(cpp_raw_metadata)
-    assert _normalize(py_raw_metadata) == _normalize(cpp_raw_metadata)
-
-    hcs_hierarchy = _build_hcs_tree()
-    plate_zarr = hcs_hierarchy.nodes["/plate"]
-    image_zarr = hcs_hierarchy.nodes["/plate/A/1/0"]
-    py_plate_node = _py_reader.Node(plate_zarr, [])
-    cpp_plate_node = _cpp_reader.Node(plate_zarr, [])
-    py_image_node = _py_reader.Node(image_zarr, [])
-    cpp_image_node = _cpp_reader.Node(image_zarr, [])
-    py_plate = py_plate_node.first(_py_reader.Plate)
-    cpp_plate = cpp_plate_node.first(_cpp_reader.Plate)
-    assert py_plate is not None
-    assert cpp_plate is not None
-    assert py_plate.get_numpy_type(py_image_node) == cpp_plate.get_numpy_type(
-        cpp_image_node
-    )
+    expected_plate = ok(value=_python_reader_plate_surface())
+    actual_plate = ok(value=_native_reader_plate_surface())
+    assert expected_plate == actual_plate

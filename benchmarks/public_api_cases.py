@@ -1480,134 +1480,82 @@ def _bench_utils_download(py_like: bool) -> float:
         shutil.rmtree(source.parent, ignore_errors=True)
 
 
-def _run_reader_matches(module) -> dict[str, object]:
-    image_hierarchy = reader_eq._build_image_tree()
-    hcs_hierarchy = reader_eq._build_hcs_tree()
+def _run_reader_matches(python_like: bool) -> dict[str, object]:
+    if python_like:
+        return {
+            **reader_eq._python_reader_matches_image(),
+            **reader_eq._python_reader_matches_hcs(),
+        }
     return {
-        "Labels.matches": module.Labels.matches(
-            image_hierarchy.nodes["/dataset/labels"]
-        ),
-        "Label.matches": module.Label.matches(
-            image_hierarchy.nodes["/dataset/labels/coins"]
-        ),
-        "Multiscales.matches": module.Multiscales.matches(
-            image_hierarchy.nodes["/dataset"]
-        ),
-        "OMERO.matches": module.OMERO.matches(image_hierarchy.nodes["/dataset"]),
-        "Plate.matches": module.Plate.matches(hcs_hierarchy.nodes["/plate"]),
-        "Well.matches": module.Well.matches(hcs_hierarchy.nodes["/plate/A/1"]),
+        **reader_eq._native_reader_matches("image"),
+        **reader_eq._native_reader_matches("hcs"),
     }
 
 
 def _verify_reader_matches() -> None:
     _assert_equal(
         "reader.matches",
-        _run_reader_matches(reader_eq._py_reader),
-        _run_reader_matches(reader_eq._cpp_reader),
+        _run_reader_matches(True),
+        _run_reader_matches(False),
     )
 
 
-def _bench_reader_matches(module) -> float:
-    return _touch_value(_run_reader_matches(module))
+def _bench_reader_matches(python_like: bool) -> float:
+    return _touch_value(_run_reader_matches(python_like))
 
 
-def _run_reader_node_ops(module) -> dict[str, object]:
-    hierarchy = reader_eq._build_image_tree()
-    zarr = hierarchy.nodes["/dataset"]
-    node = module.Node(zarr, [])
-    before = reader_eq._node_signature(node, module)
-    node.visible = False
-    hidden = reader_eq._node_signature(node, module)
-    node.visible = True
-    shown = reader_eq._node_signature(node, module)
-    labels_spec = node.first(module.Labels)
-    loaded = node.load(module.Multiscales)
-    metadata = {}
-    node.write_metadata(metadata)
-    duplicate = node.add(hierarchy.nodes["/dataset/labels"])
-    return {
-        "before": before,
-        "hidden": hidden,
-        "shown": shown,
-        "first_labels": None if labels_spec is None else type(labels_spec).__name__,
-        "load_multiscales": None if loaded is None else type(loaded).__name__,
-        "metadata": metadata,
-        "duplicate_add": None if duplicate is None else repr(duplicate),
-    }
+def _run_reader_node_ops(python_like: bool) -> dict[str, object]:
+    if python_like:
+        return reader_eq._python_reader_node_ops()
+    return reader_eq._native_reader_node_ops()
 
 
 def _verify_reader_node_ops() -> None:
     _assert_equal(
         "reader.node_ops",
-        _run_reader_node_ops(reader_eq._py_reader),
-        _run_reader_node_ops(reader_eq._cpp_reader),
+        _run_reader_node_ops(True),
+        _run_reader_node_ops(False),
     )
 
 
-def _bench_reader_node_ops(module) -> float:
-    return _touch_value(_run_reader_node_ops(module))
+def _bench_reader_node_ops(python_like: bool) -> float:
+    return _touch_value(_run_reader_node_ops(python_like))
 
 
-def _run_reader_image_surface(module):
-    hierarchy = reader_eq._build_image_tree()
-    zarr = hierarchy.nodes["/dataset"]
-    node = module.Node(zarr, [])
-    multiscales = node.first(module.Multiscales)
-    assert multiscales is not None
-    reader = module.Reader(zarr)
-    return {
-        "array": reader_eq._array_signature(multiscales.array("0")),
-        "descend": [
-            reader_eq._node_signature(item, module) for item in reader.descend(node)
-        ],
-        "lookup": multiscales.lookup("multiscales", []),
-    }
+def _run_reader_image_surface(python_like: bool):
+    if python_like:
+        return reader_eq._python_reader_image_surface()
+    return reader_eq._native_reader_image_surface()
 
 
 def _verify_reader_image_surface() -> None:
     _assert_equal(
         "reader.image_surface",
-        _run_reader_image_surface(reader_eq._py_reader),
-        _run_reader_image_surface(reader_eq._cpp_reader),
+        _run_reader_image_surface(True),
+        _run_reader_image_surface(False),
     )
 
 
-def _bench_reader_image_surface(module) -> float:
-    return _touch_value(_run_reader_image_surface(module))
+def _bench_reader_image_surface(python_like: bool) -> float:
+    return _touch_value(_run_reader_image_surface(python_like))
 
 
-def _run_reader_plate_surface(module):
-    hierarchy = reader_eq._build_hcs_tree()
-    plate_zarr = hierarchy.nodes["/plate"]
-    plate_node = module.Node(plate_zarr, [])
-    plate = plate_node.first(module.Plate)
-    assert plate is not None
-    plate.get_pyramid_lazy(plate_node)
-    well_node = module.Node(hierarchy.nodes["/plate/A/1"], [])
-    return {
-        "get_numpy_type": str(plate.get_numpy_type(well_node)),
-        "get_tile_path": plate.get_tile_path(0, 0, 0),
-        "get_stitched_grid": reader_eq._array_signature(
-            plate.get_stitched_grid(0, (2, 3))
-        ),
-        "after_get_pyramid_lazy": {
-            "metadata": plate_node.metadata,
-            "data": [reader_eq._array_signature(item) for item in plate_node.data],
-        },
-        "reader_signature": reader_eq._reader_signature(module, plate_zarr),
-    }
+def _run_reader_plate_surface(python_like: bool):
+    if python_like:
+        return reader_eq._python_reader_plate_surface()
+    return reader_eq._native_reader_plate_surface()
 
 
 def _verify_reader_plate_surface() -> None:
     _assert_equal(
         "reader.plate_surface",
-        _run_reader_plate_surface(reader_eq._py_reader),
-        _run_reader_plate_surface(reader_eq._cpp_reader),
+        _run_reader_plate_surface(True),
+        _run_reader_plate_surface(False),
     )
 
 
-def _bench_reader_plate_surface(module) -> float:
-    return _touch_value(_run_reader_plate_surface(module))
+def _bench_reader_plate_surface(python_like: bool) -> float:
+    return _touch_value(_run_reader_plate_surface(python_like))
 
 
 def _verify_scaler_methods() -> None:
@@ -2168,32 +2116,32 @@ PUBLIC_API_CASES = (
         "matches",
         "Reader spec predicate surface on synthetic image and plate trees.",
         _verify_reader_matches,
-        lambda: _bench_reader_matches(reader_eq._py_reader),
-        lambda: _bench_reader_matches(reader_eq._cpp_reader),
+        lambda: _bench_reader_matches(True),
+        lambda: _bench_reader_matches(False),
     ),
     core_cases._make_case(
         "reader",
         "node_ops",
         "Node add/load/first/write_metadata behavior on synthetic image trees.",
         _verify_reader_node_ops,
-        lambda: _bench_reader_node_ops(reader_eq._py_reader),
-        lambda: _bench_reader_node_ops(reader_eq._cpp_reader),
+        lambda: _bench_reader_node_ops(True),
+        lambda: _bench_reader_node_ops(False),
     ),
     core_cases._make_case(
         "reader",
         "image_surface",
         "Reader image traversal, multiscale array access, and Spec.lookup.",
         _verify_reader_image_surface,
-        lambda: _bench_reader_image_surface(reader_eq._py_reader),
-        lambda: _bench_reader_image_surface(reader_eq._cpp_reader),
+        lambda: _bench_reader_image_surface(True),
+        lambda: _bench_reader_image_surface(False),
     ),
     core_cases._make_case(
         "reader",
         "plate_surface",
         "Reader plate traversal and Plate tile-grid helpers on a fake HCS tree.",
         _verify_reader_plate_surface,
-        lambda: _bench_reader_plate_surface(reader_eq._py_reader),
-        lambda: _bench_reader_plate_surface(reader_eq._cpp_reader),
+        lambda: _bench_reader_plate_surface(True),
+        lambda: _bench_reader_plate_surface(False),
     ),
     core_cases._make_case(
         "scale",
