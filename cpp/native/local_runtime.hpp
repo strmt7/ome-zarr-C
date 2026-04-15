@@ -30,4 +30,13 @@ struct LocalFinderResult {
 
 LocalFinderResult local_finder_csv(const std::string& input_path, int port);
 
+struct LocalDownloadResult {
+    std::string copied_root;
+    std::vector<std::string> listed_paths;
+};
+
+LocalDownloadResult local_download_copy(
+    const std::string& input_path,
+    const std::string& output_dir);
+
 }  // namespace ome_zarr_c::native_code

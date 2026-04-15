@@ -260,6 +260,13 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match finder \
   --native-match local.finder \
   --paired-case utils.finder=local.finder
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match download \
+  --python-match utils.download \
+  --native-match local.download \
+  --paired-case utils.download=local.download
 ```
 
 List the available cases across all suites:

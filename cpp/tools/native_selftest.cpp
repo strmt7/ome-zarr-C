@@ -552,7 +552,20 @@ void test_io_and_utils() {
     }
     {
         std::ofstream array_json(fixture_root / "image.zarr" / "0" / "zarr.json");
-        array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
+        array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"fill_value":0,"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
+    }
+    std::filesystem::create_directories(fixture_root / "image-v3.zarr" / "s0" / "c" / "0");
+    {
+        std::ofstream zarr_json(fixture_root / "image-v3.zarr" / "zarr.json");
+        zarr_json << R"({"attributes":{"ome":{"version":"0.5","multiscales":[{"axes":[{"name":"y","type":"space"},{"name":"x","type":"space"}],"datasets":[{"path":"s0","coordinateTransformations":[{"type":"scale","scale":[1,1]}]}]}]}},"zarr_format":3,"node_type":"group"})";
+    }
+    {
+        std::ofstream array_json(fixture_root / "image-v3.zarr" / "s0" / "zarr.json");
+        array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},{"name":"zstd","configuration":{"level":0,"checksum":false}}],"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
+    }
+    {
+        std::ofstream chunk(fixture_root / "image-v3.zarr" / "s0" / "c" / "0" / "0");
+        chunk << "chunk";
     }
 
     std::filesystem::create_directories(
@@ -610,6 +623,33 @@ void test_io_and_utils() {
             text.find("http://localhost:8012") != std::string::npos,
             "local finder csv body");
     }
+
+    const auto download_output = fixture_root / "downloads";
+    const auto download_result = local_download_copy(
+        (fixture_root / "image.zarr").generic_string(),
+        download_output.generic_string());
+    require_eq(
+        download_result.listed_paths,
+        std::vector<std::string>{"image.zarr"},
+        "local download listed paths");
+    require(
+        std::filesystem::exists(download_output / "image.zarr" / ".zattrs"),
+        "local download copied metadata");
+    require(
+        std::filesystem::exists(download_output / "image.zarr" / "0" / "zarr.json") ||
+            std::filesystem::exists(download_output / "image.zarr" / "0" / ".zarray"),
+        "local download copied array metadata");
+
+    const auto download_v3_output = fixture_root / "downloads-v3";
+    static_cast<void>(local_download_copy(
+        (fixture_root / "image-v3.zarr").generic_string(),
+        download_v3_output.generic_string()));
+    require(
+        std::filesystem::exists(download_v3_output / "image-v3.zarr" / "zarr.json"),
+        "local download v3 copied group metadata");
+    require(
+        std::filesystem::exists(download_v3_output / "image-v3.zarr" / "s0" / "c" / "0" / "0"),
+        "local download v3 copied chunks");
 }
 
 void test_reader_and_writer() {

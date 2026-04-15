@@ -26,7 +26,7 @@ Typical Ubuntu or Debian example:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build
+sudo apt-get install -y build-essential cmake ninja-build libblosc-dev libzstd-dev
 ```
 
 ## Configure And Build
@@ -95,12 +95,14 @@ Current commands:
 ```bash
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
 ./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
+./build-cpp/ome_zarr_native_cli download /tmp/demo/image.zarr --output /tmp/out
 ```
 
 Current scope:
 
 - `info`: standalone local metadata traversal for OME-Zarr image roots
 - `finder`: standalone local OME-Zarr discovery plus BioFile Finder CSV output
+- `download`: standalone local OME-Zarr export with real v2/v3 metadata and chunk rewriting
 
 This still does not replace the full historical Python CLI. The native product
 path is being expanded command by command, and every new standalone command
@@ -134,4 +136,11 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match finder \
   --native-match local.finder \
   --paired-case utils.finder=local.finder
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match download \
+  --python-match utils.download \
+  --native-match local.download \
+  --paired-case utils.download=local.download
 ```

@@ -6,13 +6,25 @@ import json
 import logging
 import os
 import random
+import shutil
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from collections import deque
 from contextlib import ExitStack, redirect_stdout
+from functools import lru_cache
 from pathlib import Path
 from unittest.mock import patch
 
+from benchmarks.runtime_support import (
+    run_download,
+    run_info,
+    write_minimal_v2_image,
+    write_minimal_v3_image,
+)
+from benchmarks.runtime_support import (
+    snapshot_tree as snapshot_json_tree,
+)
 from tests._outcomes import err, ok
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +32,71 @@ sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_utils = importlib.import_module("ome_zarr.utils")
 _cpp_utils = importlib.import_module("ome_zarr_c.utils")
+
+
+@lru_cache(maxsize=1)
+def _native_cli_path() -> Path:
+    cmake = shutil.which("cmake")
+    assert cmake is not None, "cmake is required for standalone native CLI tests"
+
+    build_dir = ROOT / "build-cpp-tests"
+    configure_cmd = [
+        cmake,
+        "-S",
+        str(ROOT),
+        "-B",
+        str(build_dir),
+        "-DCMAKE_BUILD_TYPE=Release",
+    ]
+    if shutil.which("ninja") is not None:
+        configure_cmd[1:1] = ["-G", "Ninja"]
+
+    subprocess.run(configure_cmd, check=True, capture_output=True, text=True)
+    subprocess.run(
+        [cmake, "--build", str(build_dir), "-j2"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    cli_path = build_dir / "ome_zarr_native_cli"
+    if not cli_path.exists():
+        cli_path = cli_path.with_suffix(".exe")
+    assert cli_path.exists(), "standalone native CLI binary was not built"
+    return cli_path
+
+
+def _run_native_cli(args: list[str]):
+    completed = subprocess.run(
+        [str(_native_cli_path()), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    payload = {
+        "returncode": completed.returncode,
+        "stderr": completed.stderr,
+    }
+    if completed.returncode == 0:
+        return ok(stdout=completed.stdout, payload=payload)
+    return err(
+        RuntimeError(completed.stderr.strip() or completed.stdout.strip()),
+        stdout=completed.stdout,
+        payload=payload,
+    )
+
+
+def _normalize_download_stdout(text: str, replacements: dict[str, str]) -> str:
+    normalized = text
+    for original, replacement in replacements.items():
+        normalized = normalized.replace(original, replacement)
+    lines = []
+    for line in normalized.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and "Completed" in stripped:
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
 
 
 def _run_strip_common_prefix(func, parts):
@@ -683,3 +760,55 @@ def test_view_matches_upstream_for_trailing_slash_image_path(tmp_path) -> None:
         patch_runtime=True,
     )
     assert expected == actual
+
+
+def test_native_cli_info_matches_upstream(tmp_path) -> None:
+    image = tmp_path / "image.zarr"
+    write_minimal_v2_image(image)
+
+    expected = run_info(_py_utils.info, image)
+    actual = _run_native_cli(["info", str(image)])
+
+    assert expected.status == actual.status == "ok"
+    assert actual.payload["stderr"] == ""
+    assert actual.stdout == expected.stdout
+
+
+def test_native_cli_finder_matches_upstream_dry_run_outputs(tmp_path) -> None:
+    py_data = tmp_path / "py-case" / "data"
+    cpp_data = tmp_path / "cpp-case" / "data"
+    _build_nested_finder_tree(py_data)
+    _build_nested_finder_tree(cpp_data)
+
+    expected = _run_finder(_py_utils.finder, py_data, port=8012, dry_run=True)
+    actual = _run_native_cli(["finder", str(cpp_data), "--port", "8012"])
+
+    assert expected.status == actual.status == "ok"
+    assert actual.payload["stderr"] == ""
+    assert actual.stdout == expected.stdout
+    assert _snapshot_tree(py_data) == _snapshot_tree(cpp_data)
+
+
+def test_native_cli_download_matches_upstream_for_v2_and_v3(tmp_path) -> None:
+    for writer, name in (
+        (write_minimal_v2_image, "image-v2.zarr"),
+        (write_minimal_v3_image, "image-v3.zarr"),
+    ):
+        source = tmp_path / name
+        py_output = tmp_path / f"py-{name}"
+        cpp_output = tmp_path / f"cpp-{name}"
+        writer(source)
+
+        expected = run_download(_py_utils.download, source, py_output)
+        actual = _run_native_cli(["download", str(source), f"--output={cpp_output}"])
+        replacements = {
+            str(py_output): "<OUT>",
+            str(cpp_output): "<OUT>",
+        }
+
+        assert expected.status == actual.status == "ok"
+        assert actual.payload["stderr"] == ""
+        assert _normalize_download_stdout(actual.stdout, replacements) == (
+            _normalize_download_stdout(expected.stdout, replacements)
+        )
+        assert expected.tree == snapshot_json_tree(cpp_output / source.name)

@@ -143,6 +143,10 @@ benchmark comparison, but it is not the target runtime product.
 43. Do not expose plan-only or helper-only commands in the shipped standalone
     native CLI. Native CLI surfaces must correspond to real runtime commands
     or durable product APIs, not temporary inspection shortcuts.
+44. When replacing transitional runtime behavior, extend the standalone native
+    library or CLI first. Do not widen the Python-visible harness unless the
+    change is strictly for parity proof, fixture generation, or benchmark
+    comparison around the native runtime.
 
 ## Fast load order
 

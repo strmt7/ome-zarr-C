@@ -234,7 +234,7 @@ Typical host prerequisites on Ubuntu or Debian:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build
+sudo apt-get install -y build-essential cmake ninja-build libblosc-dev libzstd-dev
 ```
 
 Configure and build:
@@ -303,6 +303,13 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --python-match finder \
   --native-match local.finder \
   --paired-case utils.finder=local.finder
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match download \
+  --python-match utils.download \
+  --native-match local.download \
+  --paired-case utils.download=local.download
 ```
 
 Current standalone native CLI commands:
@@ -310,6 +317,7 @@ Current standalone native CLI commands:
 ```bash
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
 ./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
+./build-cpp/ome_zarr_native_cli download /tmp/demo/image.zarr --output /tmp/out
 ```
 
 Run the current proven-safe local verification lane:

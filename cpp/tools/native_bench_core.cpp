@@ -193,7 +193,7 @@ const fs::path& bench_runtime_fixture_root() {
         }
         {
             std::ofstream array_json(info_v2 / "0" / "zarr.json");
-            array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
+            array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"fill_value":0,"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
         }
 
         const fs::path finder_root = root_path / "finder_tree";
@@ -460,6 +460,20 @@ std::uint64_t bench_local_finder(std::size_t) {
         result.app_url.size());
 }
 
+std::uint64_t bench_local_download(std::size_t iteration) {
+    const auto output_root =
+        bench_runtime_fixture_root() / ("download_out_" + std::to_string(iteration % 32U));
+    std::filesystem::remove_all(output_root);
+    const auto result = local_download_copy(
+        (bench_runtime_fixture_root() / "info_v2.zarr").string(),
+        output_root.string());
+    const auto copied_root = output_root / "info_v2.zarr";
+    const auto exists = std::filesystem::exists(copied_root / ".zattrs") ? 1U : 0U;
+    std::filesystem::remove_all(output_root);
+    return static_cast<std::uint64_t>(
+        result.copied_root.size() + result.listed_paths.size() + exists);
+}
+
 std::uint64_t bench_reader_plate_levels(std::size_t) {
     const auto plans = reader_plate_level_plans(
         {"A", "B", "C"},
@@ -592,6 +606,7 @@ int main(int argc, char** argv) {
             {"format.v01_init_store", 1, bench_format_v01_init_store},
             {"format.well_and_coord", 2, bench_format_well_and_coord},
             {"io_subpath", 1, bench_io_subpath},
+            {"local.download", 1, bench_local_download},
             {"local.finder", 1, bench_local_finder},
             {"local.find_multiscales", 1, bench_local_find_multiscales},
             {"local.info", 1, bench_local_info},
