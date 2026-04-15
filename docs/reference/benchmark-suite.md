@@ -243,6 +243,14 @@ The two layers are intentionally reported together but not conflated:
   harness
 - the native row measures pure `cpp/native` semantic cost
 
+For the `utils` hotspot, use:
+
+```bash
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --match utils \
+  --native-match utils
+```
+
 List the available cases across all suites:
 
 ```bash

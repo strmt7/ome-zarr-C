@@ -99,4 +99,24 @@ if(OME_ZARR_C_NATIVE_BUILD_TESTS)
         NAME ome_zarr_native_cli_generate_well
         COMMAND ome_zarr_native_cli format generate-well --path B/3 --rows A,B,C --columns 1,2,3
     )
+    add_test(
+        NAME ome_zarr_native_cli_view_plan
+        COMMAND ome_zarr_native_cli utils view-plan --path /tmp/demo/image.zarr --port 8013 --discovered-count 1
+    )
+    add_test(
+        NAME ome_zarr_native_cli_create_zarr_plan
+        COMMAND ome_zarr_native_cli data create-plan --version 0.5 --base-shape 1,3,512,512 --smallest-shape 1,3,64,64
+    )
+    add_test(
+        NAME ome_zarr_native_cli_io_subpath
+        COMMAND ome_zarr_native_cli io subpath --path /tmp/demo.zarr --subpath labels/0 --file
+    )
+    add_test(
+        NAME ome_zarr_native_cli_finder_plan
+        COMMAND ome_zarr_native_cli utils finder-plan --path /tmp/demo/images --port 8012
+    )
+    add_test(
+        NAME ome_zarr_native_cli_writer_image_plan
+        COMMAND ome_zarr_native_cli writer image-plan --axes t,c,y,x --scaler-present --scaler-max-layer 4 --scaler-method local_mean
+    )
 endif()
