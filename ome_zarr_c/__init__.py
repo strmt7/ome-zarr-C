@@ -5,7 +5,6 @@ try:
 except ImportError:
     __version__ = "0+unknown"
 
-from .axes import KNOWN_AXES, Axes
 from .format import (
     CurrentFormat,
     Format,
@@ -32,7 +31,6 @@ from .reader import (
 )
 
 __all__ = [
-    "Axes",
     "CurrentFormat",
     "Format",
     "FormatV01",
@@ -40,7 +38,6 @@ __all__ = [
     "FormatV03",
     "FormatV04",
     "FormatV05",
-    "KNOWN_AXES",
     "Label",
     "Labels",
     "Multiscales",

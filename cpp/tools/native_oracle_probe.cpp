@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "../../third_party/nlohmann/json.hpp"
+#include "../native/axes.hpp"
 #include "../native/data.hpp"
 #include "../native/conversions.hpp"
 #include "../native/csv.hpp"
@@ -44,6 +45,9 @@ struct Options {
     std::string target_shape_json;
     std::string circle_shape_json;
     std::string offset_json;
+    std::string axes_json;
+    std::string format_version;
+    std::string cases_json;
     bool has_path = false;
     bool has_value = false;
     bool has_col_type = false;
@@ -57,6 +61,9 @@ struct Options {
     bool has_target_shape_json = false;
     bool has_circle_shape_json = false;
     bool has_offset_json = false;
+    bool has_axes_json = false;
+    bool has_format_version = false;
+    bool has_cases_json = false;
     std::size_t loops = 1;
 };
 
@@ -84,6 +91,8 @@ std::size_t parse_positive_integer(const char* text, const char* flag_name) {
         << "  rgba-to-int --rgba-json JSON [--loops N]\n"
         << "  parse-csv-value --value TEXT --col-type TYPE [--loops N]\n"
         << "  dict-to-zarr --entries-json JSON --path PATH --zarr-id ID [--loops N]\n"
+        << "  axes --axes-json JSON --format-version VERSION [--loops N]\n"
+        << "  axes-batch --cases-json JSON\n"
         << "  make-circle --target-shape-json JSON --circle-shape-json JSON "
            "--offset-json JSON --value NUMBER --dtype DTYPE [--loops N]\n"
         << "  rgb-to-5d --shape-json JSON --values-json JSON --dtype DTYPE "
@@ -213,6 +222,30 @@ Options parse_options(const int argc, char** argv) {
             options.has_offset_json = true;
             continue;
         }
+        if (arg == "--axes-json") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --axes-json");
+            }
+            options.axes_json = argv[++index];
+            options.has_axes_json = true;
+            continue;
+        }
+        if (arg == "--format-version") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --format-version");
+            }
+            options.format_version = argv[++index];
+            options.has_format_version = true;
+            continue;
+        }
+        if (arg == "--cases-json") {
+            if (index + 1 >= argc) {
+                throw ExitError("Missing value after --cases-json");
+            }
+            options.cases_json = argv[++index];
+            options.has_cases_json = true;
+            continue;
+        }
         if (arg == "--help" || arg == "-h") {
             print_usage_and_exit(0);
         }
@@ -277,6 +310,189 @@ json encode_csv_value(const CsvValue& value) {
         return json{{"kind", "int"}, {"value", *integer}};
     }
     return json{{"kind", "bool"}, {"value", std::get<bool>(value)}};
+}
+
+std::string python_string_repr(std::string_view value) {
+    std::string rendered;
+    rendered.reserve(value.size() + 2U);
+    rendered.push_back('\'');
+    for (const char ch : value) {
+        if (ch == '\\' || ch == '\'') {
+            rendered.push_back('\\');
+        }
+        rendered.push_back(ch);
+    }
+    rendered.push_back('\'');
+    return rendered;
+}
+
+std::string python_dict_repr(const json& object) {
+    if (!object.is_object()) {
+        throw ExitError("Expected JSON object when building python-style repr");
+    }
+    std::string rendered = "{";
+    bool first = true;
+    for (const auto& item : object.items()) {
+        if (!first) {
+            rendered += ", ";
+        }
+        first = false;
+        rendered += python_string_repr(item.key());
+        rendered += ": ";
+        if (item.value().is_string()) {
+            rendered += python_string_repr(item.value().get_ref<const std::string&>());
+        } else if (item.value().is_null()) {
+            rendered += "None";
+        } else if (item.value().is_boolean()) {
+            rendered += item.value().get<bool>() ? "True" : "False";
+        } else {
+            rendered += item.value().dump();
+        }
+    }
+    rendered += "}";
+    return rendered;
+}
+
+std::vector<AxisRecord> parse_axis_records(const json& parsed) {
+    if (!parsed.is_array()) {
+        throw ExitError("--axes-json must decode to null or a JSON array");
+    }
+    std::vector<AxisRecord> records;
+    records.reserve(parsed.size());
+    for (const auto& item : parsed) {
+        if (item.is_string()) {
+            records.push_back(AxisRecord{
+                true,
+                item.get<std::string>(),
+                false,
+                "",
+                "",
+                "None",
+            });
+            continue;
+        }
+        if (!item.is_object()) {
+            throw ExitError("--axes-json entries must be strings or objects");
+        }
+        AxisRecord record{};
+        record.has_name = false;
+        record.name.clear();
+        record.has_type = false;
+        record.type.clear();
+        record.axis_repr = python_dict_repr(item);
+        record.type_repr = "None";
+        if (const auto name_it = item.find("name"); name_it != item.end()) {
+            if (!name_it->is_string()) {
+                throw ExitError("--axes-json object 'name' values must be strings");
+            }
+            record.has_name = true;
+            record.name = name_it->get<std::string>();
+        }
+        if (const auto type_it = item.find("type"); type_it != item.end()) {
+            if (!type_it->is_string()) {
+                throw ExitError("--axes-json object 'type' values must be strings");
+            }
+            record.has_type = true;
+            record.type = type_it->get<std::string>();
+            record.type_repr = python_string_repr(record.type);
+        }
+        records.push_back(std::move(record));
+    }
+    return records;
+}
+
+json encode_axis_records(const std::vector<AxisRecord>& records) {
+    json payload = json::array();
+    for (const auto& record : records) {
+        json axis = json::object();
+        if (record.has_name) {
+            axis["name"] = record.name;
+        }
+        if (record.has_type) {
+            axis["type"] = record.type;
+        }
+        payload.push_back(std::move(axis));
+    }
+    return payload;
+}
+
+json run_axes_payload(const json& parsed, const std::string& version) {
+
+    bool has_axes_attr = false;
+    std::vector<AxisRecord> axes;
+    if (!parsed.is_null()) {
+        has_axes_attr = true;
+        axes = axes_to_dicts(parse_axis_records(parsed));
+    } else if (version == "0.1" || version == "0.2") {
+        has_axes_attr = true;
+        axes = axes_to_dicts({
+            AxisRecord{true, "t", false, "", "", "None"},
+            AxisRecord{true, "c", false, "", "", "None"},
+            AxisRecord{true, "z", false, "", "", "None"},
+            AxisRecord{true, "y", false, "", "", "None"},
+            AxisRecord{true, "x", false, "", "", "None"},
+        });
+    } else {
+        return make_error_payload(
+            "AttributeError",
+            "'Axes' object has no attribute 'axes'");
+    }
+
+    try {
+        if (version == "0.3") {
+            validate_03(get_names(axes));
+        } else if (version != "0.1" && version != "0.2") {
+            validate_axes_types(axes);
+        }
+    } catch (const std::invalid_argument& exc) {
+        return make_error_payload("ValueError", exc.what());
+    }
+
+    const auto names = get_names(axes);
+    json payload = json::object();
+    payload["axes"] = has_axes_attr ? encode_axis_records(axes) : json(nullptr);
+    payload["to_list_03"] = names;
+    payload["to_list_04"] = encode_axis_records(axes);
+    return make_ok_payload(payload);
+}
+
+json run_axes(const Options& options) {
+    if (!options.has_axes_json) {
+        throw ExitError("axes requires --axes-json");
+    }
+    if (!options.has_format_version) {
+        throw ExitError("axes requires --format-version");
+    }
+
+    return run_axes_payload(json::parse(options.axes_json), options.format_version);
+}
+
+json run_axes_batch(const Options& options) {
+    if (!options.has_cases_json) {
+        throw ExitError("axes-batch requires --cases-json");
+    }
+    const json parsed = json::parse(options.cases_json);
+    if (!parsed.is_array()) {
+        throw ExitError("--cases-json must decode to a JSON array");
+    }
+
+    json results = json::array();
+    for (const auto& item : parsed) {
+        if (!item.is_object()) {
+            throw ExitError("--cases-json entries must be JSON objects");
+        }
+        const auto axes_it = item.find("axes");
+        const auto version_it = item.find("format_version");
+        if (axes_it == item.end()) {
+            throw ExitError("--cases-json entries require an 'axes' key");
+        }
+        if (version_it == item.end() || !version_it->is_string()) {
+            throw ExitError(
+                "--cases-json entries require string 'format_version' values");
+        }
+        results.push_back(run_axes_payload(*axes_it, version_it->get<std::string>()));
+    }
+    return make_ok_payload(results);
 }
 
 std::vector<std::size_t> parse_shape_vector(
@@ -790,6 +1006,10 @@ int main(int argc, char** argv) {
             payload = run_parse_csv_value(options);
         } else if (options.command == "dict-to-zarr") {
             payload = run_dict_to_zarr(options);
+        } else if (options.command == "axes") {
+            payload = run_axes(options);
+        } else if (options.command == "axes-batch") {
+            payload = run_axes_batch(options);
         } else if (options.command == "make-circle") {
             payload = run_make_circle(options);
         } else if (options.command == "rgb-to-5d") {

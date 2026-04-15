@@ -329,6 +329,146 @@ std::uint64_t bench_axes_validate_types(std::size_t) {
     return 1U;
 }
 
+std::uint64_t bench_axes_constructor(std::size_t iteration) {
+    static const std::vector<std::pair<std::string, std::vector<AxisRecord>>> kCases = {
+        {"0.1", {}},
+        {"0.2", {}},
+        {"0.3",
+         {
+             AxisRecord{true, "y", false, "", "", "None"},
+             AxisRecord{true, "x", false, "", "", "None"},
+         }},
+        {"0.4",
+         {
+             AxisRecord{true, "y", false, "", "", "None"},
+             AxisRecord{true, "x", false, "", "", "None"},
+         }},
+        {"0.5",
+         {
+             AxisRecord{true, "y", false, "", "", "None"},
+             AxisRecord{true, "x", false, "", "", "None"},
+         }},
+        {"0.3",
+         {
+             AxisRecord{true, "z", false, "", "", "None"},
+             AxisRecord{true, "y", false, "", "", "None"},
+             AxisRecord{true, "x", false, "", "", "None"},
+         }},
+        {"0.4",
+         {
+             AxisRecord{true, "z", false, "", "", "None"},
+             AxisRecord{true, "y", false, "", "", "None"},
+             AxisRecord{true, "x", false, "", "", "None"},
+         }},
+        {"0.5",
+         {
+             AxisRecord{true, "t", false, "", "", "None"},
+             AxisRecord{true, "c", false, "", "", "None"},
+             AxisRecord{true, "z", false, "", "", "None"},
+             AxisRecord{true, "y", false, "", "", "None"},
+             AxisRecord{true, "x", false, "", "", "None"},
+         }},
+        {"0.4",
+         {
+             AxisRecord{
+                 true,
+                 "z",
+                 true,
+                 "space",
+                 "{'name': 'z', 'type': 'space'}",
+                 "'space'",
+             },
+             AxisRecord{
+                 true,
+                 "y",
+                 true,
+                 "space",
+                 "{'name': 'y', 'type': 'space'}",
+                 "'space'",
+             },
+             AxisRecord{
+                 true,
+                 "x",
+                 true,
+                 "space",
+                 "{'name': 'x', 'type': 'space'}",
+                 "'space'",
+             },
+         }},
+        {"0.5",
+         {
+             AxisRecord{
+                 true,
+                 "t",
+                 true,
+                 "time",
+                 "{'name': 't', 'type': 'time'}",
+                 "'time'",
+             },
+             AxisRecord{
+                 true,
+                 "c",
+                 true,
+                 "channel",
+                 "{'name': 'c', 'type': 'channel'}",
+                 "'channel'",
+             },
+             AxisRecord{
+                 true,
+                 "y",
+                 true,
+                 "space",
+                 "{'name': 'y', 'type': 'space'}",
+                 "'space'",
+             },
+             AxisRecord{
+                 true,
+                 "x",
+                 true,
+                 "space",
+                 "{'name': 'x', 'type': 'space'}",
+                 "'space'",
+             },
+         }},
+    };
+
+    const auto& [version, input_axes] = kCases[iteration % kCases.size()];
+    std::vector<AxisRecord> axes;
+    if (input_axes.empty()) {
+        axes = axes_to_dicts({
+            AxisRecord{true, "t", false, "", "", "None"},
+            AxisRecord{true, "c", false, "", "", "None"},
+            AxisRecord{true, "z", false, "", "", "None"},
+            AxisRecord{true, "y", false, "", "", "None"},
+            AxisRecord{true, "x", false, "", "", "None"},
+        });
+    } else {
+        axes = axes_to_dicts(input_axes);
+    }
+
+    if (version == "0.3") {
+        const auto names = get_names(axes);
+        validate_03(names);
+        std::uint64_t total = 0U;
+        for (const auto& name : names) {
+            total += static_cast<std::uint64_t>(name.size());
+        }
+        return total;
+    }
+    if (version != "0.1" && version != "0.2") {
+        validate_axes_types(axes);
+    }
+
+    std::uint64_t total = 0U;
+    for (const auto& axis : axes) {
+        total += static_cast<std::uint64_t>(axis.name.size());
+        if (axis.has_type) {
+            total += static_cast<std::uint64_t>(axis.type.size());
+        }
+    }
+    return total;
+}
+
 std::uint64_t bench_conversions_roundtrip(std::size_t iteration) {
     const auto value = rgba_to_int(
         static_cast<std::uint8_t>(iteration & 0xFFU),
@@ -933,6 +1073,7 @@ int main(int argc, char** argv) {
         const Options options = parse_options(argc, argv);
         std::vector<CaseDefinition> cases = {
             {"axes_validate_types", 1, bench_axes_validate_types},
+            {"axes.constructor_batch", 16, bench_axes_constructor},
             {"cli.create_plan", 1, [](std::size_t iteration) {
                  const auto& method = iteration % 2U == 0 ? std::string("coins") : std::string("astronaut");
                  const auto plan = cli_create_plan(method);

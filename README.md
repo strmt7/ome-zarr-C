@@ -55,10 +55,6 @@ policy.
 The following upstream behaviors are native-backed and currently proven by
 differential tests on this runtime:
 
-- `ome_zarr_c.axes`
-  - axes normalization
-  - axis-name extraction
-  - OME-Zarr axis validation logic
 - `ome_zarr_c.format`
   - format implementation ordering
   - `format_from_version`

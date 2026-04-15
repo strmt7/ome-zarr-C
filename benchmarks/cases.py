@@ -35,6 +35,7 @@ from benchmarks.runtime_support import (
     write_minimal_v2_image,
     write_minimal_v3_image,
 )
+from tests import test_axes_equivalence as axes_eq
 from tests import test_cli_equivalence as cli_eq
 from tests import test_data_equivalence as data_eq
 from tests import test_data_runtime_equivalence as data_rt
@@ -59,7 +60,6 @@ _py_utils = importlib.import_module("ome_zarr.utils")
 _py_scale = importlib.import_module("ome_zarr.scale")
 _py_writer = importlib.import_module("ome_zarr.writer")
 
-_cpp_axes = importlib.import_module("ome_zarr_c.axes")
 _cpp_dask_utils = importlib.import_module("ome_zarr_c.dask_utils")
 _cpp_format = importlib.import_module("ome_zarr_c.format")
 _cpp_io = importlib.import_module("ome_zarr_c.io")
@@ -159,30 +159,34 @@ def _native_bench_timer(
         bench_path = utils_eq._native_cli_path().with_name("ome_zarr_native_bench_core")
         if not bench_path.exists():
             bench_path = bench_path.with_suffix(".exe")
-        completed = subprocess.run(
-            [
-                str(bench_path),
-                "--json",
-                "-",
-                "--rounds",
-                "1",
-                "--iterations",
-                str(max(1, loops)),
-                "--match",
-                native_match,
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        payload = json.loads(completed.stdout)
+        with tempfile.TemporaryDirectory(prefix="ome-zarr-c-native-bench-") as temp_dir:
+            json_path = Path(temp_dir) / "native.json"
+            completed = subprocess.run(
+                [
+                    str(bench_path),
+                    "--match",
+                    native_match,
+                    "--rounds",
+                    "1",
+                    "--iterations",
+                    str(max(1, loops)),
+                    "--json-output",
+                    str(json_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            del completed
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
         results = payload.get("results", [])
         if len(results) != 1:
             raise AssertionError(
                 "Expected exactly one native benchmark result for "
                 f"{native_match}, got {len(results)}"
             )
-        return float(results[0]["round_microseconds"][0]) / 1_000_000.0
+        item = results[0]
+        return float(item["median_us_per_op"]) * float(item["iterations"]) / 1_000_000.0
 
     return timer
 
@@ -584,35 +588,30 @@ def _verify_axes_constructor() -> None:
     _assert_parity(
         "micro.axes.constructor_batch",
         [
-            (
-                getattr(_py_axes.Axes(axes_input, py_fmt), "axes", None),
-                _py_axes.Axes(axes_input, py_fmt).to_list(_py_format.FormatV03()),
-                _py_axes.Axes(axes_input, py_fmt).to_list(_py_format.FormatV04()),
-            )
+            {
+                "axes": getattr(_py_axes.Axes(axes_input, py_fmt), "axes", None),
+                "to_list_03": _py_axes.Axes(axes_input, py_fmt).to_list(
+                    _py_format.FormatV03()
+                ),
+                "to_list_04": _py_axes.Axes(axes_input, py_fmt).to_list(
+                    _py_format.FormatV04()
+                ),
+            }
             for axes_input, py_fmt, _cpp_fmt in _AXES_CASES
         ],
         [
-            (
-                getattr(_cpp_axes.Axes(axes_input, cpp_fmt), "axes", None),
-                _cpp_axes.Axes(axes_input, cpp_fmt).to_list(_cpp_format.FormatV03()),
-                _cpp_axes.Axes(axes_input, cpp_fmt).to_list(_cpp_format.FormatV04()),
-            )
+            axes_eq._run_native_axes(axes_input, cpp_fmt)
             for axes_input, _py_fmt, cpp_fmt in _AXES_CASES
         ],
     )
 
 
-def _bench_axes_constructor(module: object) -> float:
+def _bench_axes_constructor_python() -> float:
     total = 0.0
-    for axes_input, py_fmt, cpp_fmt in _AXES_CASES:
-        fmt = py_fmt if module is _py_axes else cpp_fmt
-        instance = module.Axes(axes_input, fmt)
-        fmt03 = (
-            _py_format.FormatV03() if module is _py_axes else _cpp_format.FormatV03()
-        )
-        fmt04 = (
-            _py_format.FormatV04() if module is _py_axes else _cpp_format.FormatV04()
-        )
+    for axes_input, py_fmt, _cpp_fmt in _AXES_CASES:
+        instance = _py_axes.Axes(axes_input, py_fmt)
+        fmt03 = _py_format.FormatV03()
+        fmt04 = _py_format.FormatV04()
         total += _touch(instance.to_list(fmt03))
         total += _touch(instance.to_list(fmt04))
     return total
@@ -1338,13 +1337,21 @@ def _bench_cli_create_info(py_like: bool, case_name: str) -> float:
 
 
 ALL_CASES = (
-    _make_case(
-        "micro",
-        "axes.constructor_batch",
-        "Axes normalization plus to_list conversion across valid formats.",
-        _verify_axes_constructor,
-        lambda: _bench_axes_constructor(_py_axes),
-        lambda: _bench_axes_constructor(_cpp_axes),
+    BenchmarkCase(
+        group="micro",
+        name="axes.constructor_batch",
+        description="Axes normalization plus to_list conversion across valid formats.",
+        verify=_verify_axes_constructor,
+        python_timer=_make_timer(
+            "micro.axes.constructor_batch",
+            _verify_axes_constructor,
+            _bench_axes_constructor_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            "micro.axes.constructor_batch",
+            _verify_axes_constructor,
+            "axes.constructor_batch",
+        ),
     ),
     _make_case(
         "micro",
