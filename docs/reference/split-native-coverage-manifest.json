@@ -16,7 +16,7 @@
     {"upstream_file": "conversions.py", "qualname": "rgba_to_int", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/conversions.cpp"]},
 
     {"upstream_file": "csv.py", "qualname": "parse_csv_value", "binding_files": ["cpp/bindings/basic_bindings.cpp"], "native_files": ["cpp/native/csv.cpp"]},
-    {"upstream_file": "csv.py", "qualname": "csv_to_zarr", "binding_files": ["cpp/bindings/csv_bindings.cpp"], "native_files": ["cpp/native/csv.cpp"]},
+    {"upstream_file": "csv.py", "qualname": "csv_to_zarr", "binding_files": [], "native_files": ["cpp/native/csv.cpp", "cpp/native/local_runtime.cpp", "cpp/tools/native_cli.cpp"]},
     {"upstream_file": "csv.py", "qualname": "dict_to_zarr", "binding_files": ["cpp/bindings/csv_bindings.cpp"], "native_files": ["cpp/native/csv.cpp"]},
 
     {"upstream_file": "data.py", "qualname": "coins", "binding_files": ["cpp/bindings/data_bindings.cpp"], "native_files": ["cpp/native/data.cpp"]},

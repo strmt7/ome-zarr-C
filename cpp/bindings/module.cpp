@@ -3,7 +3,6 @@
 namespace py = pybind11;
 
 void register_basic_bindings(py::module_& m);
-void register_cli_bindings(py::module_& m);
 void register_csv_bindings(py::module_& m);
 void register_data_bindings(py::module_& m);
 void register_dask_utils_bindings(py::module_& m);
@@ -16,7 +15,6 @@ void register_writer_bindings(py::module_& m);
 
 PYBIND11_MODULE(_core, m) {
     register_basic_bindings(m);
-    register_cli_bindings(m);
     register_csv_bindings(m);
     register_data_bindings(m);
     register_dask_utils_bindings(m);

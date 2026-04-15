@@ -32,53 +32,6 @@ py::object parse_csv_value(const std::string& value, const std::string& col_type
     }
 }
 
-std::vector<std::vector<std::string>> read_csv_rows(const std::string& csv_path) {
-    py::object csv_module = py::module_::import("csv");
-    py::object path_cls = py::module_::import("pathlib").attr("Path");
-
-    std::vector<std::vector<std::string>> rows;
-    py::object csvfile = path_cls(py::str(csv_path))
-                             .attr("open")(
-                                 py::str("r"),
-                                 py::int_(-1),
-                                 py::none(),
-                                 py::none(),
-                                 py::str(""));
-    try {
-        py::object row_reader = csv_module.attr("reader")(csvfile);
-        for (const py::handle& row_handle : row_reader) {
-            py::list row = py::cast<py::list>(row_handle);
-            std::vector<std::string> native_row;
-            native_row.reserve(py::len(row));
-            for (const py::handle& value : row) {
-                native_row.push_back(py::cast<std::string>(value));
-            }
-            rows.push_back(std::move(native_row));
-        }
-        csvfile.attr("close")();
-    } catch (...) {
-        try {
-            csvfile.attr("close")();
-        } catch (...) {
-        }
-        throw;
-    }
-    return rows;
-}
-
-py::dict props_by_id_to_python(
-    const ome_zarr_c::native_code::CsvPropsById& props_by_id) {
-    py::dict result;
-    for (const auto& [row_id, props] : props_by_id) {
-        py::dict row_props;
-        for (const auto& [key, value] : props) {
-            row_props[py::str(key)] = py_from_csv_value(value);
-        }
-        result[py::str(row_id)] = row_props;
-    }
-    return result;
-}
-
 void dict_to_zarr(
     py::dict props_to_add,
     const std::string& zarr_path,
@@ -141,39 +94,9 @@ void dict_to_zarr(
     }
 }
 
-void csv_to_zarr(
-    const std::string& csv_path,
-    const std::string& csv_id,
-    const std::string& csv_keys,
-    const std::string& zarr_path,
-    const std::string& zarr_id) {
-    const auto rows = read_csv_rows(csv_path);
-    const auto specs = ome_zarr_c::native_code::parse_csv_key_specs(csv_keys);
-
-    try {
-        const auto props_by_id =
-            ome_zarr_c::native_code::csv_props_by_id(rows, csv_id, specs);
-        dict_to_zarr(props_by_id_to_python(props_by_id), zarr_path, zarr_id);
-    } catch (const std::invalid_argument&) {
-        py::list header;
-        if (!rows.empty()) {
-            for (const auto& value : rows.front()) {
-                header.append(py::str(value));
-            }
-        }
-        throw py::value_error(
-            "csv_id '" + csv_id + "' should match acsv column name: " +
-            ome_zarr_c::bindings::repr_object(header));
-    } catch (const std::out_of_range& exc) {
-        PyErr_SetString(PyExc_IndexError, exc.what());
-        throw py::error_already_set();
-    }
-}
-
 }  // namespace
 
 void register_csv_bindings(py::module_& m) {
-    m.def("csv_to_zarr", &csv_to_zarr);
     m.def("dict_to_zarr", &dict_to_zarr);
     m.def("parse_csv_value", &parse_csv_value);
 }

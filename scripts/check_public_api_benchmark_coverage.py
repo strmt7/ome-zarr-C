@@ -30,6 +30,9 @@ MODULES = (
 )
 
 EXCLUDED = {
+    "ome_zarr.cli.config_logging": (
+        "Python-only logging bootstrap; standalone product uses native CLI runtime"
+    ),
     "ome_zarr.format.Format.generate_coordinate_transformations": (
         "abstract base contract; benchmark concrete implementations instead"
     ),
@@ -57,15 +60,14 @@ EXCLUDED = {
 }
 
 COVERAGE = {
-    "ome_zarr.cli.config_logging": ["cli.config_logging"],
     "ome_zarr.cli.create": ["cli.create_wrapper"],
-    "ome_zarr.cli.csv_to_labels": ["cli.dispatch_wrappers"],
+    "ome_zarr.cli.csv_to_labels": ["csv.csv_to_zarr"],
     "ome_zarr.cli.download": ["cli.download_wrapper"],
-    "ome_zarr.cli.finder": ["cli.dispatch_wrappers"],
+    "ome_zarr.cli.finder": ["utils.finder"],
     "ome_zarr.cli.info": ["cli.info_wrapper"],
     "ome_zarr.cli.main": ["runtime.cli.create_info_v05", "runtime.cli.download_v05"],
     "ome_zarr.cli.scale": ["cli.scale_wrapper"],
-    "ome_zarr.cli.view": ["cli.dispatch_wrappers"],
+    "ome_zarr.cli.view": ["utils.view"],
     "ome_zarr.csv.csv_to_zarr": ["csv.csv_to_zarr"],
     "ome_zarr.csv.dict_to_zarr": ["csv.dict_to_zarr"],
     "ome_zarr.csv.parse_csv_value": [
@@ -143,7 +145,7 @@ COVERAGE = {
     "ome_zarr.scale.Scaler.methods": ["scale.scaler_methods"],
     "ome_zarr.scale.Scaler.nearest": ["meso.scaler.nearest_rgb"],
     "ome_zarr.scale.Scaler.resize_image": ["scale.scaler_resize_image"],
-    "ome_zarr.scale.Scaler.scale": ["scale.scaler_scale"],
+    "ome_zarr.scale.Scaler.scale": ["cli.scale_wrapper"],
     "ome_zarr.scale.Scaler.zoom": ["scale.scaler_zoom"],
     "ome_zarr.utils.download": ["utils.download"],
     "ome_zarr.utils.find_multiscales": ["utils.find_multiscales"],

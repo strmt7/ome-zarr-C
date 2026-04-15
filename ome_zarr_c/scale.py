@@ -9,7 +9,6 @@ from typing import Union, cast
 
 import dask.array as da
 import numpy as np
-import zarr
 from deprecated import deprecated
 from scipy import __version__ as scipy_version
 from skimage import __version__ as skimage_version
@@ -91,34 +90,11 @@ class Scaler:
     def methods():
         yield from _core.scaler_methods()
 
-    def scale(self, input_array: str, output_directory: str) -> None:
-        func = self.func
-
-        base = zarr.open_array(input_array)
-        pyramid = func(base)
-
-        if self.labeled:
-            _core.scaler_assert_values(pyramid)
-
-        grp = _core.scaler_create_group(output_directory, base, pyramid)
-
-        if self.copy_metadata:
-            print(f"copying attribute keys: {list(base.attrs.keys())}")
-            grp.attrs.update(base.attrs)
-
     @property
     def func(self):
         if self.method not in set(_core.scaler_methods()):
             raise Exception
         return getattr(self, self.method)
-
-    def __assert_values(self, pyramid: list[np.ndarray]) -> None:
-        _core.scaler_assert_values(pyramid)
-
-    def __create_group(
-        self, dir_path: str, base: np.ndarray, pyramid: list[np.ndarray]
-    ) -> zarr.Group:
-        return _core.scaler_create_group(dir_path, base, pyramid)
 
     def resize_image(self, image: ArrayLike) -> ArrayLike:
         return _core.scaler_resize_image(image, self.downscale, self.order)

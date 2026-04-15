@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import copy
 import io
-import logging
 import math
+import os
 import random
 import shutil
+import subprocess
 import tempfile
 import warnings
 from contextlib import nullcontext, redirect_stdout
@@ -32,7 +33,6 @@ from tests import test_format_equivalence as format_eq
 from tests import test_io_equivalence as io_eq
 from tests import test_reader_equivalence as reader_eq
 from tests import test_scaler_equivalence as scaler_eq
-from tests import test_scaler_runtime_equivalence as scaler_rt
 from tests import test_utils_equivalence as utils_eq
 from tests import test_writer_image_equivalence as writer_img_eq
 from tests import test_writer_runtime_equivalence as writer_rt
@@ -81,40 +81,6 @@ def _touch_value(value) -> float:
     return core_cases._touch(value)
 
 
-def _run_cli_config_logging(module) -> dict[str, int]:
-    records: dict[str, int] = {}
-    s3fs_logger = logging.getLogger("s3fs")
-    previous_level = s3fs_logger.level
-
-    def fake_basic_config(*, level: int) -> None:
-        records["level"] = level
-
-    args = argparse.Namespace(verbose=2, quiet=1)
-    try:
-        with patch.object(module.logging, "basicConfig", fake_basic_config):
-            module.config_logging(logging.WARNING, args)
-        records["s3fs_level"] = s3fs_logger.level
-        return records
-    finally:
-        s3fs_logger.setLevel(previous_level)
-
-
-def _run_cli_wrapper(module, func_name: str, attr_name: str, args):
-    records: dict[str, object] = {}
-    with (
-        patch.object(
-            module,
-            attr_name,
-            lambda *call_args, **call_kwargs: records.update(
-                {"call_args": call_args, "call_kwargs": call_kwargs}
-            ),
-        ),
-        patch.object(module.logging, "basicConfig", lambda **kwargs: None),
-    ):
-        getattr(module, func_name)(args)
-    return records
-
-
 def _run_cli_namespace(func, args, replacements: dict[str, str]):
     stream = io.StringIO()
     patched = (
@@ -130,6 +96,13 @@ def _run_cli_namespace(func, args, replacements: dict[str, str]):
         return err(
             exc, stdout=cli_eq._normalize_output(stream.getvalue(), replacements)
         )
+
+
+def _run_native_cli(args: list[str], replacements: dict[str, str] | None = None):
+    outcome = cli_eq._run_native_cli(args, replacements or {})
+    if outcome.status == "ok":
+        return ok(stdout=outcome.stdout)
+    return err(RuntimeError(outcome.error_message), stdout=outcome.stdout)
 
 
 def _run_utils_download(func, source: Path, output_dir: Path):
@@ -156,6 +129,55 @@ def _run_utils_download(func, source: Path, output_dir: Path):
                     (type(item.message).__name__, str(item.message)) for item in caught
                 ],
             )
+
+
+def _run_python_view(path: Path, *, port: int, force: bool):
+    outcome = utils_eq._run_view(
+        utils_eq._py_utils.view,
+        str(path),
+        port=port,
+        dry_run=False,
+        force=force,
+        patch_runtime=True,
+    )
+    if outcome.status != "ok":
+        return outcome
+    return ok(url=outcome.browser_calls[0], body=(path / ".zattrs").read_bytes())
+
+
+def _run_native_view(path: Path, *, port: int, force: bool):
+    browser_log = path.parent / "browser-url.txt"
+    browser_script = path.parent / "browser-recorder.sh"
+    browser_script.write_text('#!/bin/sh\nprintf \'%s\' "$1" > "$BROWSER_LOG_PATH"\n')
+    browser_script.chmod(0o755)
+
+    env = os.environ.copy()
+    env["BROWSER"] = str(browser_script)
+    env["BROWSER_LOG_PATH"] = str(browser_log)
+    args = ["view", str(path), "--port", str(port)]
+    if force:
+        args.append("--force")
+    process = utils_eq._spawn_native_cli(args, env=env)
+    try:
+        utils_eq._wait_for_path(browser_log)
+        body = utils_eq._wait_for_http(port, f"/{path.name}/.zattrs")
+        if process.poll() is not None:
+            stdout, stderr = process.communicate()
+            return err(
+                RuntimeError(stderr.strip() or stdout.strip()),
+                stdout=stdout,
+                stderr=stderr,
+            )
+        return ok(url=browser_log.read_text(), body=body)
+    except Exception as exc:  # noqa: BLE001
+        return err(exc)
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
 
 
 def _run_writer_multiscale(writer_module, format_module, root: Path):
@@ -304,80 +326,6 @@ def _run_writer_labels(writer_module, format_module, root: Path):
             )
 
 
-def _verify_cli_config_logging() -> None:
-    _assert_equal(
-        "cli.config_logging",
-        _run_cli_config_logging(cli_eq._py_cli),
-        _run_cli_config_logging(cli_eq._cpp_cli),
-    )
-
-
-def _bench_cli_config_logging(module) -> float:
-    return _touch_value(_run_cli_config_logging(module))
-
-
-def _verify_cli_dispatch_wrappers() -> None:
-    view_args = argparse.Namespace(
-        path="image.zarr", port=8001, force=True, verbose=0, quiet=0
-    )
-    finder_args = argparse.Namespace(path="images", port=9000, verbose=1, quiet=0)
-    csv_args = argparse.Namespace(
-        csv_path="props.csv",
-        csv_id="cell_id",
-        csv_keys="score#d",
-        zarr_path="image.zarr",
-        zarr_id="cell_id",
-        verbose=0,
-        quiet=0,
-    )
-    _assert_equal(
-        "cli.dispatch_wrappers",
-        {
-            "view": _run_cli_wrapper(cli_eq._py_cli, "view", "zarr_view", view_args),
-            "finder": _run_cli_wrapper(
-                cli_eq._py_cli, "finder", "bff_finder", finder_args
-            ),
-            "csv_to_labels": _run_cli_wrapper(
-                cli_eq._py_cli, "csv_to_labels", "csv_to_zarr", csv_args
-            ),
-        },
-        {
-            "view": _run_cli_wrapper(cli_eq._cpp_cli, "view", "zarr_view", view_args),
-            "finder": _run_cli_wrapper(
-                cli_eq._cpp_cli, "finder", "bff_finder", finder_args
-            ),
-            "csv_to_labels": _run_cli_wrapper(
-                cli_eq._cpp_cli, "csv_to_labels", "csv_to_zarr", csv_args
-            ),
-        },
-    )
-
-
-def _bench_cli_dispatch_wrappers(module) -> float:
-    view_args = argparse.Namespace(
-        path="image.zarr", port=8001, force=True, verbose=0, quiet=0
-    )
-    finder_args = argparse.Namespace(path="images", port=9000, verbose=1, quiet=0)
-    csv_args = argparse.Namespace(
-        csv_path="props.csv",
-        csv_id="cell_id",
-        csv_keys="score#d",
-        zarr_path="image.zarr",
-        zarr_id="cell_id",
-        verbose=0,
-        quiet=0,
-    )
-    return _touch_value(
-        {
-            "view": _run_cli_wrapper(module, "view", "zarr_view", view_args),
-            "finder": _run_cli_wrapper(module, "finder", "bff_finder", finder_args),
-            "csv_to_labels": _run_cli_wrapper(
-                module, "csv_to_labels", "csv_to_zarr", csv_args
-            ),
-        }
-    )
-
-
 def _verify_cli_create_wrapper() -> None:
     py_root = _temp_dir("py-cli-create") / "image.zarr"
     cpp_root = _temp_dir("cpp-cli-create") / "image.zarr"
@@ -396,15 +344,8 @@ def _verify_cli_create_wrapper() -> None:
             replacements,
         )
         random.seed(0)
-        cpp_outcome = _run_cli_namespace(
-            cli_eq._cpp_cli.create,
-            argparse.Namespace(
-                method="coins",
-                path=str(cpp_root),
-                format="0.5",
-                verbose=0,
-                quiet=0,
-            ),
+        cpp_outcome = _run_native_cli(
+            ["create", "--method=coins", str(cpp_root), "--format", "0.5"],
             replacements,
         )
         _assert_equal(
@@ -422,22 +363,28 @@ def _verify_cli_create_wrapper() -> None:
         shutil.rmtree(cpp_root.parent, ignore_errors=True)
 
 
-def _bench_cli_create_wrapper(module) -> float:
+def _bench_cli_create_wrapper(py_like: bool) -> float:
     root = _temp_dir("cli-create") / "image.zarr"
     replacements = {str(root): "<ROOT>"}
     try:
         random.seed(0)
-        outcome = _run_cli_namespace(
-            module.create,
-            argparse.Namespace(
-                method="coins",
-                path=str(root),
-                format="0.5",
-                verbose=0,
-                quiet=0,
-            ),
-            replacements,
-        )
+        if py_like:
+            outcome = _run_cli_namespace(
+                cli_eq._py_cli.create,
+                argparse.Namespace(
+                    method="coins",
+                    path=str(root),
+                    format="0.5",
+                    verbose=0,
+                    quiet=0,
+                ),
+                replacements,
+            )
+        else:
+            outcome = _run_native_cli(
+                ["create", "--method=coins", str(root), "--format", "0.5"],
+                replacements,
+            )
         return _touch_outcome(outcome) + _touch_value(snapshot_tree(root))
     finally:
         shutil.rmtree(root.parent, ignore_errors=True)
@@ -462,32 +409,26 @@ def _verify_cli_info_wrapper() -> None:
                 ),
                 replacements,
             ),
-            _run_cli_namespace(
-                cli_eq._cpp_cli.info,
-                argparse.Namespace(
-                    path=str(cpp_root),
-                    stats=True,
-                    verbose=0,
-                    quiet=0,
-                ),
-                replacements,
-            ),
+            _run_native_cli(["info", str(cpp_root), "--stats"], replacements),
         )
     finally:
         shutil.rmtree(py_root.parent, ignore_errors=True)
         shutil.rmtree(cpp_root.parent, ignore_errors=True)
 
 
-def _bench_cli_info_wrapper(module) -> float:
+def _bench_cli_info_wrapper(py_like: bool) -> float:
     root = _temp_dir("cli-info") / "image.zarr"
     replacements = {str(root): "<ROOT>"}
     try:
         write_minimal_v2_image(root)
-        outcome = _run_cli_namespace(
-            module.info,
-            argparse.Namespace(path=str(root), stats=True, verbose=0, quiet=0),
-            replacements,
-        )
+        if py_like:
+            outcome = _run_cli_namespace(
+                cli_eq._py_cli.info,
+                argparse.Namespace(path=str(root), stats=True, verbose=0, quiet=0),
+                replacements,
+            )
+        else:
+            outcome = _run_native_cli(["info", str(root), "--stats"], replacements)
         return _touch_outcome(outcome)
     finally:
         shutil.rmtree(root.parent, ignore_errors=True)
@@ -517,26 +458,16 @@ def _verify_cli_download_wrapper() -> None:
             ),
             replacements,
         )
-        actual = _run_cli_namespace(
-            cli_eq._cpp_cli.download,
-            argparse.Namespace(
-                path=str(cpp_source),
-                output=str(cpp_output),
-                verbose=0,
-                quiet=0,
-            ),
+        actual = _run_native_cli(
+            ["download", str(cpp_source), f"--output={cpp_output}"],
             replacements,
         )
         if expected.status != actual.status or expected.status != "ok":
             _assert_equal("cli.download_wrapper.status", expected, actual)
-        if "downloading..." not in (expected.stdout or ""):
-            raise AssertionError(
-                "Benchmark case cli.download_wrapper lost upstream output"
-            )
-        if "downloading..." not in (actual.stdout or ""):
-            raise AssertionError(
-                "Benchmark case cli.download_wrapper lost native output"
-            )
+        if utils_eq._normalize_download_stdout(
+            expected.stdout, replacements
+        ) != utils_eq._normalize_download_stdout(actual.stdout, replacements):
+            raise AssertionError("Benchmark case cli.download_wrapper lost parity")
         _assert_equal(
             "cli.download_wrapper.tree",
             rewrite_snapshot_prefix(
@@ -555,7 +486,7 @@ def _verify_cli_download_wrapper() -> None:
         shutil.rmtree(cpp_source.parent, ignore_errors=True)
 
 
-def _bench_cli_download_wrapper(module) -> float:
+def _bench_cli_download_wrapper(py_like: bool) -> float:
     source = _temp_dir("cli-download-wrap") / "source.zarr"
     output = source.parent / "downloads"
     replacements = {
@@ -564,16 +495,22 @@ def _bench_cli_download_wrapper(module) -> float:
     }
     try:
         write_minimal_v2_image(source)
-        outcome = _run_cli_namespace(
-            module.download,
-            argparse.Namespace(
-                path=str(source),
-                output=str(output),
-                verbose=0,
-                quiet=0,
-            ),
-            replacements,
-        )
+        if py_like:
+            outcome = _run_cli_namespace(
+                cli_eq._py_cli.download,
+                argparse.Namespace(
+                    path=str(source),
+                    output=str(output),
+                    verbose=0,
+                    quiet=0,
+                ),
+                replacements,
+            )
+        else:
+            outcome = _run_native_cli(
+                ["download", str(source), f"--output={output}"],
+                replacements,
+            )
         return _touch_outcome(outcome) + _touch_value(snapshot_tree(output))
     finally:
         shutil.rmtree(source.parent, ignore_errors=True)
@@ -621,18 +558,16 @@ def _verify_cli_scale_wrapper() -> None:
                 ),
                 replacements,
             ),
-            _run_cli_namespace(
-                cli_eq._cpp_cli.scale,
-                argparse.Namespace(
-                    input_array=str(cpp_input),
-                    output_directory=str(cpp_output),
-                    axes="yx",
-                    copy_metadata=True,
-                    method="nearest",
-                    in_place=False,
-                    downscale=2,
-                    max_layer=2,
-                ),
+            _run_native_cli(
+                [
+                    "scale",
+                    str(cpp_input),
+                    str(cpp_output),
+                    "yx",
+                    "--copy-metadata",
+                    "--method=nearest",
+                    "--max_layer=2",
+                ],
                 replacements,
             ),
         )
@@ -646,7 +581,7 @@ def _verify_cli_scale_wrapper() -> None:
         shutil.rmtree(cpp_input.parent, ignore_errors=True)
 
 
-def _bench_cli_scale_wrapper(module) -> float:
+def _bench_cli_scale_wrapper(py_like: bool) -> float:
     input_path = _temp_dir("cli-scale") / "input.zarr"
     output_path = input_path.parent / "output.zarr"
     replacements = {
@@ -655,20 +590,34 @@ def _bench_cli_scale_wrapper(module) -> float:
     }
     try:
         _write_scale_input(input_path)
-        outcome = _run_cli_namespace(
-            module.scale,
-            argparse.Namespace(
-                input_array=str(input_path),
-                output_directory=str(output_path),
-                axes="yx",
-                copy_metadata=True,
-                method="nearest",
-                in_place=False,
-                downscale=2,
-                max_layer=2,
-            ),
-            replacements,
-        )
+        if py_like:
+            outcome = _run_cli_namespace(
+                cli_eq._py_cli.scale,
+                argparse.Namespace(
+                    input_array=str(input_path),
+                    output_directory=str(output_path),
+                    axes="yx",
+                    copy_metadata=True,
+                    method="nearest",
+                    in_place=False,
+                    downscale=2,
+                    max_layer=2,
+                ),
+                replacements,
+            )
+        else:
+            outcome = _run_native_cli(
+                [
+                    "scale",
+                    str(input_path),
+                    str(output_path),
+                    "yx",
+                    "--copy-metadata",
+                    "--method=nearest",
+                    "--max_layer=2",
+                ],
+                replacements,
+            )
         return _touch_outcome(outcome) + _touch_value(snapshot_tree(output_path))
     finally:
         shutil.rmtree(input_path.parent, ignore_errors=True)
@@ -766,31 +715,32 @@ def _verify_csv_csv_to_zarr() -> None:
         )
         csv_eq._write_csv(py_csv_path, [["cell_id", "score#d"], ["1", "4.5"]])
         csv_eq._write_csv(cpp_csv_path, [["cell_id", "score#d"], ["1", "4.5"]])
-        _assert_equal(
-            "csv.csv_to_zarr",
-            csv_eq._run_csv_to_zarr(
-                csv_eq._py_csv.csv_to_zarr,
-                py_csv_path,
-                "cell_id",
-                "score#d",
-                py_root,
-                "cell_id",
-            ),
-            csv_eq._run_csv_to_zarr(
-                csv_eq._cpp_csv.csv_to_zarr,
-                cpp_csv_path,
-                "cell_id",
-                "score#d",
-                cpp_root,
-                "cell_id",
-            ),
+        expected = csv_eq._run_csv_to_zarr(
+            csv_eq._py_csv.csv_to_zarr,
+            py_csv_path,
+            "cell_id",
+            "score#d",
+            py_root,
+            "cell_id",
         )
+        actual = _run_native_cli(
+            [
+                "csv_to_labels",
+                str(cpp_csv_path),
+                "cell_id",
+                "score#d",
+                str(cpp_root),
+                "cell_id",
+            ]
+        )
+        assert expected.status == actual.status == "ok"
+        assert snapshot_tree(py_root) == snapshot_tree(cpp_root)
     finally:
         shutil.rmtree(py_root.parent, ignore_errors=True)
         shutil.rmtree(cpp_root.parent, ignore_errors=True)
 
 
-def _bench_csv_csv_to_zarr(module) -> float:
+def _bench_csv_csv_to_zarr(py_like: bool) -> float:
     root = _temp_dir("csv-csv-to-zarr") / "image.zarr"
     csv_path = root.parent / "props.csv"
     try:
@@ -800,9 +750,26 @@ def _bench_csv_csv_to_zarr(module) -> float:
             {"labels/0": {"image-label": {"properties": [{"cell_id": 1}]}}},
         )
         csv_eq._write_csv(csv_path, [["cell_id", "score#d"], ["1", "4.5"]])
-        outcome = csv_eq._run_csv_to_zarr(
-            module.csv_to_zarr, csv_path, "cell_id", "score#d", root, "cell_id"
-        )
+        if py_like:
+            outcome = csv_eq._run_csv_to_zarr(
+                csv_eq._py_csv.csv_to_zarr,
+                csv_path,
+                "cell_id",
+                "score#d",
+                root,
+                "cell_id",
+            )
+        else:
+            outcome = _run_native_cli(
+                [
+                    "csv_to_labels",
+                    str(csv_path),
+                    "cell_id",
+                    "score#d",
+                    str(root),
+                    "cell_id",
+                ]
+            )
         return _touch_outcome(outcome)
     finally:
         shutil.rmtree(root.parent, ignore_errors=True)
@@ -1413,63 +1380,49 @@ def _verify_utils_finder_and_view() -> None:
     try:
         utils_eq._build_nested_finder_tree(finder_root)
         utils_eq._build_simple_view_tree(view_root)
-        _assert_equal(
-            "utils.finder",
-            utils_eq._run_finder(
-                utils_eq._py_utils.finder, str(finder_root), port=8012, dry_run=True
-            ),
-            utils_eq._run_finder(
-                utils_eq._cpp_utils.finder, str(finder_root), port=8012, dry_run=True
-            ),
+        expected_finder = utils_eq._run_finder(
+            utils_eq._py_utils.finder, str(finder_root), port=8012, dry_run=True
         )
-        _assert_equal(
-            "utils.view",
-            utils_eq._run_view(
-                utils_eq._py_utils.view,
-                str(view_root / "image.zarr"),
-                port=8013,
-                dry_run=True,
-                force=False,
-            ),
-            utils_eq._run_view(
-                utils_eq._cpp_utils.view,
-                str(view_root / "image.zarr"),
-                port=8013,
-                dry_run=True,
-                force=False,
-            ),
+        actual_finder = _run_native_cli(["finder", str(finder_root), "--port", "8012"])
+        assert expected_finder.status == actual_finder.status == "ok"
+        assert expected_finder.stdout == actual_finder.stdout
+
+        expected_view = _run_python_view(
+            view_root / "image.zarr", port=8013, force=False
         )
+        actual_view = _run_native_view(view_root / "image.zarr", port=8013, force=False)
+        assert expected_view.status == actual_view.status == "ok"
+        assert expected_view.url == actual_view.url
+        assert expected_view.body == actual_view.body
     finally:
         shutil.rmtree(finder_root, ignore_errors=True)
         shutil.rmtree(view_root, ignore_errors=True)
 
 
-def _bench_utils_finder(module) -> float:
+def _bench_utils_finder(py_like: bool) -> float:
     finder_root = _temp_dir("finder-bench")
     try:
         utils_eq._build_nested_finder_tree(finder_root)
-        return _touch_outcome(
-            utils_eq._run_finder(
-                module.finder, str(finder_root), port=8012, dry_run=True
+        if py_like:
+            outcome = utils_eq._run_finder(
+                utils_eq._py_utils.finder, str(finder_root), port=8012, dry_run=True
             )
-        )
+        else:
+            outcome = _run_native_cli(["finder", str(finder_root), "--port", "8012"])
+        return _touch_outcome(outcome)
     finally:
         shutil.rmtree(finder_root, ignore_errors=True)
 
 
-def _bench_utils_view(module) -> float:
+def _bench_utils_view(py_like: bool) -> float:
     view_root = _temp_dir("view-bench")
     try:
         utils_eq._build_simple_view_tree(view_root)
-        return _touch_outcome(
-            utils_eq._run_view(
-                module.view,
-                str(view_root / "image.zarr"),
-                port=8013,
-                dry_run=True,
-                force=False,
-            )
-        )
+        if py_like:
+            outcome = _run_python_view(view_root / "image.zarr", port=8013, force=False)
+        else:
+            outcome = _run_native_view(view_root / "image.zarr", port=8013, force=False)
+        return _touch_outcome(outcome)
     finally:
         shutil.rmtree(view_root, ignore_errors=True)
 
@@ -1483,28 +1436,32 @@ def _verify_utils_download() -> None:
         write_minimal_v2_image(py_source)
         write_minimal_v2_image(cpp_source)
         left = _run_utils_download(utils_eq._py_utils.download, py_source, py_output)
-        right = _run_utils_download(
-            utils_eq._cpp_utils.download, cpp_source, cpp_output
-        )
+        right = _run_native_cli(["download", str(cpp_source), f"--output={cpp_output}"])
         if left.status != right.status or left.status != "ok":
             _assert_equal("utils.download.status", left, right)
-        if "downloading..." not in (left.stdout or ""):
-            raise AssertionError("Benchmark case utils.download lost upstream output")
-        if "downloading..." not in (right.stdout or ""):
-            raise AssertionError("Benchmark case utils.download lost native output")
-        _assert_equal("utils.download.tree", left.tree, right.tree)
-        _assert_equal("utils.download.records", left.records, right.records)
+        if utils_eq._normalize_download_stdout(
+            left.stdout, {}
+        ) != utils_eq._normalize_download_stdout(right.stdout, {}):
+            raise AssertionError("Benchmark case utils.download lost parity")
+        _assert_equal(
+            "utils.download.tree",
+            left.tree,
+            snapshot_tree(cpp_output / cpp_source.name),
+        )
     finally:
         shutil.rmtree(py_source.parent, ignore_errors=True)
         shutil.rmtree(cpp_source.parent, ignore_errors=True)
 
 
-def _bench_utils_download(module) -> float:
+def _bench_utils_download(py_like: bool) -> float:
     source = _temp_dir("utils-download") / "source-v2.zarr"
     output = source.parent / "downloads"
     try:
         write_minimal_v2_image(source)
-        outcome = _run_utils_download(module.download, source, output)
+        if py_like:
+            outcome = _run_utils_download(utils_eq._py_utils.download, source, output)
+        else:
+            outcome = _run_native_cli(["download", str(source), f"--output={output}"])
         return _touch_outcome(outcome)
     finally:
         shutil.rmtree(source.parent, ignore_errors=True)
@@ -1670,56 +1627,6 @@ def _bench_scaler_method(module, method_name: str, inputs: list[object]) -> floa
             scaler_eq._run_scaler_method(module.Scaler, method_name, item)
         )
     return total
-
-
-def _verify_scaler_scale_runtime() -> None:
-    data = np.arange(64, dtype=np.uint16).reshape(8, 8)
-    py_input = _temp_dir("py-scaler-scale") / "input.zarr"
-    cpp_input = _temp_dir("cpp-scaler-scale") / "input.zarr"
-    try:
-        scaler_rt._write_input_array(py_input, data, attrs={"alpha": 1})
-        scaler_rt._write_input_array(cpp_input, data, attrs={"alpha": 1})
-        _assert_equal(
-            "scale.scaler_scale",
-            scaler_rt._run_scaler_scale(
-                scaler_eq._py_scale,
-                py_input,
-                py_input.parent / "output.zarr",
-                copy_metadata=True,
-                max_layer=2,
-                method="nearest",
-            ),
-            scaler_rt._run_scaler_scale(
-                scaler_eq._cpp_scale,
-                cpp_input,
-                cpp_input.parent / "output.zarr",
-                copy_metadata=True,
-                max_layer=2,
-                method="nearest",
-            ),
-        )
-    finally:
-        shutil.rmtree(py_input.parent, ignore_errors=True)
-        shutil.rmtree(cpp_input.parent, ignore_errors=True)
-
-
-def _bench_scaler_scale_runtime(scale_module) -> float:
-    input_path = _temp_dir("scaler-scale") / "input.zarr"
-    try:
-        scaler_rt._write_input_array(
-            input_path, np.arange(64, dtype=np.uint16).reshape(8, 8), attrs={"alpha": 1}
-        )
-        outcome = scaler_rt._run_scaler_scale(
-            scale_module,
-            input_path,
-            input_path.parent / "output.zarr",
-            copy_metadata=True,
-            max_layer=2,
-            method="nearest",
-        )
-        return _touch_outcome(outcome)
-    finally:
-        shutil.rmtree(input_path.parent, ignore_errors=True)
 
 
 def _verify_writer_metadata_helpers() -> None:
@@ -2075,51 +1982,35 @@ def _bench_writer_labels(writer_module, format_module) -> float:
 PUBLIC_API_CASES = (
     core_cases._make_case(
         "cli",
-        "config_logging",
-        "CLI logging configuration parity for verbose and quiet adjustments.",
-        _verify_cli_config_logging,
-        lambda: _bench_cli_config_logging(cli_eq._py_cli),
-        lambda: _bench_cli_config_logging(cli_eq._cpp_cli),
-    ),
-    core_cases._make_case(
-        "cli",
-        "dispatch_wrappers",
-        "CLI wrapper dispatch for view, finder, and csv_to_labels.",
-        _verify_cli_dispatch_wrappers,
-        lambda: _bench_cli_dispatch_wrappers(cli_eq._py_cli),
-        lambda: _bench_cli_dispatch_wrappers(cli_eq._cpp_cli),
-    ),
-    core_cases._make_case(
-        "cli",
         "create_wrapper",
-        "Direct cli.create wrapper with local synthetic coins output.",
+        "Native CLI create command versus upstream cli.create semantics.",
         _verify_cli_create_wrapper,
-        lambda: _bench_cli_create_wrapper(cli_eq._py_cli),
-        lambda: _bench_cli_create_wrapper(cli_eq._cpp_cli),
+        lambda: _bench_cli_create_wrapper(True),
+        lambda: _bench_cli_create_wrapper(False),
     ),
     core_cases._make_case(
         "cli",
         "info_wrapper",
-        "Direct cli.info wrapper on a local minimal v2 image.",
+        "Native CLI info command versus upstream cli.info semantics.",
         _verify_cli_info_wrapper,
-        lambda: _bench_cli_info_wrapper(cli_eq._py_cli),
-        lambda: _bench_cli_info_wrapper(cli_eq._cpp_cli),
+        lambda: _bench_cli_info_wrapper(True),
+        lambda: _bench_cli_info_wrapper(False),
     ),
     core_cases._make_case(
         "cli",
         "download_wrapper",
-        "Direct cli.download wrapper on a local minimal v2 image.",
+        "Native CLI download command versus upstream cli.download semantics.",
         _verify_cli_download_wrapper,
-        lambda: _bench_cli_download_wrapper(cli_eq._py_cli),
-        lambda: _bench_cli_download_wrapper(cli_eq._cpp_cli),
+        lambda: _bench_cli_download_wrapper(True),
+        lambda: _bench_cli_download_wrapper(False),
     ),
     core_cases._make_case(
         "cli",
         "scale_wrapper",
-        "Direct cli.scale wrapper on a local 2D array input.",
+        "Native CLI scale command versus upstream cli.scale semantics.",
         _verify_cli_scale_wrapper,
-        lambda: _bench_cli_scale_wrapper(cli_eq._py_cli),
-        lambda: _bench_cli_scale_wrapper(cli_eq._cpp_cli),
+        lambda: _bench_cli_scale_wrapper(True),
+        lambda: _bench_cli_scale_wrapper(False),
     ),
     core_cases._make_case(
         "csv",
@@ -2140,10 +2031,10 @@ PUBLIC_API_CASES = (
     core_cases._make_case(
         "csv",
         "csv_to_zarr",
-        "CSV-driven metadata injection into label properties.",
+        "CSV-driven metadata injection versus the native csv_to_labels runtime.",
         _verify_csv_csv_to_zarr,
-        lambda: _bench_csv_csv_to_zarr(csv_eq._py_csv),
-        lambda: _bench_csv_csv_to_zarr(csv_eq._cpp_csv),
+        lambda: _bench_csv_csv_to_zarr(True),
+        lambda: _bench_csv_csv_to_zarr(False),
     ),
     core_cases._make_case(
         "data",
@@ -2362,14 +2253,6 @@ PUBLIC_API_CASES = (
         ),
     ),
     core_cases._make_case(
-        "scale",
-        "scaler_scale",
-        "Deprecated Scaler.scale disk-writing workflow with metadata copy.",
-        _verify_scaler_scale_runtime,
-        lambda: _bench_scaler_scale_runtime(scaler_eq._py_scale),
-        lambda: _bench_scaler_scale_runtime(scaler_eq._cpp_scale),
-    ),
-    core_cases._make_case(
         "writer",
         "metadata_helpers",
         "add_metadata and get_metadata parity on a v0.5 group.",
@@ -2452,24 +2335,24 @@ PUBLIC_API_CASES = (
         "finder",
         "Directory discovery and CSV planning for BioFile Finder output.",
         _verify_utils_finder_and_view,
-        lambda: _bench_utils_finder(utils_eq._py_utils),
-        lambda: _bench_utils_finder(utils_eq._cpp_utils),
+        lambda: _bench_utils_finder(True),
+        lambda: _bench_utils_finder(False),
     ),
     core_cases._make_case(
         "utils",
         "view",
         "Validator-view serving plan on a local OME-Zarr path.",
         _verify_utils_finder_and_view,
-        lambda: _bench_utils_view(utils_eq._py_utils),
-        lambda: _bench_utils_view(utils_eq._cpp_utils),
+        lambda: _bench_utils_view(True),
+        lambda: _bench_utils_view(False),
     ),
     core_cases._make_case(
         "utils",
         "download",
         "Local OME-Zarr download roundtrip on a minimal v2 image.",
         _verify_utils_download,
-        lambda: _bench_utils_download(utils_eq._py_utils),
-        lambda: _bench_utils_download(utils_eq._cpp_utils),
+        lambda: _bench_utils_download(True),
+        lambda: _bench_utils_download(False),
     ),
 )
 

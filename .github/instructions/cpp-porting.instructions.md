@@ -17,6 +17,11 @@
   semantics there; reduce or delete it in later slices. Remove redundant
   `setup.py` sources and direct `cpp/bindings/` dependencies on standalone
   runtime modules as soon as the native path is proven.
+- When a standalone-native runtime replacement already exists, prefer deleting
+  the matching wrapper/binding/runtime scaffolding in the same slice rather
+  than leaving dormant compatibility code behind. Keep only the smallest
+  oracle-only residue that is still actively verified and explain it
+  concretely if it cannot be removed yet.
 - Do not ship plan-only or helper-only standalone CLI commands. Public native
   CLI surfaces should correspond to real runtime commands or durable product
   APIs that are intended to survive the migration.

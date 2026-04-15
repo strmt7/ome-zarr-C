@@ -7,7 +7,8 @@ except ImportError:
 
 from .axes import KNOWN_AXES, Axes
 from .conversions import int_to_rgba, int_to_rgba_255, rgba_to_int
-from .csv import COLUMN_TYPES, csv_to_zarr, dict_to_zarr, parse_csv_value
+from .csv import COLUMN_TYPES, dict_to_zarr, parse_csv_value
+from .data import CHANNEL_DIMENSION, astronaut, coins, make_circle, rgb_to_5d
 from .format import (
     CurrentFormat,
     Format,
@@ -32,11 +33,12 @@ from .reader import (
     Spec,
     Well,
 )
-from .utils import find_multiscales, finder, info, splitall, strip_common_prefix, view
+from .utils import find_multiscales, splitall, strip_common_prefix
 
 __all__ = [
     "Axes",
     "COLUMN_TYPES",
+    "CHANNEL_DIMENSION",
     "CurrentFormat",
     "Format",
     "FormatV01",
@@ -55,21 +57,21 @@ __all__ = [
     "Spec",
     "Well",
     "__version__",
+    "astronaut",
+    "coins",
     "detect_format",
     "dict_to_zarr",
     "find_multiscales",
-    "finder",
     "format_from_version",
     "format_implementations",
-    "info",
     "int_to_rgba",
     "int_to_rgba_255",
+    "make_circle",
     "parse_csv_value",
     "parse_url",
     "rgba_to_int",
-    "csv_to_zarr",
+    "rgb_to_5d",
     "splitall",
     "strip_common_prefix",
-    "view",
     "ZarrLocation",
 ]

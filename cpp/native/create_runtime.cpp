@@ -23,7 +23,7 @@ namespace ome_zarr_c::native_code {
 namespace {
 
 namespace fs = std::filesystem;
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 std::string trim_nul_terminated(std::string_view text) {
     const auto end = text.find('\0');
@@ -69,7 +69,7 @@ void write_json_file(const fs::path& path, const json& payload) {
     if (!stream) {
         throw std::runtime_error("Unable to write JSON file: " + path.string());
     }
-    stream << payload.dump(2) << "\n";
+    stream << payload.dump(2);
 }
 
 std::optional<std::uint64_t> create_seed_from_env() {

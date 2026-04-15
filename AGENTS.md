@@ -153,6 +153,11 @@ benchmark comparison, but it is not the target runtime product.
     reduce, delegate, or delete it in subsequent slices. That includes
     removing no-longer-needed source files from `setup.py` and cutting direct
     `cpp/bindings/` dependencies on standalone-native runtime modules.
+46. For runtime surfaces already replaced by the standalone native product,
+    deletion beats delegation. Remove the matching Python wrapper exports,
+    pybind registrations, stale benchmark references, and obsolete runtime
+    tests in the same slice unless a remaining oracle-only dependency can be
+    stated precisely and verified.
 
 ## Fast load order
 
