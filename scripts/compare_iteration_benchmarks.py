@@ -32,6 +32,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--native-timeout", type=int, default=120)
     parser.add_argument("--markdown-out", type=Path)
     parser.add_argument("--json-out", type=Path)
+    parser.add_argument(
+        "--paired-case",
+        action="append",
+        default=[],
+        help=(
+            "Explicit Python-to-native case pairing in the form "
+            "'python_case=native_case'. May be passed multiple times."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -74,6 +83,7 @@ def _build_markdown(
     native_match: str,
     pyperf_pairs: dict[str, dict[str, float]],
     native_results: dict[str, float],
+    paired_cases: list[tuple[str, str]],
 ) -> str:
     lines = [
         "# Iteration benchmark comparison: "
@@ -121,11 +131,64 @@ def _build_markdown(
             + "x |"
         )
 
+    if paired_cases:
+        lines.extend(
+            [
+                "",
+                "## Explicit paired comparisons",
+                "",
+                "| python case | native case | python us/op | native us/op | "
+                "python/native speedup |",
+                "| --- | --- | ---: | ---: | ---: |",
+            ]
+        )
+        for python_case, native_case in paired_cases:
+            py_us = pyperf_pairs.get(python_case, {}).get("python")
+            native_us = native_results.get(native_case)
+            speedup = (
+                None
+                if py_us is None or native_us is None or native_us == 0.0
+                else py_us / native_us
+            )
+            lines.append(
+                "| "
+                + python_case
+                + " | "
+                + native_case
+                + " | "
+                + ("-" if py_us is None else f"{py_us:.3f}")
+                + " | "
+                + ("-" if native_us is None else f"{native_us:.3f}")
+                + " | "
+                + ("-" if speedup is None else f"{speedup:.3f}x")
+                + " |"
+            )
+
     return "\n".join(lines) + "\n"
+
+
+def _parse_paired_cases(items: list[str]) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for item in items:
+        if "=" not in item:
+            raise SystemExit(
+                "Invalid --paired-case value "
+                f"{item!r}; expected 'python_case=native_case'"
+            )
+        python_case, native_case = item.split("=", 1)
+        python_case = python_case.strip()
+        native_case = native_case.strip()
+        if not python_case or not native_case:
+            raise SystemExit(
+                f"Invalid --paired-case value {item!r}; expected non-empty case names"
+            )
+        pairs.append((python_case, native_case))
+    return pairs
 
 
 def main() -> int:
     args = _parse_args()
+    paired_cases = _parse_paired_cases(args.paired_case)
     python_match = args.python_match or args.match
     native_match = args.native_match or args.match
     native_bench = args.build_dir / "ome_zarr_native_bench_core"
@@ -199,6 +262,7 @@ def main() -> int:
             native_match=native_match,
             pyperf_pairs=pyperf_pairs,
             native_results=native_results,
+            paired_cases=paired_cases,
         )
         print(markdown, end="")
 
@@ -215,6 +279,7 @@ def main() -> int:
                         "native_match": native_match,
                         "pyperf_us_per_op": pyperf_pairs,
                         "native_us_per_op": native_results,
+                        "paired_cases": paired_cases,
                         "native_stdout": native_run.stdout,
                     },
                     indent=2,

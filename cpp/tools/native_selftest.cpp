@@ -2,7 +2,9 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <sstream>
@@ -21,6 +23,7 @@
 #include "../native/data.hpp"
 #include "../native/format.hpp"
 #include "../native/io.hpp"
+#include "../native/local_runtime.hpp"
 #include "../native/reader.hpp"
 #include "../native/scale.hpp"
 #include "../native/utils.hpp"
@@ -534,6 +537,79 @@ void test_io_and_utils() {
     const auto finder_row = utils_finder_row(8001, "image.zarr", "A/1/0", "field", "A/1", "today");
     require(finder_row.file_path.find("localhost:8001") != std::string::npos, "finder row file path");
     require_eq(finder_row.folders, std::string("A,1"), "finder row folders");
+
+    const auto fixture_root =
+        std::filesystem::temp_directory_path() / "ome_zarr_native_selftest_runtime";
+    std::filesystem::remove_all(fixture_root);
+    std::filesystem::create_directories(fixture_root / "image.zarr" / "0");
+    {
+        std::ofstream zattrs(fixture_root / "image.zarr" / ".zattrs");
+        zattrs << R"({"multiscales":[{"version":"0.4","axes":["y","x"],"datasets":[{"path":"0"}]}]})";
+    }
+    {
+        std::ofstream zgroup(fixture_root / "image.zarr" / ".zgroup");
+        zgroup << R"({"zarr_format":2})";
+    }
+    {
+        std::ofstream array_json(fixture_root / "image.zarr" / "0" / "zarr.json");
+        array_json << R"({"shape":[2,2],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"attributes":{},"zarr_format":3,"node_type":"array","storage_transformers":[]})";
+    }
+
+    std::filesystem::create_directories(
+        fixture_root / "finder-root" / "plate.zarr" / "A" / "1" / "0");
+    {
+        std::ofstream zattrs(fixture_root / "finder-root" / "plate.zarr" / ".zattrs");
+        zattrs << R"({"plate":{"wells":[{"path":"A/1"}]}})";
+    }
+
+    const auto direct_images =
+        local_find_multiscales((fixture_root / "image.zarr").generic_string());
+    require(!direct_images.metadata_missing, "local direct image metadata found");
+    require_eq(direct_images.images.size(), std::size_t{1}, "local direct image count");
+    require_eq(
+        direct_images.images.front().name,
+        std::string("image.zarr"),
+        "local direct image name");
+
+    const auto walked_images =
+        local_walk_ome_zarr((fixture_root / "finder-root").generic_string());
+    require_eq(walked_images.size(), std::size_t{1}, "local walked image count");
+    require_eq(
+        walked_images.front().path,
+        (fixture_root / "finder-root" / "plate.zarr" / "A" / "1" / "0").generic_string(),
+        "local walked image path");
+
+    const auto native_info = local_info_lines((fixture_root / "image.zarr").generic_string());
+    require_eq(native_info.size(), std::size_t{6}, "native local info line count");
+    require_eq(
+        native_info.front(),
+        (fixture_root / "image.zarr").generic_string() + " [zgroup]",
+        "native local info repr");
+    require_eq(native_info.back(), std::string("   - (2, 2)"), "native local info shape");
+
+    const auto finder_result =
+        local_finder_csv((fixture_root / "finder-root").generic_string(), 8012);
+    require(finder_result.found_any, "local finder should discover images");
+    require_eq(finder_result.rows.size(), std::size_t{1}, "local finder row count");
+    require(
+        finder_result.rows.front().file_path.find("http://localhost:8012") !=
+            std::string::npos,
+        "local finder row url");
+    require(
+        std::filesystem::exists(finder_result.csv_path),
+        "local finder should write csv");
+    {
+        std::ifstream csv(finder_result.csv_path);
+        std::ostringstream buffer;
+        buffer << csv.rdbuf();
+        const auto text = buffer.str();
+        require(
+            text.find("File Path,File Name,Folders,Uploaded") != std::string::npos,
+            "local finder csv header");
+        require(
+            text.find("http://localhost:8012") != std::string::npos,
+            "local finder csv body");
+    }
 }
 
 void test_reader_and_writer() {

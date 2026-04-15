@@ -58,8 +58,8 @@ Target end state:
 Current `main` now ships these standalone-native CMake targets:
 
 - `ome_zarr_native`: static library built from `cpp/native/`
-- `ome_zarr_native_cli`: native executable entrypoint for already-native helper
-  and planning surfaces
+- `ome_zarr_native_cli`: native executable entrypoint for real standalone
+  runtime commands such as `info` and `finder`
 - `ome_zarr_native_selftest`: native smoke and edge-case regression checks
 - `ome_zarr_native_bench_format`: focused format hotspot benchmark
 - `ome_zarr_native_bench_core`: broader bounded native benchmark suite

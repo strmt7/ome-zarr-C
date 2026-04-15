@@ -12,6 +12,9 @@
   and Python package layers may remain temporarily for parity proof, but they
   are transitional scaffolding and should not be expanded unless required to
   validate behavior against the frozen upstream.
+- Do not ship plan-only or helper-only standalone CLI commands. Public native
+  CLI surfaces should correspond to real runtime commands or durable product
+  APIs that are intended to survive the migration.
 - Prefer newer stable dependency versions when they unlock stronger native
   techniques or performance gains, but treat the upgrade as provisional until
   parity and benchmark validation are rerun successfully on that exact stack.

@@ -223,7 +223,7 @@ timeout 120s ./build-cpp/ome_zarr_native_bench_core --match format --quick
 timeout 120s ./build-cpp/ome_zarr_native_bench_core --match writer --quick
 ```
 
-For bounded iteration comparisons on the touched hotspot, use the helper
+For bounded iteration comparisons on the touched hotspot, use the comparison
 script. It verifies parity on the selected Python-visible cases, runs a short
 `pyperf` pass, runs the matching native benchmark slice, and prints one table
 with both layers:
@@ -243,12 +243,23 @@ The two layers are intentionally reported together but not conflated:
   harness
 - the native row measures pure `cpp/native` semantic cost
 
-For the `utils` hotspot, use:
+For explicit Python-vs-native paired comparisons on the standalone runtime
+commands touched in the current migration, use:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --match utils \
-  --native-match utils
+  --suite core \
+  --match info_v2_image \
+  --python-match info_v2_image \
+  --native-match local.info \
+  --paired-case runtime.utils.info_v2_image=local.info
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match finder \
+  --python-match finder \
+  --native-match local.finder \
+  --paired-case utils.finder=local.finder
 ```
 
 List the available cases across all suites:

@@ -276,31 +276,40 @@ deciding where further optimization work belongs. See
 `docs/reference/native-build-and-selftest.md` for the standalone-native
 workflow details and focused `--match` examples.
 
-For a bounded iteration comparison on a touched hotspot, run the paired helper:
+For a bounded iteration comparison on a touched hotspot, run the comparison
+script:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
 ```
 
-That helper emits one table with the Python-visible `pyperf` numbers and the
+That script emits one table with the Python-visible `pyperf` numbers and the
 matching standalone-native benchmark numbers for the same touched surface.
 
-Example native CLI calls against already-native surfaces:
+For direct Python-vs-native comparison on the real standalone runtime paths
+touched in the current iterations:
 
 ```bash
-./build-cpp/ome_zarr_native_cli cli create-plan --method coins
-./build-cpp/ome_zarr_native_cli cli scale-factors --downscale 2 --max-layer 4
-./build-cpp/ome_zarr_native_cli data create-plan \
-  --version 0.5 --base-shape 1,3,512,512 --smallest-shape 1,3,64,64
-./build-cpp/ome_zarr_native_cli format detect --multiscales-version 0.5
-./build-cpp/ome_zarr_native_cli format generate-well \
-  --path B/3 --rows A,B,C --columns 1,2,3
-./build-cpp/ome_zarr_native_cli utils view-plan \
-  --path /tmp/demo/image.zarr --port 8013 --discovered-count 1
-./build-cpp/ome_zarr_native_cli utils finder-plan \
-  --path /tmp/demo/images --port 8012
-./build-cpp/ome_zarr_native_cli writer image-plan \
-  --axes t,c,y,x --scaler-present --scaler-max-layer 4 --scaler-method local_mean
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite core \
+  --match info_v2_image \
+  --python-match info_v2_image \
+  --native-match local.info \
+  --paired-case runtime.utils.info_v2_image=local.info
+
+timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
+  --suite public-api \
+  --match finder \
+  --python-match finder \
+  --native-match local.finder \
+  --paired-case utils.finder=local.finder
+```
+
+Current standalone native CLI commands:
+
+```bash
+./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
+./build-cpp/ome_zarr_native_cli finder /tmp/demo/images --port 8012
 ```
 
 Run the current proven-safe local verification lane:

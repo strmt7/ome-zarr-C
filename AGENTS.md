@@ -140,6 +140,9 @@ benchmark comparison, but it is not the target runtime product.
     overhead from core semantics. Measure Python-visible paths with the repo
     benchmark suite, and measure pure-native kernels with native-only tooling
     before drawing optimization conclusions.
+43. Do not expose plan-only or helper-only commands in the shipped standalone
+    native CLI. Native CLI surfaces must correspond to real runtime commands
+    or durable product APIs, not temporary inspection shortcuts.
 
 ## Fast load order
 
@@ -162,6 +165,7 @@ benchmark comparison, but it is not the target runtime product.
 - `cpp/native/`: pure-native semantics only
 - `cpp/bindings/`: minimal Python boundary glue only
 - `ome_zarr_c/`: transitional Python compatibility/oracle wrappers
+- `cpp/tools/`: standalone native CLI, self-test, and bounded native benchmarks
 - `tests/`: parity and regression tests
 - `docs/`: repo rules, routing, and benchmarks
 - `.agents/skills/`: reusable repo-local workflows

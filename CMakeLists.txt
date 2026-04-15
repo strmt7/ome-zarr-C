@@ -21,10 +21,12 @@ set(OME_ZARR_C_NATIVE_SOURCES
     cpp/native/data.cpp
     cpp/native/format.cpp
     cpp/native/io.cpp
+    cpp/native/local_runtime.cpp
     cpp/native/reader.cpp
     cpp/native/scale.cpp
     cpp/native/utils.cpp
     cpp/native/writer.cpp
+    third_party/tinyxml2/tinyxml2.cpp
 )
 
 add_library(ome_zarr_native STATIC ${OME_ZARR_C_NATIVE_SOURCES})
@@ -82,41 +84,5 @@ if(OME_ZARR_C_NATIVE_BUILD_TESTS)
     add_test(
         NAME ome_zarr_native_cli_help
         COMMAND ome_zarr_native_cli --help
-    )
-    add_test(
-        NAME ome_zarr_native_cli_format_matches
-        COMMAND ome_zarr_native_cli format matches --version 0.5 --multiscales-version 0.5
-    )
-    add_test(
-        NAME ome_zarr_native_cli_create_plan
-        COMMAND ome_zarr_native_cli cli create-plan --method astronaut
-    )
-    add_test(
-        NAME ome_zarr_native_cli_scale_factors
-        COMMAND ome_zarr_native_cli cli scale-factors --downscale 2 --max-layer 4
-    )
-    add_test(
-        NAME ome_zarr_native_cli_generate_well
-        COMMAND ome_zarr_native_cli format generate-well --path B/3 --rows A,B,C --columns 1,2,3
-    )
-    add_test(
-        NAME ome_zarr_native_cli_view_plan
-        COMMAND ome_zarr_native_cli utils view-plan --path /tmp/demo/image.zarr --port 8013 --discovered-count 1
-    )
-    add_test(
-        NAME ome_zarr_native_cli_create_zarr_plan
-        COMMAND ome_zarr_native_cli data create-plan --version 0.5 --base-shape 1,3,512,512 --smallest-shape 1,3,64,64
-    )
-    add_test(
-        NAME ome_zarr_native_cli_io_subpath
-        COMMAND ome_zarr_native_cli io subpath --path /tmp/demo.zarr --subpath labels/0 --file
-    )
-    add_test(
-        NAME ome_zarr_native_cli_finder_plan
-        COMMAND ome_zarr_native_cli utils finder-plan --path /tmp/demo/images --port 8012
-    )
-    add_test(
-        NAME ome_zarr_native_cli_writer_image_plan
-        COMMAND ome_zarr_native_cli writer image-plan --axes t,c,y,x --scaler-present --scaler-max-layer 4 --scaler-method local_mean
     )
 endif()
