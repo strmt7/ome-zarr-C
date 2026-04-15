@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
 
+from tests import test_utils_equivalence as utils_eq
 from tests._outcomes import err, ok
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "source_code_v.0.15.0"))
 
 _py_data = importlib.import_module("ome_zarr.data")
-_cpp_data = importlib.import_module("ome_zarr_c.data")
 
 
 def _array_digest(array: np.ndarray) -> dict:
@@ -37,18 +38,47 @@ def _result_signature(result):
     return _array_digest(np.asarray(result))
 
 
-def _run_simple(func):
-    try:
-        return ok(value=_result_signature(func()))
-    except Exception as exc:  # noqa: BLE001
-        return err(exc)
-
-
 def _run_make_circle(func, h, w, value, dtype):
     target = np.zeros((h, w), dtype=dtype)
     try:
         func(h, w, value, target)
         return ok(value=_array_digest(target))
+    except Exception as exc:  # noqa: BLE001
+        return err(exc)
+
+
+def _run_native_make_circle(
+    *,
+    target_shape: tuple[int, int],
+    circle_shape: tuple[int, int],
+    offset: tuple[int, int],
+    value,
+    dtype,
+):
+    try:
+        outcome = utils_eq._run_native_probe(
+            [
+                "make-circle",
+                "--target-shape-json",
+                json.dumps(list(target_shape)),
+                "--circle-shape-json",
+                json.dumps(list(circle_shape)),
+                "--offset-json",
+                json.dumps(list(offset)),
+                "--value",
+                str(value),
+                "--dtype",
+                np.dtype(dtype).name,
+            ]
+        )
+        if outcome.status != "ok":
+            error_type = outcome.error_type or RuntimeError
+            raise error_type(outcome.error_message or "")
+        payload = outcome.value
+        array = np.array(payload["values"], dtype=payload["dtype"]).reshape(
+            tuple(int(dim) for dim in payload["shape"])
+        )
+        return ok(value=_array_digest(array))
     except Exception as exc:  # noqa: BLE001
         return err(exc)
 
@@ -60,6 +90,31 @@ def _run_rgb_to_5d(func, pixels):
         return err(exc)
 
 
+def _run_native_rgb_to_5d(pixels):
+    try:
+        outcome = utils_eq._run_native_probe(
+            [
+                "rgb-to-5d",
+                "--shape-json",
+                json.dumps([int(dim) for dim in pixels.shape]),
+                "--values-json",
+                json.dumps(np.asarray(pixels).reshape(-1).tolist()),
+                "--dtype",
+                np.asarray(pixels).dtype.name,
+            ]
+        )
+        if outcome.status != "ok":
+            error_type = outcome.error_type or RuntimeError
+            raise error_type(outcome.error_message or "")
+        payload = outcome.value
+        array = np.array(payload["values"], dtype=payload["dtype"]).reshape(
+            tuple(int(dim) for dim in payload["shape"])
+        )
+        return ok(value=_result_signature(array))
+    except Exception as exc:  # noqa: BLE001
+        return err(exc)
+
+
 def test_make_circle_matches_upstream() -> None:
     for h, w, value, dtype in [
         (8, 8, 1, np.float64),
@@ -67,16 +122,27 @@ def test_make_circle_matches_upstream() -> None:
         (12, 16, 2, np.uint8),
     ]:
         expected = _run_make_circle(_py_data.make_circle, h, w, value, dtype)
-        actual = _run_make_circle(_cpp_data.make_circle, h, w, value, dtype)
+        actual = _run_native_make_circle(
+            target_shape=(h, w),
+            circle_shape=(h, w),
+            offset=(0, 0),
+            value=value,
+            dtype=dtype,
+        )
         assert expected == actual
 
     py_target = np.zeros((16, 16), dtype=np.int16)
-    cpp_target = np.zeros((16, 16), dtype=np.int16)
     py_view = py_target[3:11, 4:12]
-    cpp_view = cpp_target[3:11, 4:12]
     _py_data.make_circle(8, 8, 5, py_view)
-    _cpp_data.make_circle(8, 8, 5, cpp_view)
-    assert _array_digest(py_target) == _array_digest(cpp_target)
+    actual = _run_native_make_circle(
+        target_shape=(16, 16),
+        circle_shape=(8, 8),
+        offset=(3, 4),
+        value=5,
+        dtype=np.int16,
+    )
+    assert actual.status == "ok"
+    assert _array_digest(py_target) == actual.value
 
 
 def test_rgb_to_5d_matches_upstream() -> None:
@@ -89,17 +155,5 @@ def test_rgb_to_5d_matches_upstream() -> None:
 
     for pixels in cases:
         expected = _run_rgb_to_5d(_py_data.rgb_to_5d, pixels)
-        actual = _run_rgb_to_5d(_cpp_data.rgb_to_5d, pixels)
+        actual = _run_native_rgb_to_5d(pixels)
         assert expected == actual
-
-
-def test_coins_matches_upstream() -> None:
-    expected = _run_simple(_py_data.coins)
-    actual = _run_simple(_cpp_data.coins)
-    assert expected == actual
-
-
-def test_astronaut_matches_upstream() -> None:
-    expected = _run_simple(_py_data.astronaut)
-    actual = _run_simple(_cpp_data.astronaut)
-    assert expected == actual

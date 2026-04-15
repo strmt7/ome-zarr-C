@@ -7,6 +7,7 @@ import math
 import os
 import random
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -35,6 +36,7 @@ from benchmarks.runtime_support import (
     write_minimal_v3_image,
 )
 from tests import test_cli_equivalence as cli_eq
+from tests import test_data_equivalence as data_eq
 from tests import test_data_runtime_equivalence as data_rt
 from tests import test_utils_equivalence as utils_eq
 
@@ -58,7 +60,6 @@ _py_scale = importlib.import_module("ome_zarr.scale")
 _py_writer = importlib.import_module("ome_zarr.writer")
 
 _cpp_axes = importlib.import_module("ome_zarr_c.axes")
-_cpp_data = importlib.import_module("ome_zarr_c.data")
 _cpp_dask_utils = importlib.import_module("ome_zarr_c.dask_utils")
 _cpp_format = importlib.import_module("ome_zarr_c.format")
 _cpp_io = importlib.import_module("ome_zarr_c.io")
@@ -144,6 +145,44 @@ def _make_timer(
             for _ in range(loops):
                 func()
         return time.perf_counter() - start
+
+    return timer
+
+
+def _native_bench_timer(
+    case_id: str,
+    verify: Callable[[], None],
+    native_match: str,
+) -> Callable[[int], float]:
+    def timer(loops: int) -> float:
+        _verify_once(case_id, verify)
+        bench_path = utils_eq._native_cli_path().with_name("ome_zarr_native_bench_core")
+        if not bench_path.exists():
+            bench_path = bench_path.with_suffix(".exe")
+        completed = subprocess.run(
+            [
+                str(bench_path),
+                "--json",
+                "-",
+                "--rounds",
+                "1",
+                "--iterations",
+                str(max(1, loops)),
+                "--match",
+                native_match,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        results = payload.get("results", [])
+        if len(results) != 1:
+            raise AssertionError(
+                "Expected exactly one native benchmark result for "
+                f"{native_match}, got {len(results)}"
+            )
+        return float(results[0]["round_microseconds"][0]) / 1_000_000.0
 
     return timer
 
@@ -725,38 +764,47 @@ def _bench_resolve_storage_options(module: object) -> float:
 
 def _verify_make_circle() -> None:
     py_results = []
-    cpp_results = []
+    native_results = []
     for height, width, value, dtype in _MAKE_CIRCLE_CASES:
-        py_target = np.zeros((height, width), dtype=dtype)
-        cpp_target = np.zeros((height, width), dtype=dtype)
-        _py_data.make_circle(height, width, value, py_target)
-        _cpp_data.make_circle(height, width, value, cpp_target)
-        py_results.append(py_target)
-        cpp_results.append(cpp_target)
-    _assert_parity("micro.data.make_circle_batch", py_results, cpp_results)
+        py_results.append(
+            data_eq._run_make_circle(_py_data.make_circle, height, width, value, dtype)
+        )
+        native_results.append(
+            data_eq._run_native_make_circle(
+                target_shape=(height, width),
+                circle_shape=(height, width),
+                offset=(0, 0),
+                value=value,
+                dtype=dtype,
+            )
+        )
+    _assert_parity("micro.data.make_circle_batch", py_results, native_results)
 
 
-def _bench_make_circle(module: object) -> float:
+def _bench_make_circle_python() -> float:
     total = 0.0
     for height, width, value, dtype in _MAKE_CIRCLE_CASES:
-        target = np.zeros((height, width), dtype=dtype)
-        module.make_circle(height, width, value, target)
-        total += _touch(target)
+        total += _touch_outcome(
+            data_eq._run_make_circle(_py_data.make_circle, height, width, value, dtype)
+        )
     return total
 
 
 def _verify_rgb_to_5d() -> None:
     _assert_parity(
         "micro.data.rgb_to_5d_batch",
-        [_py_data.rgb_to_5d(pixels) for pixels in _RGB_TO_5D_CASES],
-        [_cpp_data.rgb_to_5d(pixels) for pixels in _RGB_TO_5D_CASES],
+        [
+            data_eq._run_rgb_to_5d(_py_data.rgb_to_5d, pixels)
+            for pixels in _RGB_TO_5D_CASES
+        ],
+        [data_eq._run_native_rgb_to_5d(pixels) for pixels in _RGB_TO_5D_CASES],
     )
 
 
-def _bench_rgb_to_5d(module: object) -> float:
+def _bench_rgb_to_5d_python() -> float:
     total = 0.0
     for pixels in _RGB_TO_5D_CASES:
-        total += _touch(module.rgb_to_5d(pixels))
+        total += _touch_outcome(data_eq._run_rgb_to_5d(_py_data.rgb_to_5d, pixels))
     return total
 
 
@@ -870,22 +918,6 @@ def _bench_scaler_local_mean(py_like: bool) -> float:
     image = _scaler_image()
     scalers = _py_scalers() if py_like else _cpp_scalers()
     return _touch(scalers["local_mean"].local_mean(image))
-
-
-def _verify_coins() -> None:
-    _assert_parity("macro.data.coins", _py_data.coins(), _cpp_data.coins())
-
-
-def _bench_coins(module: object) -> float:
-    return _touch(module.coins())
-
-
-def _verify_astronaut() -> None:
-    _assert_parity("macro.data.astronaut", _py_data.astronaut(), _cpp_data.astronaut())
-
-
-def _bench_astronaut(module: object) -> float:
-    return _touch(module.astronaut())
 
 
 def _verify_parse_url_v2() -> None:
@@ -1354,21 +1386,37 @@ ALL_CASES = (
         lambda: _bench_resolve_storage_options(_py_writer),
         lambda: _bench_resolve_storage_options(_cpp_writer),
     ),
-    _make_case(
-        "micro",
-        "data.make_circle_batch",
-        "Synthetic circle mask generation over mixed shapes and dtypes.",
-        _verify_make_circle,
-        lambda: _bench_make_circle(_py_data),
-        lambda: _bench_make_circle(_cpp_data),
+    BenchmarkCase(
+        group="micro",
+        name="data.make_circle_batch",
+        description="Synthetic circle mask generation over mixed shapes and dtypes.",
+        verify=_verify_make_circle,
+        python_timer=_make_timer(
+            "micro.data.make_circle_batch",
+            _verify_make_circle,
+            _bench_make_circle_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            "micro.data.make_circle_batch",
+            _verify_make_circle,
+            "data.make_circle_batch",
+        ),
     ),
-    _make_case(
-        "micro",
-        "data.rgb_to_5d_batch",
-        "RGB/greyscale normalization into 5D OME-Zarr video layout.",
-        _verify_rgb_to_5d,
-        lambda: _bench_rgb_to_5d(_py_data),
-        lambda: _bench_rgb_to_5d(_cpp_data),
+    BenchmarkCase(
+        group="micro",
+        name="data.rgb_to_5d_batch",
+        description="RGB/greyscale normalization into 5D OME-Zarr video layout.",
+        verify=_verify_rgb_to_5d,
+        python_timer=_make_timer(
+            "micro.data.rgb_to_5d_batch",
+            _verify_rgb_to_5d,
+            _bench_rgb_to_5d_python,
+        ),
+        cpp_timer=_native_bench_timer(
+            "micro.data.rgb_to_5d_batch",
+            _verify_rgb_to_5d,
+            "data.rgb_to_5d_batch",
+        ),
     ),
     _make_case(
         "meso",
@@ -1417,22 +1465,6 @@ ALL_CASES = (
         _verify_scaler_local_mean,
         lambda: _bench_scaler_local_mean(True),
         lambda: _bench_scaler_local_mean(False),
-    ),
-    _make_case(
-        "macro",
-        "data.coins",
-        "Synthetic coins pyramid and labels generation.",
-        _verify_coins,
-        lambda: _bench_coins(_py_data),
-        lambda: _bench_coins(_cpp_data),
-    ),
-    _make_case(
-        "macro",
-        "data.astronaut",
-        "Synthetic astronaut pyramid and label generation.",
-        _verify_astronaut,
-        lambda: _bench_astronaut(_py_data),
-        lambda: _bench_astronaut(_cpp_data),
     ),
     _make_case(
         "runtime",

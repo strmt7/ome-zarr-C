@@ -93,11 +93,6 @@ differential tests on this runtime:
   - `Scaler.laplacian`
   - `Scaler.local_mean`
   - `Scaler.zoom`
-- `ome_zarr_c.data`
-  - `coins`
-  - `astronaut`
-  - `make_circle`
-  - `rgb_to_5d`
 
 Each converted surface is validated against the frozen upstream release with
 parity tests under `tests/`.
