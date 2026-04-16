@@ -8,9 +8,11 @@ the Python runtime.
 This path exercises `cpp/native/` directly:
 
 - native static library: `ome_zarr_native`
+- optional native shared C ABI library: `ome_zarr_native_api`
 - native CLI executable: `ome_zarr_native_cli`
 - native oracle probe executable: `ome_zarr_native_probe`
 - native self-test executable: `ome_zarr_native_selftest`
+- native C ABI self-test executable: `ome_zarr_native_api_selftest`
 - native benchmark executables:
   - `ome_zarr_native_bench_format`
   - `ome_zarr_native_bench_core`
@@ -77,6 +79,7 @@ Run the standalone native self-test directly:
 
 ```bash
 ./build-cpp/ome_zarr_native_selftest
+./build-cpp/ome_zarr_native_api_selftest
 ./build-cpp/ome_zarr_native_cli --help
 ./build-cpp/ome_zarr_native_probe --help
 ```
@@ -145,6 +148,18 @@ before it is treated as acceptable.
 The native benchmark layer measures pure C++ semantic cost. Use the Python
 benchmark suite separately when you need end-to-end parity-harness timing or
 upstream-versus-port comparison on the same machine.
+
+## Native C ABI Interop
+
+The build produces `ome_zarr_native_api` as a shared library. This target is a
+thin C ABI over native semantics for external FFI consumers. It is tested with
+native CTest coverage and with `tests/test_native_c_api_interop.py`, which
+uses `ctypes`, NumPy arrays, and Zarr-created local stores as external
+callers/producers.
+
+The ABI intentionally accepts raw C pointers, shape metadata, and JSON strings
+instead of Python objects. See `docs/reference/native-c-api-interop.md` before
+adding or changing an ABI entrypoint.
 
 For a fast iteration comparison on the touched `format` hotspot:
 

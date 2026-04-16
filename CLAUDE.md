@@ -13,7 +13,8 @@ Use `AGENTS.md` as the universal baseline. This file is only a thin adapter.
 ## Core rules
 
 - Never edit `source_code_v.0.15.0/`.
-- Keep wrappers thin and push converted logic into `cpp/` where possible.
+- Keep C ABI wrappers thin and push converted logic into `cpp/native/`.
+- Do not add Python-object, pybind, or embedded-interpreter semantics to C++.
 - Match upstream behavior before attempting improvements.
 - Differential tests are required for every ported module.
 - Benchmark before claiming speedups.

@@ -3,6 +3,7 @@
 - `docs/reference/architecture-first-porting.md`: architecture-first porting map
 - `docs/reference/standalone-cpp-target.md`: current-vs-target product shape for the standalone C++ migration
 - `docs/reference/native-build-and-selftest.md`: standalone native build, self-test, and bounded benchmark workflow
+- `docs/reference/native-c-api-interop.md`: optional C ABI for external FFI, NumPy-style buffers, and local Zarr store interop
 - `docs/reference/native-dependency-manifest.json`: pinned latest native tool and library versions for the standalone C++ path
 - `docs/reference/pure-native-cpp-policy.md`: strict native-vs-binding layout policy
 - `docs/reference/pure-native-coverage.md`: strict percentage report for semantics that already live in `cpp/native`

@@ -9,7 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 TEXT_FILES = [
     ROOT / "README.md",
     ROOT / "AGENTS.md",
+    ROOT / "CLAUDE.md",
+    ROOT / "GEMINI.md",
     ROOT / ".github" / "copilot-instructions.md",
+    ROOT / ".cursor" / "rules" / "00-porting-core.mdc",
     ROOT / "benchmarks" / "__init__.py",
     ROOT / "benchmarks" / "cases.py",
     ROOT / "benchmarks" / "report.py",
@@ -72,11 +75,16 @@ def main() -> int:
     native_dev_doc = ROOT / "docs/reference/native-build-and-selftest.md"
     native_bench = ROOT / "cpp/tools/native_bench_format.cpp"
     native_bench_core = ROOT / "cpp/tools/native_bench_core.cpp"
+    native_api = ROOT / "cpp/api/ome_zarr_native_api.cpp"
+    native_api_header = ROOT / "cpp/api/ome_zarr_native_api.h"
+    native_api_selftest = ROOT / "cpp/tools/native_api_selftest.cpp"
     native_cli = ROOT / "cpp/tools/native_cli.cpp"
     native_selftest = ROOT / "cpp/tools/native_selftest.cpp"
     cmake_file = ROOT / "CMakeLists.txt"
     iteration_compare_script = ROOT / "scripts/compare_iteration_benchmarks.py"
     native_dependency_manifest = ROOT / "docs/reference/native-dependency-manifest.json"
+    native_api_doc = ROOT / "docs/reference/native-c-api-interop.md"
+    native_api_test = ROOT / "tests/test_native_c_api_interop.py"
     native_toolchain_installer = ROOT / "scripts/install_latest_native_toolchain.sh"
     setup_py = ROOT / "setup.py"
     pyproject_toml = ROOT / "pyproject.toml"
@@ -94,11 +102,16 @@ def main() -> int:
         native_dev_doc,
         native_bench,
         native_bench_core,
+        native_api,
+        native_api_header,
+        native_api_selftest,
         native_cli,
         native_selftest,
         cmake_file,
         iteration_compare_script,
         native_dependency_manifest,
+        native_api_doc,
+        native_api_test,
         native_toolchain_installer,
     ):
         if not required.exists():
@@ -133,16 +146,26 @@ def main() -> int:
         issues.append(
             "AGENTS.md is missing the native build/self-test doc in fast-load guidance."
         )
+    if "docs/reference/native-c-api-interop.md" not in agents_text:
+        issues.append(
+            "AGENTS.md is missing the native C ABI interop doc in fast-load guidance."
+        )
     if "docs/reference/standalone-cpp-target.md" not in docs_index_text:
         issues.append("docs/index.md is missing the standalone C++ target doc.")
     if "docs/reference/native-build-and-selftest.md" not in docs_index_text:
         issues.append("docs/index.md is missing the native build/self-test doc.")
+    if "docs/reference/native-c-api-interop.md" not in docs_index_text:
+        issues.append("docs/index.md is missing the native C ABI interop doc.")
     if "docs/reference/native-dependency-manifest.json" not in docs_index_text:
         issues.append("docs/index.md is missing the native dependency manifest.")
     if "standalone C++ product" not in readme_text:
         issues.append("README.md no longer states the standalone C++ target.")
     if "ome_zarr_native_selftest" not in readme_text:
         issues.append("README.md is missing the native self-test command.")
+    if "ome_zarr_native_api" not in readme_text:
+        issues.append("README.md is missing the native C ABI target.")
+    if "docs/reference/native-c-api-interop.md" not in readme_text:
+        issues.append("README.md is missing the native C ABI interop doc.")
     if "ome_zarr_native_cli" not in readme_text:
         issues.append("README.md is missing the native CLI command.")
     if "ome_zarr_native_cli info " not in readme_text:
@@ -187,6 +210,10 @@ def main() -> int:
         issues.append(
             "README.md references ome_zarr_native_selftest, "
             "but the source file is missing."
+        )
+    if "ome_zarr_native_api" in readme_text and not native_api.exists():
+        issues.append(
+            "README.md references ome_zarr_native_api, but the source file is missing."
         )
     if "ome_zarr_native_cli" in readme_text and not native_cli.exists():
         issues.append(
@@ -243,6 +270,12 @@ def main() -> int:
         not in cmake_text
     ):
         issues.append("CMakeLists.txt does not use the manifest-pinned C++ standard.")
+    if "add_library(\n    ome_zarr_native_api" not in cmake_text:
+        issues.append("CMakeLists.txt is missing the native C ABI shared library.")
+    if "cpp/api/ome_zarr_native_api.cpp" not in cmake_text:
+        issues.append("CMakeLists.txt is missing the native C ABI source file.")
+    if "ome_zarr_native_api_selftest" not in cmake_text:
+        issues.append("CMakeLists.txt is missing the native C ABI self-test.")
 
     tinyxml2_text = read_text(ROOT / "third_party/tinyxml2/tinyxml2.h")
     cpp_httplib_text = read_text(ROOT / "third_party/cpp-httplib/httplib.h")

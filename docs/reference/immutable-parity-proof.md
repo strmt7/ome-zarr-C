@@ -29,9 +29,11 @@ Use the smallest proof that matches the surface:
 
 Converted behavior only counts as pure-native when the semantics live in
 `cpp/native/`.
-No active binding layer remains in current `main`. Any reintroduced binding
-glue would require an explicit temporary exception, and mixed
-binding-plus-semantic files do not count as pure-native conversion.
+No active binding layer remains in current `main`. The optional `cpp/api/` C
+ABI is allowed only as raw-buffer/JSON FFI over native semantics. Any
+reintroduced Python-object binding glue would require an explicit temporary
+exception, and mixed binding-plus-semantic files do not count as pure-native
+conversion.
 
 To keep that boundary enforceable:
 

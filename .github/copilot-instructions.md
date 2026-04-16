@@ -20,6 +20,10 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Python objects are not allowed in C++ semantic code. No active binding layer
   remains in current `main`; do not reintroduce one without explicit approval
   and a documented unavoidable parity need.
+- Optional external interoperability belongs in `cpp/api/` as a C ABI over
+  native semantics. It may expose raw buffers and JSON strings for external
+  FFI consumers, but it must not use Python objects, CPython headers, pybind,
+  embedded interpreter calls, or package-specific Python adapter code.
 - Do not expose plan-only or helper-only commands through the shipped
   standalone native CLI. Public native entrypoints must be real runtime
   commands or durable product APIs.
@@ -42,6 +46,9 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Load context selectively: start with the smallest sufficient set of docs,
   code, tests, and skills, then widen only when evidence says it is necessary.
 - Differential tests are required for ported surfaces.
+- C ABI array interop must be tested with real contiguous NumPy memory through
+  `ctypes` or an equivalent external FFI consumer, while keeping the C++ side
+  object-free and native.
 - Benchmarks are required before claiming that native C++ is faster. Report
   pure-native outcomes as absolute native C++ relative speed vs Python
   (`python_time / native_cpp_time`). Do not invert slower cases into larger
