@@ -2,14 +2,13 @@
 requires = [
     "setuptools>=82.0.1",
     "wheel>=0.46.3",
-    "pybind11>=3.0.3",
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "ome-zarr-c"
 version = "0.0.1"
-description = "Release-anchored C++/pybind11 parity port workspace for ome/ome-zarr-py."
+description = "Release-anchored standalone C++ parity port workspace for ome/ome-zarr-py."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "BSD-2-Clause"

@@ -1,6 +1,6 @@
 {
   "metric_name": "split_native_coverage",
-  "description": "Count only upstream surfaces that are either routed through dedicated cpp/bindings entrypoints or implemented as thin Python orchestration over split binding/native surfaces, instead of the former mixed monolithic export pattern.",
+  "description": "Legacy split-native metric retained for historical reporting. Current entries are implemented by native files and no longer require binding files; Python orchestration is development-oracle scaffolding, not shipped runtime code.",
   "upstream_root": "source_code_v.0.15.0/ome_zarr",
   "entries": [
     {
@@ -173,9 +173,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "format_from_version",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -183,9 +181,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "format_implementations",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -193,9 +189,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "detect_format",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -203,9 +197,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "Format._get_metadata_version",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -213,9 +205,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.zarr_format",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -223,9 +213,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.chunk_key_encoding",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -233,9 +221,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.matches",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -243,9 +229,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV02.chunk_key_encoding",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -253,9 +237,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV05.zarr_format",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -263,9 +245,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV05.chunk_key_encoding",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -273,9 +253,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.generate_well_dict",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -283,9 +261,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.validate_well_dict",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -293,9 +269,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.generate_coordinate_transformations",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -303,9 +277,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.validate_coordinate_transformations",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -478,8 +450,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.methods",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -487,8 +458,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.func",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -496,8 +466,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.resize_image",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -505,8 +474,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.nearest",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -514,8 +482,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.__nearest",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -523,8 +490,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.gaussian",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -532,8 +498,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.laplacian",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -541,8 +506,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.local_mean",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -550,8 +514,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler._by_plane",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -559,8 +522,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.zoom",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -568,8 +530,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "_build_pyramid",
-      "binding_files": [
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -662,9 +623,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_wells",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -681,9 +640,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "check_group_fmt",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -692,9 +649,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "check_format",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -703,9 +658,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_multiscale",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp",
@@ -715,9 +668,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_multiscales_metadata",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -726,9 +677,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_plate_metadata",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -745,9 +694,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_write_pyramid_to_zarr",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -780,9 +727,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_multiscale_labels",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp",
@@ -792,9 +737,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_labels",
-      "binding_files": [
-        "cpp/bindings/format_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp",

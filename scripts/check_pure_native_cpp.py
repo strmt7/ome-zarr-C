@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce a pure-native C++ layout and flag mixed binding/semantic debt."""
+"""Enforce a pure-native C++ layout and flag Python-integration debt."""
 
 from __future__ import annotations
 
@@ -80,11 +80,10 @@ def validate_against_baseline(
 def debt_paths(
     cpp_root: Path,
     native_root: Path,
-    binding_root: Path,
 ) -> list[Path]:
     debt: list[Path] = []
     for path in iter_cpp_files(cpp_root):
-        if path.is_relative_to(native_root) or path.is_relative_to(binding_root):
+        if path.is_relative_to(native_root):
             continue
         debt.append(path)
     return debt
@@ -94,7 +93,6 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cpp-root", default="cpp")
     parser.add_argument("--native-root", default="cpp/native")
-    parser.add_argument("--binding-root", default="cpp/bindings")
     parser.add_argument(
         "--enforce-pure-native-subtree",
         action="store_true",
@@ -103,12 +101,12 @@ def main() -> int:
     parser.add_argument(
         "--report-existing-debt",
         action="store_true",
-        help="report mixed binding/semantic debt outside cpp/native and cpp/bindings",
+        help="report Python-integration debt outside cpp/native",
     )
     parser.add_argument(
         "--fail-on-existing-debt",
         action="store_true",
-        help="return non-zero when mixed debt is found outside the allowed roots",
+        help="return non-zero when Python-integration debt is found under cpp",
     )
     parser.add_argument(
         "--baseline-json",
@@ -133,7 +131,6 @@ def main() -> int:
 
     cpp_root = Path(args.cpp_root)
     native_root = Path(args.native_root)
-    binding_root = Path(args.binding_root)
 
     exit_code = 0
 
@@ -150,11 +147,11 @@ def main() -> int:
                 print(f"Pure-native subtree clean: {native_root}")
 
     if args.report_existing_debt:
-        debt_files = debt_paths(cpp_root, native_root, binding_root)
+        debt_files = debt_paths(cpp_root, native_root)
         debt_violations = scan_paths(debt_files, PYTHON_INTEGRATION_PATTERNS)
         if debt_violations:
             print_violations(
-                "Mixed binding/semantic debt outside allowed roots:",
+                "Python-integration debt outside pure-native subtree:",
                 debt_violations,
             )
             counts = Counter(name for name, _path, _line, _text in debt_violations)
@@ -175,7 +172,7 @@ def main() -> int:
             if args.fail_on_existing_debt:
                 exit_code = 1
         else:
-            print("No mixed binding/semantic debt found outside allowed roots.")
+            print("No Python-integration debt found outside pure-native subtree.")
 
     return exit_code
 

@@ -53,9 +53,9 @@ incrementally while keeping the imported upstream snapshot intact.
   upstream implementation on the same runtime. Do not freeze exception text or
   unpack errors that the interpreter itself generates.
 - Python truthiness:
-  In pybind11 ports, `py::cast<bool>` is not a drop-in replacement for Python
-  truth-value testing on arbitrary objects. Preserve `if obj:` semantics with
-  Python truthiness evaluation.
+  Preserve upstream `if obj:` semantics in native ports. Do not reintroduce
+  pybind truthiness helpers such as `py::cast<bool>` as a shortcut around
+  proper native parity.
 - Persistent side effects:
   For functions that mutate files, directories, or stores, compare the
   serialized on-disk results between upstream and the port. Return-value parity

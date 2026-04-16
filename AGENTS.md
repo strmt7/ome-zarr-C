@@ -40,11 +40,12 @@ benchmark comparison, but it is not the target runtime product.
 13. When using `gh` for Actions or remote repo checks, pin the target repo with
     `-R owner/repo` unless the active `gh` repo context has been explicitly
     verified.
-14. After any C++ or extension-build change, reinstall the editable package
-    before rerunning parity tests so the checks exercise the current binary.
-15. In pybind11 ports, do not use `py::cast<bool>` as a generic replacement for
-    Python truthiness on arbitrary objects such as lists or `None`. Use Python
-    truth-value evaluation so `if obj:` behavior matches upstream.
+14. After any C++ or package-build change, rebuild the native targets or
+    reinstall the editable package before rerunning parity tests so the checks
+    exercise the current files.
+15. Do not reintroduce pybind11 ports. If historical pybind code is found,
+    remove it or keep it only as already-failing debt until it can be deleted;
+    do not add new `py::` objects to preserve behavior.
 16. For ports that mutate persistent stores or files, parity tests must compare
     serialized on-disk effects between upstream and the port, not just return
     values.
@@ -69,7 +70,7 @@ benchmark comparison, but it is not the target runtime product.
     unlock better implementation techniques or performance, but every such
     upgrade must be followed by parity revalidation on the real runtime before
     it is treated as acceptable.
-24. If repo-local skill coverage is missing for pybind11 runtime-parity work or
+24. If repo-local skill coverage is missing for standalone C++ parity work or
     workflow/dependency-governance work, add or update a repo-local skill with
     official references before relying on ad-hoc process notes.
 25. Treat tests as first-class repo code. If CodeQL, lint, or security findings
@@ -93,18 +94,18 @@ benchmark comparison, but it is not the target runtime product.
     fully converted C++ coverage.
 31. The pure-native C++ policy applies to the whole repository, including
     existing converted code. `cpp/native/` is for real C++ semantics only,
-    `cpp/bindings/` is for minimal boundary glue only, and mixed files
-    elsewhere under `cpp/` are remediation debt.
+    `cpp/tools/` may expose standalone native entrypoints, and no active
+    binding layer remains.
 32. Do not count any converted surface as pure-native unless its semantics live
     in `cpp/native/`. "Native-backed" and "pure-native" are different claims.
 33. If a change touches `cpp/`, run
     `.venv/bin/python scripts/check_pure_native_cpp.py --enforce-pure-native-subtree --report-existing-debt`
-    and treat any Python-integration tokens outside `cpp/bindings/` as a hard
+    and treat any Python-integration tokens under `cpp/` as a hard
     architectural problem to be removed, not documented away.
 34. Python objects are not allowed in C++ semantic code. The only acceptable
-    exception is a boundary shim in `cpp/bindings/` when it can be shown with
-    high confidence that no practical native alternative exists for preserving
-    the Python-visible contract.
+    exception is a deliberately approved, temporary boundary shim when it can
+    be shown with high confidence that no practical native alternative exists
+    for preserving parity. No such active shim exists in current `main`.
 35. The rule against Python-object semantics applies retroactively to existing
     converted code as well as new work. Existing violations are remediation
     debt and must not be disguised as completed native conversion.
@@ -133,9 +134,9 @@ benchmark comparison, but it is not the target runtime product.
     Local branches and local artifacts are disposable until their content is
     reconciled with `origin/main`.
 41. Do not expand the Python runtime footprint of the shipped product. Python
-    wrappers, pybind bindings, and Python package metadata are transitional
-    development harnesses only and must not be mistaken for the intended final
-    delivery shape.
+    wrappers and Python package metadata are development harnesses only and
+    must not be mistaken for the intended final delivery shape. pybind
+    bindings are not part of the current architecture.
 42. When working on performance-sensitive native code, separate boundary
     overhead from core semantics. Measure Python-visible paths with the repo
     benchmark suite, and measure pure-native kernels with native-only tooling
@@ -148,16 +149,14 @@ benchmark comparison, but it is not the target runtime product.
     change is strictly for parity proof, fixture generation, or benchmark
     comparison around the native runtime.
 45. Once a standalone-native runtime command or library entrypoint exists and
-    parity is proven for that surface, treat the corresponding binding-heavy
+    parity is proven for that surface, treat any corresponding Python-harness
     runtime path as shrink-only debt. Do not add new semantic work there;
-    reduce, delegate, or delete it in subsequent slices. That includes
-    removing no-longer-needed source files from `setup.py` and cutting direct
-    `cpp/bindings/` dependencies on standalone-native runtime modules.
+    reduce, delegate, or delete it in subsequent slices.
 46. For runtime surfaces already replaced by the standalone native product,
     deletion beats delegation. Remove the matching Python wrapper exports,
-    pybind registrations, stale benchmark references, and obsolete runtime
-    tests in the same slice unless a remaining oracle-only dependency can be
-    stated precisely and verified.
+    stale benchmark references, and obsolete runtime tests in the same slice
+    unless a remaining oracle-only dependency can be stated precisely and
+    verified.
 47. If parity proof and performance measurement for a surface can be carried by
     standalone native tools plus the Python oracle, do not keep a pybind or
     Python-wrapper version of that surface alive just to satisfy old tests or
@@ -192,7 +191,6 @@ benchmark comparison, but it is not the target runtime product.
 - `source_code_v.0.15.0/`: immutable upstream reference snapshot
 - `cpp/`: C++ implementations
 - `cpp/native/`: pure-native semantics only
-- `cpp/bindings/`: minimal Python boundary glue only
 - `ome_zarr_c/`: transitional Python compatibility/oracle wrappers
 - `cpp/tools/`: standalone native CLI, self-test, and bounded native benchmarks
 - `tests/`: parity and regression tests

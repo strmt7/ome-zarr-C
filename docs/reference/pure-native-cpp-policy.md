@@ -7,8 +7,8 @@ code, not only future additions.
 
 - `cpp/native/`
   real C++ semantics only
-- `cpp/bindings/`
-  minimal Python binding glue only
+- `cpp/tools/`
+  standalone native executable entrypoints only
 - any other file under `cpp/`
   transitional debt that must be removed or relocated
 
@@ -16,9 +16,9 @@ code, not only future additions.
 
 - Code in `cpp/native/` must not contain `py::`, `pybind11` headers,
   Python C-API calls, or Python attribute dispatch.
-- Python objects are forbidden in C++ semantic code. Python interop is allowed
-  only in `cpp/bindings/`, and only when it can be justified as the smallest
-  unavoidable boundary required to preserve the Python-visible contract.
+- Python objects are forbidden in C++ semantic code. Python interop is not part
+  of the current C++ architecture and must not be reintroduced without a
+  documented, temporary, unavoidable exception.
 - A mixed file that combines binding glue and business logic does not count as
   pure-native, even if it compiles and passes parity tests.
 - Existing mixed files are subject to the same rule. They are debt, not exempt.
@@ -44,9 +44,9 @@ code, not only future additions.
 
 ## Migration rule
 
-Until a surface has been split so that only the boundary glue lives in
-`cpp/bindings/` and the semantics live in `cpp/native/`, that surface remains
-in remediation and should not be counted as pure-native conversion progress.
+Until a surface has its semantics in `cpp/native/` and its runtime path can be
+exercised without Python binding glue, that surface remains in remediation and
+should not be counted as pure-native conversion progress.
 
 ## Priority order
 

@@ -1,4 +1,9 @@
-"""C++-backed port of selected format helpers from ome-zarr-py."""
+"""Parity copy of the frozen upstream format helpers.
+
+This module intentionally stays Python-only while the standalone C++ product
+keeps its native implementation in ``cpp/native``. It is a development oracle
+surface for tests and benchmarks; it must not import binding modules.
+"""
 
 from __future__ import annotations
 
@@ -9,92 +14,116 @@ from typing import Any
 
 from zarr.storage import FsspecStore, LocalStore
 
-from . import _core
-
 LOGGER = logging.getLogger("ome_zarr_c.format")
 
-_FORMAT_CLASS_BY_VERSION: dict[str, type[Format]] = {}
 
+def format_from_version(version: str) -> Format:
+    for fmt in format_implementations():
+        # Support floating-point versions like `0.2`
+        if isinstance(version, float):
+            version = str(version)
 
-def format_from_version(version: str | float) -> Format:
-    if isinstance(version, float):
-        version = str(version)
-    try:
-        return _format_class_for_version(str(version))()
-    except KeyError as exc:
-        raise ValueError(f"Version {version} not recognized") from exc
+        if fmt.version == version:
+            return fmt
+    raise ValueError(f"Version {version} not recognized")
 
 
 def format_implementations() -> Iterator[Format]:
-    for cls in (FormatV05, FormatV04, FormatV03, FormatV02, FormatV01):
-        yield cls()
+    """
+    Return an instance of each format implementation, newest to oldest.
+    """
+    yield FormatV05()
+    yield FormatV04()
+    yield FormatV03()
+    yield FormatV02()
+    yield FormatV01()
 
 
 def detect_format(metadata: dict, default: Format) -> Format:
+    """
+    Give each format implementation a chance to take ownership of the
+    given metadata. If none matches, the default value will be returned.
+    """
+
     if metadata:
-        detected = _core.detect_format_version(metadata)
-        if detected is not None:
-            return _format_class_for_version(str(detected))()
+        for fmt in format_implementations():
+            if fmt.matches(metadata):
+                return fmt
+
     return default
 
 
 class Format(ABC):
+    """
+    Abstract base class for format implementations.
+    """
+
     @property
     @abstractmethod
-    def version(self) -> str:
+    def version(self) -> str:  # pragma: no cover
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def zarr_format(self) -> int:
+    def zarr_format(self) -> int:  # pragma: no cover
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def chunk_key_encoding(self) -> dict[str, str]:
+    def chunk_key_encoding(self) -> dict[str, str]:  # pragma: no cover
         raise NotImplementedError()
 
     @abstractmethod
-    def matches(self, metadata: dict) -> bool:
+    def matches(self, metadata: dict) -> bool:  # pragma: no cover
         raise NotImplementedError()
 
     @abstractmethod
     def init_store(self, path: str, mode: str = "r") -> FsspecStore | LocalStore:
         raise NotImplementedError()
 
-    def init_channels(self) -> None:
+    # @abstractmethod
+    def init_channels(self) -> None:  # pragma: no cover
         raise NotImplementedError()
 
-    def _get_metadata_version(self, metadata: dict):
-        return _core.get_metadata_version(metadata)
+    def _get_metadata_version(self, metadata: dict) -> str | None:
+        """
+        Checks the metadata dict for a version
+
+        Returns the version of the first object found in the metadata,
+        checking for 'multiscales', 'plate', 'well' etc
+        """
+        multiscales = metadata.get("multiscales", [])
+        if multiscales:
+            dataset = multiscales[0]
+            return dataset.get("version", None)
+        for name in ["plate", "well", "image-label"]:
+            obj = metadata.get(name)
+            if obj:
+                return obj.get("version", None)
+        return None
 
     def __repr__(self) -> str:
-        return str(self.__class__._CLASS_NAME)
+        return self.__class__.__name__
 
     def __eq__(self, other: object) -> bool:
-        return _core.format_class_matches(
-            self.version,
-            self.__class__.__module__,
-            other.__class__.__module__,
-            other.__class__.__name__,
-        )
+        return self.__class__ == other.__class__
 
     @abstractmethod
     def generate_well_dict(
         self, well: str, rows: list[str], columns: list[str]
-    ) -> dict:
+    ) -> dict:  # pragma: no cover
         raise NotImplementedError()
 
     @abstractmethod
     def validate_well_dict(
         self, well: dict, rows: list[str], columns: list[str]
-    ) -> None:
+    ) -> None:  # pragma: no cover
         raise NotImplementedError()
 
     @abstractmethod
     def generate_coordinate_transformations(
         self, shapes: list[tuple]
-    ) -> list[list[dict[str, Any]]] | None:
+    ) -> list[list[dict[str, Any]]] | None:  # pragma: no cover
         raise NotImplementedError()
 
     @abstractmethod
@@ -103,57 +132,74 @@ class Format(ABC):
         ndim: int,
         nlevels: int,
         coordinate_transformations: list[list[dict[str, Any]]] | None = None,
-    ) -> list[list[dict[str, Any]]] | None:
+    ) -> list[list[dict[str, Any]]] | None:  # pragma: no cover
         raise NotImplementedError()
 
 
-class _VersionedFormat(Format):
-    _VERSION: str
-    _ZARR_FORMAT: int
-    _CHUNK_KEY_ENCODING: dict[str, str]
-    _CLASS_NAME: str
+class FormatV01(Format):
+    """
+    Initial format. (2020)
+    """
+
+    REQUIRED_PLATE_WELL_KEYS: Mapping[str, type] = {"path": str}
 
     @property
     def version(self) -> str:
-        return self._VERSION
+        return "0.1"
 
     @property
     def zarr_format(self) -> int:
-        return self._ZARR_FORMAT
+        return 2
 
     @property
     def chunk_key_encoding(self) -> dict[str, str]:
-        return dict(self._CHUNK_KEY_ENCODING)
+        return {"name": "v2", "separator": "."}
 
     def matches(self, metadata: dict) -> bool:
-        version = _core.get_metadata_version(metadata)
+        version = self._get_metadata_version(metadata)
         LOGGER.debug("%s matches %s?", self.version, version)
         return version == self.version
 
-
-class FormatV01(_VersionedFormat):
-    REQUIRED_PLATE_WELL_KEYS: Mapping[str, type] = {"path": str}
-    _VERSION = "0.1"
-
     def init_store(self, path: str, mode: str = "r") -> FsspecStore | LocalStore:
-        return _core.format_init_store(path, mode)
+        """
+        Not ideal. Stores should remain hidden
+        "dimension_separator" is specified at array creation time
+        """
+
+        read_only = mode == "r"
+        if path.startswith(("http", "s3")):
+            store = FsspecStore.from_url(
+                path,
+                storage_options=None,
+                read_only=read_only,
+            )
+        else:
+            # No other kwargs supported
+            store = LocalStore(path, read_only=read_only)
+        LOGGER.debug("Created nested FsspecStore(%s, %s)", path, mode)
+        return store
 
     def generate_well_dict(
         self, well: str, rows: list[str], columns: list[str]
     ) -> dict:
-        del rows, columns
         return {"path": str(well)}
 
     def validate_well_dict(
         self, well: dict, rows: list[str], columns: list[str]
     ) -> None:
-        del rows, columns
-        _core.validate_well_dict_v01(well)
+        if any(e not in self.REQUIRED_PLATE_WELL_KEYS for e in well):
+            LOGGER.debug("%s contains unspecified keys", well)
+        for key, key_type in self.REQUIRED_PLATE_WELL_KEYS.items():
+            if key not in well:
+                raise ValueError(
+                    "%s must contain a %s key of type %s", well, key, key_type
+                )
+            if not isinstance(well[key], key_type):
+                raise ValueError("%s path must be of %s type", well, key_type)
 
     def generate_coordinate_transformations(
         self, shapes: list[tuple]
     ) -> list[list[dict[str, Any]]] | None:
-        del shapes
         return None
 
     def validate_coordinate_transformations(
@@ -162,40 +208,93 @@ class FormatV01(_VersionedFormat):
         nlevels: int,
         coordinate_transformations: list[list[dict[str, Any]]] | None = None,
     ) -> None:
-        del ndim, nlevels, coordinate_transformations
         return None
 
 
 class FormatV02(FormatV01):
-    _VERSION = "0.2"
+    """
+    Changelog: move to nested storage (April 2021)
+    """
+
+    @property
+    def version(self) -> str:
+        return "0.2"
+
+    @property
+    def chunk_key_encoding(self) -> dict[str, str]:
+        return {"name": "v2", "separator": "/"}
 
 
-class FormatV03(FormatV02):
-    _VERSION = "0.3"
+class FormatV03(FormatV02):  # inherits from V02 to avoid code duplication
+    """
+    Changelog: variable number of dimensions (up to 5),
+    introduce axes field in multiscales (June 2021)
+    """
+
+    @property
+    def version(self) -> str:
+        return "0.3"
 
 
 class FormatV04(FormatV03):
+    """
+    Changelog: axes is list of dicts,
+    introduce coordinate_transformations in multiscales (Nov 2021)
+    """
+
     REQUIRED_PLATE_WELL_KEYS: Mapping[str, type] = {
         "path": str,
         "rowIndex": int,
         "columnIndex": int,
     }
-    _VERSION = "0.4"
+
+    @property
+    def version(self) -> str:
+        return "0.4"
 
     def generate_well_dict(
         self, well: str, rows: list[str], columns: list[str]
     ) -> dict:
-        return _core.generate_well_dict_v04(well, rows, columns)
+        row, column = well.split("/")
+        if row not in rows:
+            raise ValueError("%s is not defined in the list of rows", row)
+        rowIndex = rows.index(row)
+        if column not in columns:
+            raise ValueError("%s is not defined in the list of columns", column)
+        columnIndex = columns.index(column)
+        return {"path": str(well), "rowIndex": rowIndex, "columnIndex": columnIndex}
 
     def validate_well_dict(
         self, well: dict, rows: list[str], columns: list[str]
     ) -> None:
-        _core.validate_well_dict_v04(well, rows, columns)
+        super().validate_well_dict(well, rows, columns)
+        if len(well["path"].split("/")) != 2:
+            raise ValueError("%s path must exactly be composed of 2 groups", well)
+        row, column = well["path"].split("/")
+        if row not in rows:
+            raise ValueError("%s is not defined in the plate rows", row)
+        if well["rowIndex"] != rows.index(row):
+            raise ValueError("Mismatching row index for %s", well)
+        if column not in columns:
+            raise ValueError("%s is not defined in the plate columns", column)
+        if well["columnIndex"] != columns.index(column):
+            raise ValueError("Mismatching column index for %s", well)
 
     def generate_coordinate_transformations(
         self, shapes: list[tuple]
     ) -> list[list[dict[str, Any]]] | None:
-        return _core.generate_coordinate_transformations(shapes)
+        data_shape = shapes[0]
+        coordinate_transformations: list[list[dict[str, Any]]] = []
+        # calculate minimal 'scale' transform based on pyramid dims
+        for shape in shapes:
+            assert len(shape) == len(data_shape)
+            scale = [
+                full / level
+                for full, level in zip(data_shape, shape)  # noqa: B905
+            ]
+            coordinate_transformations.append([{"type": "scale", "scale": scale}])
+
+        return coordinate_transformations
 
     def validate_coordinate_transformations(
         self,
@@ -203,37 +302,88 @@ class FormatV04(FormatV03):
         nlevels: int,
         coordinate_transformations: list[list[dict[str, Any]]] | None = None,
     ) -> None:
-        _core.validate_coordinate_transformations(
-            ndim, nlevels, coordinate_transformations
-        )
+        """
+        Validates that a list of dicts contains a 'scale' transformation
+
+        Raises ValueError if no 'scale' found or doesn't match ndim.
+
+        :param ndim: Number of image dimensions.
+        """
+
+        if coordinate_transformations is None:
+            raise ValueError("coordinate_transformations must be provided")
+        ct_count = len(coordinate_transformations)
+        if ct_count != nlevels:
+            raise ValueError(
+                f"coordinate_transformations count: {ct_count} must match "
+                f"datasets {nlevels}"
+            )
+        for transformations in coordinate_transformations:
+            assert isinstance(transformations, list)
+            types = [t.get("type", None) for t in transformations]
+            if any(t is None for t in types):
+                raise ValueError(f"Missing type in: {transformations}")
+            # validate scales...
+            if sum(t == "scale" for t in types) != 1:
+                raise ValueError(
+                    "Must supply 1 'scale' item in coordinate_transformations"
+                )
+            # first transformation must be scale
+            if types[0] != "scale":
+                raise ValueError("First coordinate_transformations must be 'scale'")
+            first = transformations[0]
+            if "scale" not in transformations[0]:
+                raise ValueError(f"Missing scale argument in: {first}")
+            scale = first["scale"]
+            if len(scale) != ndim:
+                raise ValueError(
+                    f"'scale' list {scale} must match "
+                    f"number of image dimensions: {ndim}"
+                )
+            for value in scale:
+                if not isinstance(value, (float, int)):
+                    raise ValueError(f"'scale' values must all be numbers: {scale}")
+
+            # validate translations...
+            translation_types = [t == "translation" for t in types]
+            if sum(translation_types) > 1:
+                raise ValueError(
+                    "Must supply 0 or 1 'translation' item incoordinate_transformations"
+                )
+            elif sum(translation_types) == 1:
+                transformation = transformations[types.index("translation")]
+                if "translation" not in transformation:
+                    raise ValueError(f"Missing scale argument in: {first}")
+                translation = transformation["translation"]
+                if len(translation) != ndim:
+                    raise ValueError(
+                        f"'translation' list {translation} must match "
+                        f"image dimensions count: {ndim}"
+                    )
+                for value in translation:
+                    if not isinstance(value, (float, int)):
+                        raise ValueError(
+                            f"'translation' values must all be numbers: {translation}"
+                        )
 
 
 class FormatV05(FormatV04):
-    _VERSION = "0.5"
+    """
+    Changelog: added FormatV05 (May 2025): writing not supported yet
+    """
 
+    @property
+    def version(self) -> str:
+        return "0.5"
 
-def _format_class_for_version(version: str) -> type[Format]:
-    return _FORMAT_CLASS_BY_VERSION[version]
+    @property
+    def zarr_format(self) -> int:
+        return 3
 
-
-def _initialize_format_class_metadata() -> None:
-    for cls in (FormatV01, FormatV02, FormatV03, FormatV04, FormatV05):
-        cls._ZARR_FORMAT = int(_core.format_zarr_format(cls._VERSION))
-        cls._CHUNK_KEY_ENCODING = dict(_core.format_chunk_key_encoding(cls._VERSION))
-        cls._CLASS_NAME = str(_core.format_class_name(cls._VERSION))
-
-
-_FORMAT_CLASS_BY_VERSION.update(
-    {
-        "0.1": FormatV01,
-        "0.2": FormatV02,
-        "0.3": FormatV03,
-        "0.4": FormatV04,
-        "0.5": FormatV05,
-    }
-)
-
-_initialize_format_class_metadata()
+    @property
+    def chunk_key_encoding(self) -> dict[str, str]:
+        # this is default for Zarr v3. Could return None?
+        return {"name": "default", "separator": "/"}
 
 
 CurrentFormat = FormatV05
