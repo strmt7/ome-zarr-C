@@ -166,6 +166,11 @@ benchmark comparison, but it is not the target runtime product.
     in `docs/reference/native-dependency-manifest.json` as the source of truth.
     Do not rely on stale distro package versions for CMake, Ninja, Zstd, or
     c-blosc when the manifest specifies newer releases.
+49. Report benchmark outcomes as absolute C++ relative speed vs Python:
+    `python_time / cpp_time`. A ratio above `1.0` means C++ is faster; below
+    `1.0` means C++ is slower. Do not invert slower cases into larger
+    "slower" multipliers; report them directly, for example `0.748x`, with a
+    status such as "C++ slower".
 
 ## Fast load order
 

@@ -486,7 +486,7 @@ current portable `-O3` build:
 - command mode: fixed-loop iteration gate, `--processes 1 --values 1 --warmups 0
   --loops 1`
 - paired cases: `62`
-- overall geometric-mean speedup: `2.988x` (`python / cpp`)
+- overall C++ relative speed vs Python: `2.988x` by geometric mean
 - classification: `38` C++ faster, `12` roughly equal, `12` C++ slower
 - public API benchmark coverage:
   - `89` documented callables discovered from upstream modules
@@ -494,7 +494,7 @@ current portable `-O3` build:
   - `77` covered callable entrypoints
   - `0` uncovered callable entrypoints
 
-Group geometric means in that snapshot:
+Group geometric-mean C++ relative speeds vs Python in that snapshot:
 
 - `cli`: `7.799x`
 - `conversions`: `156.416x`
@@ -521,7 +521,7 @@ Notable wins in that completed snapshot:
 - `runtime.data.create_zarr_coins_v05`: `23.868x`
 - `runtime.data.create_zarr_astronaut_v05`: `19.977x`
 
-Still-slower paths in the same completed snapshot:
+C++-slower paths in the same completed snapshot:
 
 - `utils.view`: `0.016x`
 - `utils.find_multiscales`: `0.129x`

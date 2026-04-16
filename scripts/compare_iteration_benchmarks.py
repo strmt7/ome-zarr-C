@@ -80,6 +80,12 @@ def _load_native_results(path: Path) -> dict[str, float]:
     }
 
 
+def _format_cpp_result(ratio: float | None) -> str:
+    if ratio is None:
+        return "-"
+    return f"{ratio:.3f}x"
+
+
 def _build_markdown(
     *,
     suite: str,
@@ -97,8 +103,9 @@ def _build_markdown(
         "Standalone native timings come from `ome_zarr_native_bench_core` "
         "and measure pure-native semantic cost.",
         "",
-        "| case | python us/op | cpp harness us/op | python/cpp speedup | "
-        "native us/op | python/native speedup |",
+        "| case | C++ harness us/op | python us/op | "
+        "C++ harness relative speed vs Python | native us/op | "
+        "native C++ relative speed vs Python |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
 
@@ -110,10 +117,10 @@ def _build_markdown(
         def _fmt(value: float | None) -> str:
             return "-" if value is None else f"{value:.3f}"
 
-        py_cpp_speedup = (
+        py_cpp_ratio = (
             None if py_us is None or cpp_us is None or cpp_us == 0.0 else py_us / cpp_us
         )
-        py_native_speedup = (
+        py_native_ratio = (
             None
             if py_us is None or native_us is None or native_us == 0.0
             else py_us / native_us
@@ -123,16 +130,16 @@ def _build_markdown(
             "| "
             + case_name
             + " | "
-            + _fmt(py_us)
-            + " | "
             + _fmt(cpp_us)
             + " | "
-            + _fmt(py_cpp_speedup)
-            + "x | "
+            + _fmt(py_us)
+            + " | "
+            + _format_cpp_result(py_cpp_ratio)
+            + " | "
             + _fmt(native_us)
             + " | "
-            + _fmt(py_native_speedup)
-            + "x |"
+            + _format_cpp_result(py_native_ratio)
+            + " |"
         )
 
     if paired_cases:
@@ -141,15 +148,15 @@ def _build_markdown(
                 "",
                 "## Explicit paired comparisons",
                 "",
-                "| python case | native case | python us/op | native us/op | "
-                "python/native speedup |",
+                "| python case | native case | native us/op | python us/op | "
+                "native C++ relative speed vs Python |",
                 "| --- | --- | ---: | ---: | ---: |",
             ]
         )
         for python_case, native_case in paired_cases:
             py_us = pyperf_pairs.get(python_case, {}).get("python")
             native_us = native_results.get(native_case)
-            speedup = (
+            native_ratio = (
                 None
                 if py_us is None or native_us is None or native_us == 0.0
                 else py_us / native_us
@@ -160,11 +167,11 @@ def _build_markdown(
                 + " | "
                 + native_case
                 + " | "
-                + ("-" if py_us is None else f"{py_us:.3f}")
-                + " | "
                 + ("-" if native_us is None else f"{native_us:.3f}")
                 + " | "
-                + ("-" if speedup is None else f"{speedup:.3f}x")
+                + ("-" if py_us is None else f"{py_us:.3f}")
+                + " | "
+                + _format_cpp_result(native_ratio)
                 + " |"
             )
 

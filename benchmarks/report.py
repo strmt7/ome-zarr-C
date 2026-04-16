@@ -39,11 +39,11 @@ def _format_seconds(seconds: float) -> str:
     return f"{seconds:.3f} s"
 
 
-def _status(speedup: float) -> str:
-    if speedup >= 1.05:
-        return "cpp faster"
-    if speedup <= 0.95:
-        return "cpp slower"
+def _status(cpp_ratio: float) -> str:
+    if cpp_ratio >= 1.05:
+        return "C++ faster"
+    if cpp_ratio <= 0.95:
+        return "C++ slower"
     return "roughly equal"
 
 
@@ -51,24 +51,31 @@ def _geometric_mean(values: list[float]) -> float:
     return math.exp(sum(math.log(value) for value in values) / len(values))
 
 
+def _format_cpp_result(cpp_ratio: float) -> str:
+    return f"{cpp_ratio:.3f}x"
+
+
 def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
-    speedups = [row["speedup"] for row in paired_rows]
-    faster = sum(1 for row in paired_rows if row["status"] == "cpp faster")
-    slower = sum(1 for row in paired_rows if row["status"] == "cpp slower")
+    cpp_ratios = [row["cpp_ratio"] for row in paired_rows]
+    faster = sum(1 for row in paired_rows if row["status"] == "C++ faster")
+    slower = sum(1 for row in paired_rows if row["status"] == "C++ slower")
     equal = sum(1 for row in paired_rows if row["status"] == "roughly equal")
 
     grouped: dict[str, list[float]] = defaultdict(list)
     for row in paired_rows:
-        grouped[row["group"]].append(row["speedup"])
+        grouped[row["group"]].append(row["cpp_ratio"])
 
     lines = [
         "# Benchmark Summary",
         "",
         f"- Paired cases: {len(paired_rows)}",
-        f"- Geometric-mean speedup (python / cpp): {_geometric_mean(speedups):.3f}x",
+        (
+            "- Geometric-mean C++ relative speed vs Python: "
+            f"{_format_cpp_result(_geometric_mean(cpp_ratios))}"
+        ),
         (
             "- Case classification: "
-            f"{faster} cpp faster, {equal} roughly equal, {slower} cpp slower"
+            f"{faster} C++ faster, {equal} roughly equal, {slower} C++ slower"
         ),
         "",
         "## Group Geometric Means",
@@ -76,14 +83,17 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
     ]
 
     for group in sorted(grouped):
-        lines.append(f"- {group}: {_geometric_mean(grouped[group]):.3f}x")
+        lines.append(
+            f"- {group}: {_format_cpp_result(_geometric_mean(grouped[group]))}"
+        )
 
     lines.extend(
         [
             "",
             "## Cases",
             "",
-            "| Case | Python median | C++ median | Speedup (py/cpp) | Status |",
+            "| Case | C++ median | Python median | "
+            "C++ relative speed vs Python | Status |",
             "| --- | ---: | ---: | ---: | --- |",
         ]
     )
@@ -92,9 +102,9 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
         lines.append(
             "| "
             f"{row['name']} | "
-            f"{_format_seconds(row['python_median'])} | "
             f"{_format_seconds(row['cpp_median'])} | "
-            f"{row['speedup']:.3f}x | "
+            f"{_format_seconds(row['python_median'])} | "
+            f"{_format_cpp_result(row['cpp_ratio'])} | "
             f"{row['status']} |"
         )
 
@@ -118,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
 
         python_median = pair["python"].median()
         cpp_median = pair["cpp"].median()
-        speedup = python_median / cpp_median
+        cpp_ratio = python_median / cpp_median
         group, _, short_name = base_name.partition(".")
         rows.append(
             {
@@ -126,8 +136,8 @@ def main(argv: list[str] | None = None) -> int:
                 "name": short_name,
                 "python_median": python_median,
                 "cpp_median": cpp_median,
-                "speedup": speedup,
-                "status": _status(speedup),
+                "cpp_ratio": cpp_ratio,
+                "status": _status(cpp_ratio),
             }
         )
 

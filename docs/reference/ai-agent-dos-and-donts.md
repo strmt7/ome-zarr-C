@@ -36,8 +36,9 @@ porting work.
   or similar Python runtime type participate in C++ code, and confine that
   boundary to `cpp/bindings/`.
 - Prefer newer stable dependency versions when they enable better native
-  implementation techniques or measurable speedups, but only keep the upgrade
-  after rerunning parity and benchmark validation on the upgraded stack.
+  implementation techniques or measurable C++ performance gains, but only keep
+  the upgrade after rerunning parity and benchmark validation on the upgraded
+  stack.
 - Use the standalone native build and native benchmark tools when you need to
   measure pure-native semantic cost separately from Python-visible boundary
   overhead.
@@ -62,6 +63,11 @@ porting work.
 - Do run a smart consistency sweep before pushing so docs, file names, function
   names, benchmark claims, and structural references still match the actual
   repo state.
+- Report benchmark results as absolute C++ relative speed vs Python:
+  `python_time / cpp_time`. A ratio above `1.0` means C++ is faster; below
+  `1.0` means C++ is slower. Do not invert slower cases into larger "slower"
+  multipliers; report the direct ratio, for example `0.748x`, plus a clear
+  status.
 
 ## Don't
 
@@ -92,3 +98,5 @@ porting work.
 - Do not assume passing tests are enough to prove the repo is internally
   consistent. Scan for stale names, removed files still mentioned in docs, and
   other contract drift before pushing.
+- Do not describe a slower C++ result as a performance gain or invert it into
+  a larger "slower" multiplier. Keep the direct relative-speed ratio.
