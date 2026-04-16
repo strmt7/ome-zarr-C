@@ -461,30 +461,37 @@ available only when `OME_ZARR_BENCH_INCLUDE_LARGE=1`.
 See `docs/reference/benchmark-suite.md` for the methodology and
 `docs/reference/public-benchmark-fixtures.md` for fixture provenance.
 
-Latest completed broad snapshot on `2026-04-14` on the current portable `-O3`
-build:
+Latest completed bounded all-suite iteration snapshot on `2026-04-16` on the
+current portable `-O3` build:
 
-- `core`: `29` cases, geometric mean `1.139x` (`python / cpp`)
-- `public-api`: `38` cases, geometric mean `1.032x`
-- `realdata`: `3` default public fixtures, geometric mean `1.005x`
-- public API coverage checker: `89` documented callables, `8` abstract
-  exclusions, `0` uncovered callables
+- command mode: fixed-loop iteration gate, `--processes 1 --values 1
+  --warmups 0 --loops 1`
+- paired cases: `62`
+- overall geometric mean: `3.294x` (`python / cpp`)
+- classification: `41` C++ faster, `12` roughly equal, `9` C++ slower
+- public API coverage checker: `89` documented callables, `16` excluded
+  callables, `77` covered callable entrypoints, `0` uncovered callables
 
 Notable wins in that completed snapshot:
 
-- `conversions.rgba_to_int`: `37.771x`
-- `conversions.int_to_rgba`: `66.258x`
-- `data.rgb_to_5d_batch`: `2.467x`
-- `data.make_circle_batch`: `2.087x`
-- `format.detect_format_batch`: `1.413x`
-- `scale.scaler_methods`: `4.533x`
+- `conversions.int_to_rgba`: `3156.858x`
+- `conversions.rgba_to_int`: `301.812x`
+- `data.rgb_to_5d_batch`: `5306.384x`
+- `data.make_circle_batch`: `423.817x`
+- `runtime.data.create_zarr_coins_v05`: `26.249x`
+- `runtime.data.create_zarr_astronaut_v05`: `20.638x`
+- `runtime.cli.create_info_v05`: `23.423x`
+- `utils.download`: `17.030x`
 
 Still-slower paths in the same completed snapshot:
 
-- `format.matches`: `0.824x`
-- `format.well_and_coord`: `0.705x`
-- `writer.resolve_storage_options_batch`: `0.901x`
-- `scaler.nearest_rgb`: `0.944x`
+- `utils.view`: `0.015x`
+- `utils.find_multiscales`: `0.138x`
+- `reader.matches`: `0.332x`
+- `utils.finder`: `0.536x`
+- `format.well_and_coord`: `0.875x`
+- `writer.metadata_writers`: `0.920x`
+- `writer.write_image_v05_delayed`: `0.939x`
 
 For read-only surfaces that print absolute paths, parity tests should run the
 upstream and converted implementations against the same fixture path so the

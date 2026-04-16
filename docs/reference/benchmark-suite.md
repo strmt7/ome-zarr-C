@@ -420,6 +420,28 @@ Run the public-API suite:
   --output /tmp/ome-zarr-c-bench-public-api.json
 ```
 
+Run a bounded all-suite iteration snapshot when you need a complete
+Python-vs-C++ comparison during migration work:
+
+```bash
+timeout 180s .venv/bin/python -m benchmarks.run \
+  --processes 1 \
+  --values 1 \
+  --warmups 0 \
+  --loops 1 \
+  --timeout 120 \
+  --quiet \
+  --output /tmp/ome-zarr-c-bench-full-iteration.json
+```
+
+This fixed-loop command intentionally prioritizes full-suite coverage and
+bounded wall time over rigorous statistics. Use it for per-iteration gates. Do
+not let `pyperf` auto-calibrate broad all-suite runs during routine migration
+work, because extremely fast microcases can legitimately calibrate to huge loop
+counts and waste minutes without improving the migration decision. For final
+published performance claims, rerun focused cases with larger `--values`,
+`--processes`, and non-trivial `--min-time`.
+
 Run only the format cases in the public API suite during iteration:
 
 ```bash
@@ -458,57 +480,69 @@ live under `/tmp/` or another local scratch path.
 
 ## Current Snapshot
 
-Latest completed broad snapshot on `2026-04-14` on the current portable `-O3`
-build:
+Latest completed bounded all-suite iteration snapshot on `2026-04-16` on the
+current portable `-O3` build:
 
-- `core`: `29` paired cases, geometric-mean speedup `1.139x` (`python / cpp`)
-- `public-api`: `38` paired cases, geometric-mean speedup `1.032x`
-- `realdata`: `3` paired cases, geometric-mean speedup `1.005x`
+- command mode: fixed-loop iteration gate, `--processes 1 --values 1 --warmups 0
+  --loops 1`
+- paired cases: `62`
+- overall geometric-mean speedup: `3.294x` (`python / cpp`)
+- classification: `41` C++ faster, `12` roughly equal, `9` C++ slower
 - public API benchmark coverage:
   - `89` documented callables discovered from upstream modules
-  - `8` abstract exclusions
+  - `16` excluded callables
+  - `77` covered callable entrypoints
   - `0` uncovered callable entrypoints
+
+Group geometric means in that snapshot:
+
+- `cli`: `8.268x`
+- `conversions`: `976.103x`
+- `csv`: `6.586x`
+- `data`: `50.317x`
+- `format`: `0.951x`
+- `meso`: `1.092x`
+- `micro`: `8.700x`
+- `reader`: `1.992x`
+- `realdata`: `2.970x`
+- `runtime`: `4.258x`
+- `scale`: `1.169x`
+- `utils`: `0.760x`
+- `writer`: `1.114x`
 
 Notable wins in that completed snapshot:
 
-- `conversions.rgba_to_int`: `37.771x`
-- `conversions.int_to_rgba`: `66.258x`
-- `data.rgb_to_5d_batch`: `2.467x`
-- `data.make_circle_batch`: `2.087x`
-- `format.detect_format_batch`: `1.413x`
-- `scale.scaler_methods`: `4.533x`
+- `conversions.int_to_rgba`: `3156.858x`
+- `conversions.rgba_to_int`: `301.812x`
+- `data.rgb_to_5d_batch`: `5306.384x`
+- `data.make_circle_batch`: `423.817x`
+- `runtime.data.create_zarr_coins_v05`: `26.249x`
+- `runtime.data.create_zarr_astronaut_v05`: `20.638x`
+- `runtime.cli.create_info_v05`: `23.423x`
+- `utils.download`: `17.030x`
 
 Still-slower paths in the same completed snapshot:
 
-- `format.matches`: `0.824x`
-- `format.well_and_coord`: `0.705x`
-- `writer.resolve_storage_options_batch`: `0.901x`
-- `scaler.nearest_rgb`: `0.944x`
+- `utils.view`: `0.015x`
+- `utils.find_multiscales`: `0.138x`
+- `reader.matches`: `0.332x`
+- `utils.finder`: `0.536x`
+- `format.well_and_coord`: `0.875x`
+- `writer.metadata_writers`: `0.920x`
+- `writer.write_image_v05_delayed`: `0.939x`
 
 Interpretation:
 
-- The strongest gains are in arithmetic-heavy conversion and array-shaping
-  kernels.
-- The meso compute slice is modestly faster overall on the current machine.
-
-Latest focused format-only fast slice on `2026-04-14`:
-
-- artifact: `benchmarks/results/format-slice-v4-report.md`
-- `4` paired cases, geometric-mean speedup `0.887x`
-- `dispatch`: `1.059x`
-- `matches`: `0.876x`
-- `v01_init_store`: `0.970x`
-- `well_and_coord`: `0.688x`
-
-That focused slice is better than the earlier committed format slices, but the
-format path is still not a net win overall on this machine and remains the
-highest-value optimization target.
-- The broad suite-level picture was still near-flat in the last completed
-  all-suite run, so targeted wins should not be overstated as package-wide wins.
-- Boundary-heavy helper and format paths are still the main performance drag.
-- Filesystem-heavy runtime paths are noisier than in-memory kernels, so the
-  summaries use `pyperf` medians and geometric means instead of raw
-  means.
+- The strongest gains are in conversion, local data creation, CLI wrappers, and
+  deterministic runtime flows now backed by native code.
+- Writer is slightly net faster overall, but metadata writers and delayed
+  writes are still close to parity or slower because they remain dominated by
+  Dask/Zarr boundary work.
+- `utils.view`, finder traversal, and reader `matches` are the highest-value
+  performance targets before making stronger package-wide speed claims.
+- Fixed-loop all-suite snapshots are iteration gates, not statistically
+  rigorous marketing numbers. Re-run important hotspots with larger pyperf
+  sampling before publishing external performance claims.
 
 ## Benchmark Hygiene
 

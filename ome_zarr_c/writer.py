@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 import warnings
 from pathlib import Path
@@ -21,11 +20,9 @@ from .format import (
     FormatV01,
     FormatV02,
     FormatV03,
-    format_from_version,
+    FormatV04,
 )
 from .scale import Methods, Scaler
-
-_core = importlib.import_module("ome_zarr_c._core")
 
 LOGGER = logging.getLogger("ome_zarr.writer")
 
@@ -307,18 +304,64 @@ def _resolve_storage_options(
     return options
 
 
+def _uses_legacy_root_attrs(fmt: Format) -> bool:
+    return fmt.version in ("0.1", "0.2", "0.3", "0.4")
+
+
+def _method_name(method: Methods | str | None) -> str | None:
+    if method is None:
+        return None
+    value = getattr(method, "value", None)
+    if isinstance(value, str):
+        return value
+    if isinstance(method, str):
+        return method
+    return str(method)
+
+
+def _scale_factors_from_scaler(
+    dims: tuple[str, ...],
+    max_layer: int,
+) -> list[dict[str, int]]:
+    return [
+        {dimension: 2**level if dimension in SPATIAL_DIMS else 1 for dimension in dims}
+        for level in range(1, max_layer + 1)
+    ]
+
+
+def _validate_omero_metadata(omero_metadata: Any) -> None:
+    if omero_metadata is None:
+        raise KeyError("If `'omero'` is present, value cannot be `None`.")
+
+    for channel in omero_metadata["channels"]:
+        if "color" in channel:
+            color = channel["color"]
+            if not isinstance(color, str) or len(color) != 6:
+                raise TypeError("`'color'` must be a hex code string.")
+        if "window" in channel:
+            window = channel["window"]
+            if not isinstance(window, dict):
+                raise TypeError("`'window'` must be a dict.")
+            for parameter in ["min", "max", "start", "end"]:
+                if parameter not in window:
+                    raise KeyError(f"`'{parameter}'` not found in `'window'`.")
+                if not isinstance(window[parameter], (int, float)):
+                    raise TypeError(f"`'{parameter}'` must be an int or float.")
+
+
 def check_group_fmt(
     group: zarr.Group | str,
     fmt: Format | None = None,
     mode: str = "a",
 ) -> tuple[zarr.Group, Format]:
     """Create/check a zarr group against the requested OME-Zarr format."""
-    checked_group, version = _core.writer_check_group_fmt(
-        group,
-        None if fmt is None else fmt.version,
-        mode,
-    )
-    return checked_group, format_from_version(str(version))
+    if isinstance(group, str):
+        if fmt is None:
+            fmt = CurrentFormat()
+        group = zarr.open_group(group, mode=mode, zarr_format=fmt.zarr_format)
+    else:
+        fmt = check_format(group, fmt)
+    return group, fmt
 
 
 def check_format(
@@ -326,9 +369,19 @@ def check_format(
     fmt: Format | None = None,
 ) -> Format:
     """Check if the format is valid for the given group."""
-    return format_from_version(
-        str(_core.writer_check_format(group, None if fmt is None else fmt.version))
-    )
+    zarr_format = group.info._zarr_format
+    if fmt is not None:
+        if fmt.zarr_format != zarr_format:
+            raise ValueError(
+                f"Group is zarr_format: {zarr_format} but OME-Zarr "
+                f"{fmt.version} is {fmt.zarr_format}"
+            )
+    elif zarr_format == 2:
+        fmt = FormatV04()
+    elif zarr_format == 3:
+        fmt = CurrentFormat()
+    assert fmt is not None
+    return fmt
 
 
 def write_image(
@@ -363,31 +416,31 @@ def write_image(
     axes = _get_valid_axes(len(image.shape), axes, fmt)
     dims = _extract_dims_from_axes(axes)
 
-    runtime_plan = dict(
-        _core.writer_image_plan(
-            dims,
-            scaler is not None,
-            0 if scaler is None else int(scaler.max_layer),
-            "" if scaler is None else str(scaler.method),
-            method,
-        )
-    )
-
-    if bool(runtime_plan["warn_scaler_deprecated"]):
+    if scaler is not None:
         msg = """
             The 'scaler' argument is deprecated and will be removed in a future version.
             Please use the 'scale_factors' argument instead.
             """
         warnings.warn(msg, DeprecationWarning, stacklevel=2)
-        scale_factors = list(runtime_plan["scale_factors"])
-        method = str(runtime_plan["resolved_method"])
-
-    if bool(runtime_plan["warn_laplacian_fallback"]):
-        warnings.warn(
-            "Laplacian downsampling is not supported anymore.Falling back to `resize`",
-            UserWarning,
-            stacklevel=2,
-        )
+        scale_factors = _scale_factors_from_scaler(dims, int(scaler.max_layer))
+        if scaler.method == "local_mean":
+            method = Methods.LOCAL_MEAN
+        elif scaler.method == "nearest":
+            method = Methods.NEAREST
+        elif scaler.method == "resize_image":
+            method = Methods.RESIZE
+        elif scaler.method == "laplacian":
+            method = Methods.RESIZE
+            warnings.warn(
+                "Laplacian downsampling is not supported anymore."
+                "Falling back to `resize`",
+                UserWarning,
+                stacklevel=2,
+            )
+        elif scaler.method == "zoom":
+            method = Methods.ZOOM
+        else:
+            method = Methods.RESIZE
 
     if method is None:
         method = Methods.RESIZE
@@ -472,14 +525,33 @@ def write_multiscales_metadata(
             if axes is not None:
                 ndim = len(axes)
 
-    _core.writer_write_multiscales_metadata(
-        group,
-        _validate_datasets(datasets, ndim, fmt),
-        fmt.version,
-        axes,
-        name,
-        metadata,
-    )
+    if (
+        isinstance(metadata, dict)
+        and metadata.get("metadata")
+        and isinstance(metadata["metadata"], dict)
+        and "omero" in metadata["metadata"]
+    ):
+        omero_metadata = metadata["metadata"].pop("omero")
+        _validate_omero_metadata(omero_metadata)
+        add_metadata(group, {"omero": omero_metadata}, fmt=fmt)
+
+    multiscales = [
+        dict(
+            datasets=_validate_datasets(datasets, ndim, fmt),
+            name=name or group.name,
+        )
+    ]
+    if len(metadata.get("metadata", {})) > 0:
+        multiscales[0]["metadata"] = metadata["metadata"]
+    if axes is not None:
+        multiscales[0]["axes"] = axes
+
+    if _uses_legacy_root_attrs(fmt):
+        multiscales[0]["version"] = fmt.version
+    else:
+        add_metadata(group, {"version": fmt.version}, fmt=fmt)
+
+    add_metadata(group, {"multiscales": multiscales}, fmt=fmt)
 
 
 def write_plate_metadata(
@@ -493,16 +565,25 @@ def write_plate_metadata(
     name: str | None = None,
 ) -> None:
     group, fmt = check_group_fmt(group, fmt)
-    _core.writer_write_plate_metadata(
-        group,
-        _validate_plate_rows_columns(rows),
-        _validate_plate_rows_columns(columns),
-        _validate_plate_wells(wells, rows, columns, fmt=fmt),
-        fmt.version,
-        None if acquisitions is None else _validate_plate_acquisitions(acquisitions),
-        field_count,
-        name,
-    )
+    plate: dict[str, str | int | list[dict]] = {
+        "columns": _validate_plate_rows_columns(columns),
+        "rows": _validate_plate_rows_columns(rows),
+        "wells": _validate_plate_wells(wells, rows, columns, fmt=fmt),
+    }
+    if name is not None:
+        plate["name"] = name
+    if field_count is not None:
+        plate["field_count"] = field_count
+    if acquisitions is not None:
+        plate["acquisitions"] = _validate_plate_acquisitions(acquisitions)
+
+    if _uses_legacy_root_attrs(fmt):
+        plate["version"] = fmt.version
+        group.attrs["plate"] = plate
+    else:
+        if fmt.version == "0.5":
+            plate["version"] = fmt.version
+        group.attrs["ome"] = {"version": fmt.version, "plate": plate}
 
 
 def write_well_metadata(
@@ -511,11 +592,14 @@ def write_well_metadata(
     fmt: Format | None = None,
 ) -> None:
     group, fmt = check_group_fmt(group, fmt)
-    _core.writer_write_well_metadata(
-        group,
-        _validate_well_images(images),
-        fmt.version,
-    )
+    well: dict[str, Any] = {
+        "images": _validate_well_images(images),
+    }
+    if _uses_legacy_root_attrs(fmt):
+        well["version"] = fmt.version
+        group.attrs["well"] = well
+    else:
+        group.attrs["ome"] = {"version": fmt.version, "well": well}
 
 
 def _write_pyramid_to_zarr(
@@ -531,33 +615,33 @@ def _write_pyramid_to_zarr(
 ) -> list:
     group, fmt = check_group_fmt(group, fmt)
 
-    runtime_plan = dict(
-        _core.writer_pyramid_plan(pyramid, int(fmt.zarr_format), axes, storage_options)
-    )
     zarr_array_kwargs: dict[str, Any] = {}
     options = _resolve_storage_options(storage_options, 0)
 
-    if bool(runtime_plan["use_v2_chunk_key_encoding"]):
+    use_v2_chunk_key_encoding = fmt.zarr_format == 2
+    if use_v2_chunk_key_encoding:
         zarr_array_kwargs["chunk_key_encoding"] = {"name": "v2", "separator": "/"}
         zarr_array_kwargs["compressor"] = options.pop("compressor", _blosc_compressor())
     else:
-        dimension_names = list(runtime_plan["dimension_names"])
-        if len(dimension_names) > 0:
-            zarr_array_kwargs["dimension_names"] = dimension_names
-    if not bool(runtime_plan["use_v2_chunk_key_encoding"]) and "compressor" in options:
+        if axes is not None:
+            dimension_names = [axis["name"] for axis in axes if isinstance(axis, dict)]
+            if len(dimension_names) > 0:
+                zarr_array_kwargs["dimension_names"] = dimension_names
+    if not use_v2_chunk_key_encoding and "compressor" in options:
         zarr_array_kwargs["compressors"] = [options.pop("compressor")]
 
     shapes = []
     datasets: list[dict] = []
     delayed = []
 
-    for idx, (level, level_plan) in enumerate(
-        zip(pyramid, list(runtime_plan["levels"]), strict=False)
-    ):
+    for idx, level in enumerate(pyramid):
         options = _resolve_storage_options(storage_options, idx)
 
         chunks_opt = None
-        if bool(level_plan["has_chunks"]):
+        if isinstance(storage_options, list) and isinstance(storage_options[idx], dict):
+            if "chunks" in storage_options[idx]:
+                chunks_opt = options.pop("chunks", None)
+        elif isinstance(storage_options, dict) and "chunks" in storage_options:
             chunks_opt = options.pop("chunks", None)
 
         if chunks_opt is not None:
@@ -574,8 +658,9 @@ def _write_pyramid_to_zarr(
             level_image.shape,
             level_image.dtype,
         )
-        component = str(Path(group.path, str(level_plan["component"])))
-        if bool(runtime_plan["use_v2_chunk_key_encoding"]):
+        level_component = f"s{idx}"
+        component = str(Path(group.path, level_component))
+        if use_v2_chunk_key_encoding:
             compressor = zarr_array_kwargs["compressor"]
             chunk_key_encoding = dict(zarr_array_kwargs["chunk_key_encoding"])
             chunks = zarr_array_kwargs.get("chunks", level_image.chunksize)
@@ -607,7 +692,7 @@ def _write_pyramid_to_zarr(
                     zarr_array_kwargs=zarr_array_kwargs,
                 )
             )
-        datasets.append({"path": str(level_plan["component"])})
+        datasets.append({"path": level_component})
 
     if compute:
         da.compute(*delayed)
@@ -645,28 +730,51 @@ def write_label_metadata(
     **metadata: list[dict[str, Any]] | dict[str, Any] | str,
 ) -> None:
     group, fmt = check_group_fmt(group, fmt)
-    _core.writer_write_label_metadata(
-        group,
-        name,
-        colors,
-        properties,
-        fmt.version,
-        metadata,
-    )
+    label_group = group[name]
+    image_label_metadata = {**metadata}
+    if colors is not None:
+        image_label_metadata["colors"] = colors
+    if properties is not None:
+        image_label_metadata["properties"] = properties
+    image_label_metadata["version"] = fmt.version
+
+    label_list = get_metadata(group).get("labels", [])
+    label_list.append(name)
+
+    add_metadata(group, {"labels": label_list}, fmt=fmt)
+    add_metadata(label_group, {"image-label": image_label_metadata}, fmt=fmt)
 
 
 def get_metadata(group: zarr.Group | str) -> dict:
-    return dict(_core.writer_get_metadata(group))
+    if isinstance(group, str):
+        group = zarr.open_group(group, mode="r")
+    attrs = group.attrs
+    if group.info._zarr_format == 3:
+        attrs = attrs.get("ome", {})
+    else:
+        attrs = dict(attrs)
+    return attrs
 
 
 def add_metadata(
     group: zarr.Group | str, metadata: dict[str, Any], fmt: Format | None = None
 ) -> None:
-    _core.writer_add_metadata(
-        group,
-        metadata,
-        None if fmt is None else fmt.version,
-    )
+    group, fmt = check_group_fmt(group, fmt)
+    attrs = group.attrs
+    if not _uses_legacy_root_attrs(fmt):
+        attrs = attrs.get("ome", {})
+
+    for key, value in metadata.items():
+        if isinstance(value, dict) and isinstance(attrs.get(key), dict):
+            attrs[key].update(value)
+        else:
+            attrs[key] = value
+
+    if _uses_legacy_root_attrs(fmt):
+        for key, value in attrs.items():
+            group.attrs[key] = value
+    else:
+        group.attrs["ome"] = attrs
 
 
 def write_multiscale_labels(
@@ -738,26 +846,18 @@ def write_labels(
 
     axes = _get_valid_axes(len(labels.shape), axes, fmt)
     dims = _extract_dims_from_axes(axes)
-    labels_plan = dict(
-        _core.writer_labels_plan(
-            dims,
-            scaler is _DEFAULT_LABEL_SCALER,
-            scaler is None,
-            0 if scaler in (None, _DEFAULT_LABEL_SCALER) else int(scaler.max_layer),
-            method,
-        )
-    )
 
-    if bool(labels_plan["warn_scaler_deprecated"]):
+    if scaler is _DEFAULT_LABEL_SCALER or scaler is not None:
         msg = """
         The 'scaler' argument is deprecated and will be removed in version 0.13.0.
         Please use the 'scale_factors' argument instead.
         """
         warnings.warn(msg, DeprecationWarning, stacklevel=2)
-        scale_factors = list(labels_plan["scale_factors"])
+        max_layer = 4 if scaler is _DEFAULT_LABEL_SCALER else int(scaler.max_layer)
+        scale_factors = _scale_factors_from_scaler(dims, max_layer)
 
     if method is None or scaler is not None or scaler is _DEFAULT_LABEL_SCALER:
-        method = str(labels_plan["resolved_method"])
+        method = _method_name(method) or "nearest"
 
     if not isinstance(labels, da.Array):
         labels = da.from_array(labels)
