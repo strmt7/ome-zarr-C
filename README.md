@@ -467,31 +467,31 @@ current portable `-O3` build:
 - command mode: fixed-loop iteration gate, `--processes 1 --values 1
   --warmups 0 --loops 1`
 - paired cases: `62`
-- overall geometric mean: `3.294x` (`python / cpp`)
-- classification: `41` C++ faster, `12` roughly equal, `9` C++ slower
+- overall geometric mean: `2.988x` (`python / cpp`)
+- classification: `38` C++ faster, `12` roughly equal, `12` C++ slower
 - public API coverage checker: `89` documented callables, `16` excluded
   callables, `77` covered callable entrypoints, `0` uncovered callables
 
 Notable wins in that completed snapshot:
 
-- `conversions.int_to_rgba`: `3156.858x`
-- `conversions.rgba_to_int`: `301.812x`
-- `data.rgb_to_5d_batch`: `5306.384x`
-- `data.make_circle_batch`: `423.817x`
-- `runtime.data.create_zarr_coins_v05`: `26.249x`
-- `runtime.data.create_zarr_astronaut_v05`: `20.638x`
-- `runtime.cli.create_info_v05`: `23.423x`
-- `utils.download`: `17.030x`
+- `data.rgb_to_5d_batch`: `7505.487x`
+- `data.make_circle_batch`: `410.486x`
+- `conversions.rgba_to_int`: `323.628x`
+- `data.rgb_to_5d`: `141.721x`
+- `conversions.int_to_rgba`: `75.599x`
+- `runtime.cli.create_info_v05`: `24.753x`
+- `runtime.data.create_zarr_coins_v05`: `23.868x`
+- `runtime.data.create_zarr_astronaut_v05`: `19.977x`
 
 Still-slower paths in the same completed snapshot:
 
-- `utils.view`: `0.015x`
-- `utils.find_multiscales`: `0.138x`
-- `reader.matches`: `0.332x`
-- `utils.finder`: `0.536x`
-- `format.well_and_coord`: `0.875x`
-- `writer.metadata_writers`: `0.920x`
-- `writer.write_image_v05_delayed`: `0.939x`
+- `utils.view`: `0.016x`
+- `utils.find_multiscales`: `0.129x`
+- `reader.matches`: `0.325x`
+- `utils.finder`: `0.585x`
+- `format.well_and_coord`: `0.844x`
+- `format.matches`: `0.857x`
+- `Scaler.resize_image`: `0.880x`
 
 For read-only surfaces that print absolute paths, parity tests should run the
 upstream and converted implementations against the same fixture path so the

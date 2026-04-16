@@ -479,7 +479,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.methods",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -489,7 +488,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.func",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -499,7 +497,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.resize_image",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -509,7 +506,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.nearest",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -519,7 +515,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.__nearest",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -529,7 +524,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.gaussian",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -539,7 +533,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.laplacian",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -549,7 +542,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.local_mean",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -559,7 +551,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler._by_plane",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -569,7 +560,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.zoom",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -579,7 +569,6 @@
       "upstream_file": "scale.py",
       "qualname": "_build_pyramid",
       "binding_files": [
-        "cpp/bindings/scale_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/scale.cpp"
@@ -715,8 +704,7 @@
       "upstream_file": "writer.py",
       "qualname": "write_multiscale",
       "binding_files": [
-        "cpp/bindings/format_bindings.cpp",
-        "cpp/bindings/scale_bindings.cpp"
+        "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/writer.cpp",
@@ -793,8 +781,7 @@
       "upstream_file": "writer.py",
       "qualname": "write_multiscale_labels",
       "binding_files": [
-        "cpp/bindings/format_bindings.cpp",
-        "cpp/bindings/scale_bindings.cpp"
+        "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/writer.cpp",
@@ -806,8 +793,7 @@
       "upstream_file": "writer.py",
       "qualname": "write_labels",
       "binding_files": [
-        "cpp/bindings/format_bindings.cpp",
-        "cpp/bindings/scale_bindings.cpp"
+        "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
         "cpp/native/writer.cpp",

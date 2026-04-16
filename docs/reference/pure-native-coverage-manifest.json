@@ -174,7 +174,6 @@
       "upstream_file": "dask_utils.py",
       "qualname": "_better_chunksize",
       "boundary_files": [
-        "cpp/bindings/dask_utils_bindings.cpp",
         "ome_zarr_c/dask_utils.py"
       ],
       "native_files": [
@@ -185,7 +184,6 @@
       "upstream_file": "dask_utils.py",
       "qualname": "resize",
       "boundary_files": [
-        "cpp/bindings/dask_utils_bindings.cpp",
         "ome_zarr_c/dask_utils.py"
       ],
       "native_files": [
@@ -196,7 +194,6 @@
       "upstream_file": "dask_utils.py",
       "qualname": "local_mean",
       "boundary_files": [
-        "cpp/bindings/dask_utils_bindings.cpp",
         "ome_zarr_c/dask_utils.py"
       ],
       "native_files": [
@@ -207,7 +204,6 @@
       "upstream_file": "dask_utils.py",
       "qualname": "zoom",
       "boundary_files": [
-        "cpp/bindings/dask_utils_bindings.cpp",
         "ome_zarr_c/dask_utils.py"
       ],
       "native_files": [
@@ -218,7 +214,6 @@
       "upstream_file": "dask_utils.py",
       "qualname": "downscale_nearest",
       "boundary_files": [
-        "cpp/bindings/dask_utils_bindings.cpp",
         "ome_zarr_c/dask_utils.py"
       ],
       "native_files": [
@@ -229,7 +224,6 @@
       "entry_type": "non_callable_scaffold",
       "upstream_file": "dask_utils.py",
       "boundary_files": [
-        "cpp/bindings/dask_utils_bindings.cpp",
         "ome_zarr_c/dask_utils.py"
       ],
       "native_files": [
@@ -732,7 +726,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.methods",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -743,7 +736,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.func",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -754,7 +746,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.resize_image",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -765,7 +756,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.nearest",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -776,7 +766,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.__nearest",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -787,7 +776,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.local_mean",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -798,7 +786,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.zoom",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -809,7 +796,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler._by_plane",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -820,7 +806,6 @@
       "upstream_file": "scale.py",
       "qualname": "_build_pyramid",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -1515,7 +1500,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.__create_group",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -1526,7 +1510,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.__assert_values",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -1537,7 +1520,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.gaussian",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -1548,7 +1530,6 @@
       "upstream_file": "scale.py",
       "qualname": "Scaler.laplacian",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [
@@ -1559,7 +1540,6 @@
       "entry_type": "non_callable_scaffold",
       "upstream_file": "scale.py",
       "boundary_files": [
-        "cpp/bindings/scale_bindings.cpp",
         "ome_zarr_c/scale.py"
       ],
       "native_files": [

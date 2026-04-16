@@ -486,8 +486,8 @@ current portable `-O3` build:
 - command mode: fixed-loop iteration gate, `--processes 1 --values 1 --warmups 0
   --loops 1`
 - paired cases: `62`
-- overall geometric-mean speedup: `3.294x` (`python / cpp`)
-- classification: `41` C++ faster, `12` roughly equal, `9` C++ slower
+- overall geometric-mean speedup: `2.988x` (`python / cpp`)
+- classification: `38` C++ faster, `12` roughly equal, `12` C++ slower
 - public API benchmark coverage:
   - `89` documented callables discovered from upstream modules
   - `16` excluded callables
@@ -496,48 +496,48 @@ current portable `-O3` build:
 
 Group geometric means in that snapshot:
 
-- `cli`: `8.268x`
-- `conversions`: `976.103x`
-- `csv`: `6.586x`
-- `data`: `50.317x`
-- `format`: `0.951x`
-- `meso`: `1.092x`
-- `micro`: `8.700x`
-- `reader`: `1.992x`
-- `realdata`: `2.970x`
-- `runtime`: `4.258x`
-- `scale`: `1.169x`
-- `utils`: `0.760x`
-- `writer`: `1.114x`
+- `cli`: `7.799x`
+- `conversions`: `156.416x`
+- `csv`: `6.433x`
+- `data`: `35.225x`
+- `format`: `0.891x`
+- `meso`: `1.004x`
+- `micro`: `9.131x`
+- `reader`: `1.958x`
+- `realdata`: `2.928x`
+- `runtime`: `4.194x`
+- `scale`: `0.981x`
+- `utils`: `0.748x`
+- `writer`: `1.157x`
 
 Notable wins in that completed snapshot:
 
-- `conversions.int_to_rgba`: `3156.858x`
-- `conversions.rgba_to_int`: `301.812x`
-- `data.rgb_to_5d_batch`: `5306.384x`
-- `data.make_circle_batch`: `423.817x`
-- `runtime.data.create_zarr_coins_v05`: `26.249x`
-- `runtime.data.create_zarr_astronaut_v05`: `20.638x`
-- `runtime.cli.create_info_v05`: `23.423x`
-- `utils.download`: `17.030x`
+- `data.rgb_to_5d_batch`: `7505.487x`
+- `data.make_circle_batch`: `410.486x`
+- `conversions.rgba_to_int`: `323.628x`
+- `data.rgb_to_5d`: `141.721x`
+- `conversions.int_to_rgba`: `75.599x`
+- `runtime.cli.create_info_v05`: `24.753x`
+- `runtime.data.create_zarr_coins_v05`: `23.868x`
+- `runtime.data.create_zarr_astronaut_v05`: `19.977x`
 
 Still-slower paths in the same completed snapshot:
 
-- `utils.view`: `0.015x`
-- `utils.find_multiscales`: `0.138x`
-- `reader.matches`: `0.332x`
-- `utils.finder`: `0.536x`
-- `format.well_and_coord`: `0.875x`
-- `writer.metadata_writers`: `0.920x`
-- `writer.write_image_v05_delayed`: `0.939x`
+- `utils.view`: `0.016x`
+- `utils.find_multiscales`: `0.129x`
+- `reader.matches`: `0.325x`
+- `utils.finder`: `0.585x`
+- `format.well_and_coord`: `0.844x`
+- `format.matches`: `0.857x`
+- `Scaler.resize_image`: `0.880x`
 
 Interpretation:
 
 - The strongest gains are in conversion, local data creation, CLI wrappers, and
   deterministic runtime flows now backed by native code.
-- Writer is slightly net faster overall, but metadata writers and delayed
-  writes are still close to parity or slower because they remain dominated by
-  Dask/Zarr boundary work.
+- Writer is slightly net faster overall, but labels and metadata-heavy writes
+  are still close to parity or slower because they remain dominated by Dask/Zarr
+  boundary work.
 - `utils.view`, finder traversal, and reader `matches` are the highest-value
   performance targets before making stronger package-wide speed claims.
 - Fixed-loop all-suite snapshots are iteration gates, not statistically
