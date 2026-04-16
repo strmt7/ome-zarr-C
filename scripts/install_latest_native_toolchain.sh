@@ -165,7 +165,7 @@ tar -xzf "${DOWNLOAD_DIR}/c-blosc-${CBLOSC_VERSION}.tar.gz" -C "${SRC_DIR}"
 "${PREFIX}/bin/cmake" --build "${BUILD_DIR}/c-blosc-${CBLOSC_VERSION}" -j2
 "${PREFIX}/bin/cmake" --install "${BUILD_DIR}/c-blosc-${CBLOSC_VERSION}"
 
-if command -v ldconfig >/dev/null 2>&1; then
+if command -v ldconfig >/dev/null 2>&1 && [[ "${PREFIX}" == /usr* ]]; then
   ldconfig
 fi
 
