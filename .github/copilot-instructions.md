@@ -17,15 +17,15 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
   pinned latest tool and library versions instead of whatever older host
   packages happen to be installed.
 - Treat `origin/main` as the shared source of truth for repo state.
-- Python objects are not allowed in C++ semantic code unless the boundary is
-  proven unavoidable and isolated to minimal binding glue.
+- Python objects are not allowed in C++ semantic code. No active binding layer
+  remains in current `main`; do not reintroduce one without explicit approval
+  and a documented unavoidable parity need.
 - Do not expose plan-only or helper-only commands through the shipped
   standalone native CLI. Public native entrypoints must be real runtime
   commands or durable product APIs.
 - Once a standalone-native runtime surface exists and parity is proven, treat
-  the corresponding Python-visible binding path as shrink-only debt. Remove
-  redundant `setup.py` sources and direct `cpp/bindings/` dependencies on
-  standalone runtime modules instead of keeping duplicate product paths alive.
+  the corresponding Python-visible harness path as shrink-only debt instead of
+  keeping duplicate product paths alive.
 - For runtime surfaces already replaced by standalone native code, remove the
   matching wrapper exports, pybind registrations, and stale test/benchmark
   references in the same slice unless a remaining oracle-only dependency is
@@ -33,7 +33,7 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - If parity and benchmark coverage can be preserved with the Python oracle plus
   standalone-native probe/bench tooling, do not retain a pybind or Python
   wrapper layer for that surface.
-- Ruff is Python-only. Never target `cpp/` or C/C++ files with Ruff; use
+- Ruff is for Python files only. Never target `cpp/` or C/C++ files with Ruff; use
   native checks, compiler/test validation, and C++-appropriate tooling
   instead.
 - Before pushing, perform a repo-consistency sweep over the touched code,

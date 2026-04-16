@@ -10,10 +10,10 @@ if it preserves the repo's structure and leaves a clear proof path behind it.
 2. Pure-native semantic core:
    `cpp/native/` should hold the actual converted behavior whenever the logic
    is deterministic and self-contained.
-3. Minimal binding layer:
-   `cpp/bindings/` should expose temporary Python-facing entry points and
-   nothing more.
-4. Thin compatibility wrapper:
+3. Native entrypoints:
+   `cpp/tools/` should expose standalone CLI, self-test, and benchmark
+   executables over the native core.
+4. Thin development oracle:
    `ome_zarr_c/` should mostly adapt imports and unavoidable parity-oracle
    runtime integration points while the standalone C++ target is still under
    construction.
@@ -75,15 +75,15 @@ Port in this order unless there is a compelling reason not to:
 - Separate pure logic from store mutation when designing the port.
 - Treat runtime blockers as a stop sign for parity claims.
 - Update the docs whenever the proof boundary changes.
-- Move mixed legacy code toward `cpp/native/` plus `cpp/bindings/`, not toward
-  a larger monolithic mixed-export file like the historical `core.cpp`
+- Move mixed legacy code toward `cpp/native/` plus standalone native tools, not
+  toward a larger monolithic mixed-export file like the historical `core.cpp`
   pattern.
 
 ## Architectural don'ts
 
 - Do not use a wrapper-heavy design to hide unported logic.
-- Do not mistake the current pybind harness for the final product
-  architecture.
+- Do not reintroduce a pybind harness or mistake any Python-facing development
+  oracle for the final product architecture.
 - Do not add new Python-integrated semantics to mixed C++ files just because
   they are already impure.
 - Do not count blocked store-backed surfaces as done because a partial wrapper

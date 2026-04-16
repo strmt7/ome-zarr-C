@@ -20,7 +20,9 @@ That means:
 Current `main` is still a transitional workspace:
 
 - `cpp/native/` contains pure-native semantic code
-- `cpp/bindings/` plus `ome_zarr_c/` provide the Python-visible parity harness
+- `ome_zarr_c/` provides a Python-visible development oracle for parity tests
+  and benchmarks
+- no active binding layer remains
 - `tests/` and `benchmarks/` compare the converted behavior against the frozen
   Python upstream
 
@@ -34,8 +36,8 @@ Target end state:
 
 ## Architectural rules
 
-1. Do not add new semantic logic to `cpp/bindings/` unless the boundary is
-   temporarily unavoidable for parity proof.
+1. Do not reintroduce Python-object C++ glue unless the boundary is explicitly
+   approved as temporarily unavoidable for parity proof.
 2. Do not treat the Python package shape as the product contract.
 3. Prefer moving reusable logic into `cpp/native/` even if a temporary Python
    harness still consumes it.
@@ -51,8 +53,8 @@ Target end state:
 
 1. Keep `cpp/native/` buildable without Python headers or pybind.
 2. Grow native build, self-test, and benchmark tooling around `cpp/native/`.
-3. Reduce boundary-heavy slow paths in `cpp/bindings/` only when they still
-   matter for parity-proof workflows.
+3. Keep the Python development oracle shrink-only and do not add new shipped
+   runtime behavior there.
 4. Move user-facing runtime claims away from the Python package shape and
    toward the standalone C++ target as native entrypoints become available.
 
@@ -72,7 +74,7 @@ These targets run without importing the Python runtime. Python remains in the
 repository separately for parity-proof workflows against the frozen upstream
 release.
 
-The largest remaining migration work is no longer a CLI/runtime gap. It is the
-controlled retirement of `cpp/bindings/`, `ome_zarr_c/`, and Python package
-metadata from the delivered product path now that all upstream CLI commands
-have standalone-native replacements.
+The largest remaining migration work is no longer a binding-layer gap. It is
+the controlled retirement of `ome_zarr_c/` and Python package metadata from the
+delivered product path now that all upstream CLI commands have
+standalone-native replacements.

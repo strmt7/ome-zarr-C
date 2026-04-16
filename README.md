@@ -6,8 +6,8 @@
 The project preserves the exact upstream `v0.15.0` release snapshot under
 `source_code_v.0.15.0/` and implements converted functionality outside that
 snapshot in native-backed modules. Under the stricter current architecture,
-`cpp/native/` holds semantics, `cpp/bindings/` holds boundary glue, and mixed
-files outside those roots remain remediation debt. The working rule for
+`cpp/native/` holds C++ semantics, `cpp/tools/` exposes standalone native
+entrypoints, and no active binding layer remains. The working rule for
 converted code is behavioral parity first, performance claims second.
 
 Current `main` is still a transitional parity workspace with Python-oracle
@@ -40,7 +40,6 @@ directory.
 - `source_code_v.0.15.0/`: frozen upstream release snapshot
 - `cpp/`: C++ implementations
 - `cpp/native/`: pure-native semantic implementation
-- `cpp/bindings/`: transitional Python boundary glue for parity-proof workflows
 - `cpp/tools/`: standalone native self-test and benchmark executables
 - `ome_zarr_c/`: transitional Python compatibility/oracle layer
 - `tests/`: differential and regression tests
@@ -48,9 +47,9 @@ directory.
 
 ## Verified Native-Backed Surfaces
 
-These are parity-proven native-backed surfaces. This is not the same as
-pure-native coverage under the stricter `cpp/native/` plus `cpp/bindings/`
-policy.
+These are parity-proven surfaces. This is not the same as a shipped standalone
+C++ API guarantee for every upstream Python entrypoint; the Python package is
+still a development oracle and compatibility harness.
 
 The following upstream behaviors are native-backed and currently proven by
 differential tests on this runtime:
@@ -103,10 +102,9 @@ architecture-first conversion floor:
 .venv/bin/python scripts/report_split_native_coverage.py --fail-under 25
 ```
 
-This `split-native` metric counts only upstream surfaces that are routed
-through dedicated `cpp/bindings/` entrypoints with corresponding native files,
-and excludes any residual mixed routing that has not yet been isolated to a
-dedicated binding-plus-native path.
+This legacy `split-native` metric is retained for historical reporting. Current
+manifest entries no longer require binding files; native semantic ownership is
+tracked by the stricter pure-native manifest below.
 
 ## Pure-Native Coverage
 
@@ -151,13 +149,11 @@ product shape.
 Python dev-harness prerequisites:
 
 - Python `3.12`
-- a working C++17 toolchain for building the `pybind11` extension
-- Python headers for the selected interpreter
 
 Typical Linux package examples:
 
-- Debian or Ubuntu: `build-essential python3.12-dev`
-- Fedora: `gcc-c++ python3.12-devel`
+- Debian or Ubuntu: `python3.12-dev`
+- Fedora: `python3.12-devel`
 
 Create a local environment and install the editable package for parity work:
 
@@ -172,24 +168,6 @@ performance on the verified kernel and runtime slices:
 
 ```bash
 .venv/bin/python -m pip install -e '.[dev,benchmark]' --no-build-isolation
-```
-
-The extension now builds with an explicit portable release profile by default:
-
-- Unix-like hosts: `-O3` and hidden symbol visibility
-- Windows hosts: `/O2`
-- no unsafe math flags such as `-ffast-math`
-
-Optional build-time tuning knobs:
-
-- `OME_ZARR_C_ENABLE_LTO=1`: enable link-time optimization
-- `OME_ZARR_C_MARCH_NATIVE=1`: enable host-specific CPU tuning on Unix-like hosts
-
-Example host-tuned rebuild for local benchmarking only:
-
-```bash
-OME_ZARR_C_ENABLE_LTO=1 OME_ZARR_C_MARCH_NATIVE=1 \
-  .venv/bin/python -m pip install -e '.[dev,benchmark]' --no-build-isolation
 ```
 
 Benchmark runs disable package logging by default so timing is not polluted by

@@ -31,10 +31,10 @@ porting work.
 - Prefer `--no-build-isolation` in offline or sandboxed rebuilds once local
   build dependencies are already installed.
 - Treat existing mixed C++ files as debt. New work should move semantics toward
-  `cpp/native/` and keep Python glue in `cpp/bindings/` only.
+  `cpp/native/` and standalone native tools only.
 - Prove a Python-object boundary is unavoidable before letting any `py::object`
-  or similar Python runtime type participate in C++ code, and confine that
-  boundary to `cpp/bindings/`.
+  or similar Python runtime type participate in C++ code. No active
+  Python-object C++ boundary is allowed in current `main`.
 - Prefer newer stable dependency versions when they enable better native
   implementation techniques or measurable C++ performance gains, but only keep
   the upgrade after rerunning parity and benchmark validation on the upgraded
@@ -46,9 +46,8 @@ porting work.
   durable product APIs.
 - Once a standalone-native runtime surface exists and parity is proven, treat
   the corresponding binding/runtime path as shrink-only debt and reduce it in
-  later slices instead of adding fresh semantics there. Remove matching
-  `setup.py` sources and direct `cpp/bindings/` dependencies on standalone
-  runtime modules once they are no longer needed for oracle work.
+  later slices instead of adding fresh semantics there. Remove matching Python
+  package hooks once they are no longer needed for oracle work.
 - When a standalone-native runtime replacement already exists, delete the
   matching wrapper exports, pybind registrations, obsolete runtime tests, and
   stale benchmark references in the same slice unless a remaining oracle-only

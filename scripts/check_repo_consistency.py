@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEXT_FILES = [
     ROOT / "README.md",
     ROOT / "AGENTS.md",
+    ROOT / ".github" / "copilot-instructions.md",
     *sorted((ROOT / "docs").rglob("*.md")),
     *sorted((ROOT / ".github" / "instructions").glob("*.md")),
 ]
@@ -66,6 +67,12 @@ def main() -> int:
     native_dependency_manifest = ROOT / "docs/reference/native-dependency-manifest.json"
     native_toolchain_installer = ROOT / "scripts/install_latest_native_toolchain.sh"
     setup_py = ROOT / "setup.py"
+    pyproject_toml = ROOT / "pyproject.toml"
+    removed_binding_files = (
+        ROOT / "cpp/bindings/common.hpp",
+        ROOT / "cpp/bindings/format_bindings.cpp",
+        ROOT / "cpp/bindings/module.cpp",
+    )
 
     for required in (
         standalone_doc,
@@ -82,10 +89,17 @@ def main() -> int:
         if not required.exists():
             issues.append(f"Missing required file: {required.relative_to(ROOT)}")
 
+    for removed in removed_binding_files:
+        if removed.exists():
+            issues.append(
+                f"Removed binding-layer file still exists: {removed.relative_to(ROOT)}"
+            )
+
     agents_text = read_text(ROOT / "AGENTS.md")
     docs_index_text = read_text(ROOT / "docs/index.md")
     readme_text = read_text(ROOT / "README.md")
     setup_text = read_text(setup_py)
+    pyproject_text = read_text(pyproject_toml)
     cmake_text = read_text(cmake_file)
     native_dev_text = read_text(native_dev_doc)
     manifest = json.loads(read_text(native_dependency_manifest))
@@ -204,6 +218,19 @@ def main() -> int:
         )
     if "cpp/bindings/data_bindings.cpp" in setup_text:
         issues.append("setup.py still builds the removed transitional data bindings.")
+    if any(
+        token in setup_text
+        for token in (
+            "Pybind11Extension",
+            "build_ext",
+            "pybind11",
+            "ome_zarr_c._core",
+            "cpp/bindings/",
+        )
+    ):
+        issues.append("setup.py still references removed pybind binding build inputs.")
+    if "pybind11" in pyproject_text:
+        issues.append("pyproject.toml still depends on removed pybind tooling.")
     if "install_latest_native_toolchain.sh" not in native_dev_text:
         issues.append(
             "native-build-and-selftest.md is missing the native toolchain installer."
@@ -282,6 +309,11 @@ def main() -> int:
         if REMOVED_RUNTIME_PATTERN.search(text) is not None:
             issues.append(
                 "Removed transitional runtime surface is still referenced in "
+                f"{path.relative_to(ROOT)}"
+            )
+        if "cpp/bindings/format_bindings.cpp" in text:
+            issues.append(
+                "Removed format binding file is still referenced in "
                 f"{path.relative_to(ROOT)}"
             )
         if STALE_DISTRO_NATIVE_DEPS_PATTERN.search(text) is not None:

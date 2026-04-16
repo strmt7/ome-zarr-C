@@ -29,9 +29,9 @@ Use the smallest proof that matches the surface:
 
 Converted behavior only counts as pure-native when the semantics live in
 `cpp/native/`.
-Minimal binding glue may exist in `cpp/bindings/` when there is no pragmatic
-alternative, but mixed binding-plus-semantic files do not count as pure-native
-conversion.
+No active binding layer remains in current `main`. Any reintroduced binding
+glue would require an explicit temporary exception, and mixed
+binding-plus-semantic files do not count as pure-native conversion.
 
 To keep that boundary enforceable:
 

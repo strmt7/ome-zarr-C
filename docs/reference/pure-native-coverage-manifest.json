@@ -1,6 +1,6 @@
 {
   "metric_name": "pure_native_coverage",
-  "description": "Count upstream callable surfaces whose behavior is owned by semantics under cpp/native, plus explicitly listed non-callable module scaffolding for thin boundary modules. cpp/bindings or thin Python wrappers are allowed only for boundary marshalling.",
+  "description": "Count upstream callable surfaces whose behavior is owned by semantics under cpp/native, plus explicitly listed non-callable module scaffolding. Python files listed as boundary files are development-oracle wrappers only; no active binding layer is part of the current architecture.",
   "upstream_root": "source_code_v.0.15.0/ome_zarr",
   "entries": [
     {
@@ -272,7 +272,6 @@
       "upstream_file": "format.py",
       "qualname": "format_from_version",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -283,7 +282,6 @@
       "upstream_file": "format.py",
       "qualname": "format_implementations",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -294,7 +292,6 @@
       "upstream_file": "format.py",
       "qualname": "detect_format",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -305,7 +302,6 @@
       "upstream_file": "format.py",
       "qualname": "Format._get_metadata_version",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -316,7 +312,6 @@
       "upstream_file": "format.py",
       "qualname": "Format.__repr__",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -327,7 +322,6 @@
       "upstream_file": "format.py",
       "qualname": "Format.__eq__",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -338,7 +332,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.zarr_format",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -349,7 +342,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.chunk_key_encoding",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -360,7 +352,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.matches",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -371,7 +362,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV02.chunk_key_encoding",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -382,7 +372,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV04.generate_well_dict",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -393,7 +382,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV04.validate_well_dict",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -404,7 +392,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV04.generate_coordinate_transformations",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -415,7 +402,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV04.validate_coordinate_transformations",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -426,7 +412,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV05.zarr_format",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -437,7 +422,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV05.chunk_key_encoding",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1177,7 +1161,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.version",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1188,7 +1171,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.init_store",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1199,7 +1181,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.generate_well_dict",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1210,7 +1191,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.validate_well_dict",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1221,7 +1201,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.generate_coordinate_transformations",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1232,7 +1211,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV01.validate_coordinate_transformations",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1243,7 +1221,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV02.version",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1254,7 +1231,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV03.version",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1265,7 +1241,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV04.version",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1276,7 +1251,6 @@
       "upstream_file": "format.py",
       "qualname": "FormatV05.version",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [
@@ -1287,7 +1261,6 @@
       "entry_type": "non_callable_scaffold",
       "upstream_file": "format.py",
       "boundary_files": [
-        "cpp/bindings/format_bindings.cpp",
         "ome_zarr_c/format.py"
       ],
       "native_files": [

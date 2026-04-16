@@ -5,18 +5,15 @@
   2. Maximize measured performance only after parity is already proven.
 - Do not modify the frozen upstream snapshot under `source_code_v.0.15.0/`.
 - Port one small upstream surface at a time.
-- Keep Python wrappers as thin transitional compatibility/oracle layers.
-- Keep real semantics in `cpp/native/` and limit Python binding glue to
-  `cpp/bindings/` when there is no pragmatic alternative.
-- The target shipped product is standalone C++, not a Python adapter. Pybind
-  and Python package layers may remain temporarily for parity proof, but they
-  are transitional scaffolding and should not be expanded unless required to
-  validate behavior against the frozen upstream.
+- Keep Python wrappers as thin transitional compatibility/oracle layers only.
+- Keep real semantics in `cpp/native/` and standalone entrypoints in
+  `cpp/tools/`.
+- The target shipped product is standalone C++, not a Python adapter. No active
+  binding layer remains in current `main`; do not reintroduce one without
+  explicit approval and a documented unavoidable parity need.
 - Once a standalone-native runtime surface exists and parity is proven, treat
-  the matching binding/runtime path as shrink-only debt. Do not add new
-  semantics there; reduce or delete it in later slices. Remove redundant
-  `setup.py` sources and direct `cpp/bindings/` dependencies on standalone
-  runtime modules as soon as the native path is proven.
+  the matching Python-harness path as shrink-only debt. Do not add new
+  semantics there; reduce or delete it in later slices.
 - When a standalone-native runtime replacement already exists, prefer deleting
   the matching wrapper/binding/runtime scaffolding in the same slice rather
   than leaving dormant compatibility code behind. Keep only the smallest
@@ -44,8 +41,9 @@
 - If upstream behavior depends on interpreter-generated exception text, use the
   live Python runtime to produce that behavior instead of freezing a message
   literal in C++.
-- Do not use `py::cast<bool>` for generic Python truthiness on arbitrary
-  objects. Match Python `if obj:` semantics with Python truth-value evaluation.
+- Do not use pybind truthiness shortcuts such as `py::cast<bool>` to replace
+  real native parity work. Match Python `if obj:` semantics natively or keep
+  the surface in the development oracle until it can be ported cleanly.
 - For functions that mutate files or stores, compare the resulting serialized
   on-disk state against upstream instead of only checking return values.
 - For functions that cross external side-effect boundaries, patch the boundary
@@ -56,13 +54,12 @@
 - Do not introduce embedded-Python execution patterns such as `py::exec`,
   `py::eval`, or raw Python source blocks into `cpp/`. If such debt already
   exists, do not count the affected surface as fully native-converted coverage.
-- Do not add new Python-integrated semantics to mixed C++ files outside
-  `cpp/bindings/`. Existing mixed files are debt and should be split, not
-  expanded.
+- Do not add new Python-integrated semantics to C++ files. Existing mixed files
+  are debt and should be deleted or replaced, not expanded.
 - If historical embedded-Python debt is encountered, remove it or quarantine it
   to the smallest possible boundary instead of extending it.
-- After changing native code or extension build surfaces, rebuild the editable
-  install before rerunning parity tests.
+- After changing native code or package build surfaces, rebuild the native
+  targets or editable install before rerunning parity tests.
 - When working on pure-native performance, also use the standalone native build
   and native benchmark tooling so Python-boundary overhead does not get
   confused with core semantic cost.

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -38,6 +39,36 @@
 namespace {
 
 using namespace ome_zarr_c::native_code;
+
+class TemporaryDirectory {
+public:
+    TemporaryDirectory()
+        : path_(
+              std::filesystem::temp_directory_path() /
+              ("ome_zarr_native_selftest_runtime_" +
+               std::to_string(
+                   std::chrono::steady_clock::now().time_since_epoch().count()))) {
+        std::error_code error;
+        std::filesystem::remove_all(path_, error);
+        if (error) {
+            throw std::runtime_error(
+                "Unable to clean self-test temp root: " + error.message());
+        }
+        std::filesystem::create_directories(path_);
+    }
+
+    ~TemporaryDirectory() {
+        std::error_code error;
+        std::filesystem::remove_all(path_, error);
+    }
+
+    const std::filesystem::path& path() const {
+        return path_;
+    }
+
+private:
+    std::filesystem::path path_;
+};
 
 std::vector<char> zstd_compress_bytes(const std::vector<char>& payload) {
     std::vector<char> compressed(ZSTD_compressBound(payload.size()));
@@ -635,9 +666,8 @@ void test_io_and_utils() {
     require(finder_row.file_path.find("localhost:8001") != std::string::npos, "finder row file path");
     require_eq(finder_row.folders, std::string("A,1"), "finder row folders");
 
-    const auto fixture_root =
-        std::filesystem::temp_directory_path() / "ome_zarr_native_selftest_runtime";
-    std::filesystem::remove_all(fixture_root);
+    const TemporaryDirectory fixture_directory;
+    const auto& fixture_root = fixture_directory.path();
     std::filesystem::create_directories(fixture_root / "image.zarr" / "0");
     {
         std::ofstream zattrs(fixture_root / "image.zarr" / ".zattrs");
