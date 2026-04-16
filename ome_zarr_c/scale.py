@@ -1,30 +1,273 @@
-"""C++-backed port of selected scale helpers from ome-zarr-py."""
+"""Module for downsampling numpy arrays via various methods.
 
-from __future__ import annotations
+See the :class:`~ome_zarr.scale.Scaler` class for details.
+"""
 
+import inspect
 import logging
+import warnings
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Union, cast
+from typing import Any, Union, cast
 
 import dask.array as da
 import numpy as np
+import zarr
 from deprecated import deprecated
 from scipy import __version__ as scipy_version
+from scipy.ndimage import zoom
 from skimage import __version__ as skimage_version
+from skimage.transform import (
+    downscale_local_mean,
+    pyramid_gaussian,
+    pyramid_laplacian,
+    resize,
+)
 
-from . import _core
 from .dask_utils import local_mean as dask_local_mean
 from .dask_utils import resize as dask_resize
 from .dask_utils import zoom as dask_zoom
 
-SPATIAL_DIMS = ("z", "y", "x")
 LOGGER = logging.getLogger("ome_zarr.scale")
+
 ListOfArrayLike = Union[list[da.Array], list[np.ndarray]]  # noqa: UP007
 ArrayLike = Union[da.Array, np.ndarray]  # noqa: UP007
 
 
+@deprecated(
+    reason=(
+        "Downsampling via the `Scaler` class has been deprecated. "
+        "Please use the `scale_factors` argument instead."
+    ),
+    version="0.14.0",
+)
+@dataclass
+class Scaler:
+    """Helper class for performing various types of downsampling.
+
+    .. deprecated:: 0.14.0
+        **This class is deprecated and should not be used.**
+
+        Downsampling via the `Scaler` class has been deprecated.
+        Please use the `scale_factors` argument in the
+        :py:func:`ome_zarr.writer.write_image()` function instead.
+
+    A method can be chosen by name such as "nearest". All methods on this
+    that do not begin with "_" and not either "methods" or "scale" are valid
+    choices. These values can be returned by the
+    :func:`~ome_zarr.scale.Scaler.methods` method.
+    """
+
+    copy_metadata: bool = False
+    downscale: int = 2
+    in_place: bool = False
+    labeled: bool = False
+    max_layer: int = 4
+    method: str = "nearest"
+
+    # 0: Nearest-neighbor
+    # 1: Bi-linear (default)
+    order: int = 1
+
+    @staticmethod
+    def methods() -> Iterator[str]:
+        """Return the name of all methods which define a downsampling."""
+        funcs = inspect.getmembers(Scaler, predicate=inspect.isfunction)
+        for name, _func in funcs:
+            if name in ("methods", "scale"):
+                continue
+            if name.startswith("_"):
+                continue
+            yield name
+
+    def scale(self, input_array: str, output_directory: str) -> None:
+        """Perform downsampling to disk."""
+        func = self.func
+
+        base = zarr.open_array(input_array)
+        pyramid = func(base)
+
+        if self.labeled:
+            self.__assert_values(pyramid)
+
+        grp = self.__create_group(output_directory, base, pyramid)
+
+        if self.copy_metadata:
+            print(f"copying attribute keys: {list(base.attrs.keys())}")
+            grp.attrs.update(base.attrs)
+
+    @property
+    def func(self) -> Callable[[np.ndarray], list[np.ndarray]]:
+        """Get downsample function."""
+        func = getattr(self, self.method, None)
+        if not func:
+            raise Exception
+        return func
+
+    def __assert_values(self, pyramid: list[np.ndarray]) -> None:
+        """Check for a single unique set of values for all pyramid levels."""
+        expected = set(np.unique(pyramid[0]))
+        print(f"level 0 {pyramid[0].shape} = {len(expected)} labels")
+        for i in range(1, len(pyramid)):
+            level = pyramid[i]
+            print(f"level {i}", pyramid[i].shape, len(expected))
+            found = set(np.unique(level))
+            if not expected.issuperset(found):
+                raise Exception(
+                    f"{len(found)} found values are not "
+                    "a subset of {len(expected)} values"
+                )
+
+    def __create_group(
+        self, dir_path: str, base: np.ndarray, pyramid: list[np.ndarray]
+    ) -> zarr.Group:
+        """Create group and datasets."""
+        grp = zarr.open_group(dir_path, mode="w")
+        grp.create_dataset("base", data=base)
+        _series = []
+        for i in range(len(pyramid)):
+            if i == 0:
+                path = "base"
+            else:
+                path = str(i)
+                grp.create_dataset(path, data=pyramid[i])
+            _series.append({"path": path})
+        return grp
+
+    def resize_image(self, image: ArrayLike) -> ArrayLike:
+        """Resize a numpy array OR a dask array to a smaller array."""
+        if isinstance(image, da.Array):
+
+            def _resize(image: ArrayLike, out_shape: tuple, **kwargs: Any) -> ArrayLike:
+                return dask_resize(image, out_shape, **kwargs)
+
+        else:
+            _resize = resize
+
+        # only down-sample in X and Y dimensions for now...
+        new_shape = list(image.shape)
+        new_shape[-1] = image.shape[-1] // self.downscale
+        new_shape[-2] = image.shape[-2] // self.downscale
+        out_shape = tuple(new_shape)
+
+        dtype = image.dtype
+        image = _resize(
+            image.astype(float),
+            out_shape,
+            order=self.order,
+            mode="reflect",
+            anti_aliasing=False,
+        )
+        return image.astype(dtype)
+
+    def nearest(self, base: np.ndarray) -> list[np.ndarray]:
+        """Downsample using :func:`skimage.transform.resize`."""
+        return self._by_plane(base, self.__nearest)
+
+    def __nearest(self, plane: ArrayLike, sizeY: int, sizeX: int) -> np.ndarray:
+        """Apply the 2-dimensional transformation."""
+        if isinstance(plane, da.Array):
+
+            def _resize(
+                image: ArrayLike, output_shape: tuple, **kwargs: Any
+            ) -> ArrayLike:
+                return dask_resize(image, output_shape, **kwargs)
+
+        else:
+            _resize = resize
+
+        return _resize(
+            plane,
+            output_shape=(sizeY // self.downscale, sizeX // self.downscale),
+            order=0,
+            preserve_range=True,
+            anti_aliasing=False,
+        ).astype(plane.dtype)
+
+    def gaussian(self, base: np.ndarray) -> list[np.ndarray]:
+        """Downsample using :func:`skimage.transform.pyramid_gaussian`."""
+        dtype = base.dtype
+        pyramid = pyramid_gaussian(
+            base,
+            downscale=self.downscale,
+            max_layer=self.max_layer,
+            channel_axis=None,
+        )
+        return [level.astype(dtype) for level in pyramid]
+
+    def laplacian(self, base: np.ndarray) -> list[np.ndarray]:
+        """Downsample using :func:`skimage.transform.pyramid_laplacian`."""
+        dtype = base.dtype
+        pyramid = pyramid_laplacian(
+            base,
+            downscale=self.downscale,
+            max_layer=self.max_layer,
+            channel_axis=None,
+        )
+        return [level.astype(dtype) for level in pyramid]
+
+    def local_mean(self, base: np.ndarray) -> list[np.ndarray]:
+        """Downsample using :func:`skimage.transform.downscale_local_mean`."""
+        rv = [base]
+        stack_dims = base.ndim - 2
+        factors = (*(1,) * stack_dims, *(self.downscale, self.downscale))
+        for _ in range(self.max_layer):
+            rv.append(downscale_local_mean(rv[-1], factors=factors).astype(base.dtype))
+        return rv
+
+    def zoom(self, base: np.ndarray) -> list[np.ndarray]:
+        """Downsample using :func:`scipy.ndimage.zoom`."""
+        rv = [base]
+        print(base.shape)
+        for i in range(self.max_layer):
+            print(i, self.downscale)
+            rv.append(zoom(base, self.downscale**i))
+            print(rv[-1].shape)
+        return list(reversed(rv))
+
+    def _by_plane(
+        self,
+        base: np.ndarray,
+        func: Callable[[np.ndarray, int, int], np.ndarray],
+    ) -> np.ndarray:
+        """Loop over 3 of the 5 dimensions and apply the func transform."""
+        rv = [base]
+        for _ in range(self.max_layer):
+            stack_to_scale = rv[-1]
+            shape_5d = (*(1,) * (5 - stack_to_scale.ndim), *stack_to_scale.shape)
+            T, C, Z, Y, X = shape_5d
+
+            if stack_to_scale.ndim == 2:
+                rv.append(func(stack_to_scale, Y, X))
+                continue
+
+            stack_dims = stack_to_scale.ndim - 2
+            new_stack = None
+            for t in range(T):
+                for c in range(C):
+                    for z in range(Z):
+                        dims_to_slice = (t, c, z)[-stack_dims:]
+                        plane = stack_to_scale[(dims_to_slice)][:]
+                        out = func(plane, Y, X)
+                        if new_stack is None:
+                            zct_dims = shape_5d[:-2]
+                            shape_dims = zct_dims[-stack_dims:]
+                            new_stack = np.zeros(
+                                (*shape_dims, out.shape[0], out.shape[1]),
+                                dtype=base.dtype,
+                            )
+                        new_stack[(dims_to_slice)] = out
+            rv.append(new_stack)
+        return rv
+
+
+SPATIAL_DIMS = ("z", "y", "x")
+
+
 class Methods(Enum):
+    """Downsampling methods for multi-scale image generation."""
+
     RESIZE = "resize"
     NEAREST = "nearest"
     LOCAL_MEAN = "local_mean"
@@ -69,92 +312,79 @@ method_dispatch = {
 }
 
 
-@deprecated(
-    reason=(
-        "Downsampling via the `Scaler` class has been deprecated. "
-        "Please use the `scale_factors` argument instead."
-    ),
-    version="0.14.0",
-)
-@dataclass
-class Scaler:
-    copy_metadata: bool = False
-    downscale: int = 2
-    in_place: bool = False
-    labeled: bool = False
-    max_layer: int = 4
-    method: str = "nearest"
-    order: int = 1
-
-    @staticmethod
-    def methods():
-        yield from _core.scaler_methods()
-
-    @property
-    def func(self):
-        if self.method not in set(_core.scaler_methods()):
-            raise Exception
-        return getattr(self, self.method)
-
-    def resize_image(self, image: ArrayLike) -> ArrayLike:
-        return _core.scaler_resize_image(image, self.downscale, self.order)
-
-    def nearest(self, base: np.ndarray) -> list[np.ndarray]:
-        return cast(list[np.ndarray], self._by_plane(base, self.__nearest))
-
-    def __nearest(self, plane: ArrayLike, sizeY: int, sizeX: int) -> np.ndarray:
-        return cast(
-            np.ndarray,
-            _core.scaler_nearest_plane(plane, sizeY, sizeX, self.downscale),
-        )
-
-    def gaussian(self, base: np.ndarray) -> list[np.ndarray]:
-        return cast(
-            list[np.ndarray],
-            _core.scaler_gaussian(base, self.downscale, self.max_layer),
-        )
-
-    def laplacian(self, base: np.ndarray) -> list[np.ndarray]:
-        return cast(
-            list[np.ndarray],
-            _core.scaler_laplacian(base, self.downscale, self.max_layer),
-        )
-
-    def local_mean(self, base: np.ndarray) -> list[np.ndarray]:
-        return cast(
-            list[np.ndarray],
-            _core.scaler_local_mean(base, self.downscale, self.max_layer),
-        )
-
-    def zoom(self, base: np.ndarray) -> list[np.ndarray]:
-        return cast(
-            list[np.ndarray],
-            _core.scaler_zoom(base, self.downscale, self.max_layer),
-        )
-
-    def _by_plane(
-        self,
-        base: np.ndarray,
-        func,
-    ) -> list[np.ndarray]:
-        if getattr(func, "__name__", "") != "__nearest":
-            raise NotImplementedError("Only nearest is supported in the native path")
-        return cast(
-            list[np.ndarray],
-            _core.scaler_by_plane_nearest(base, self.downscale, self.max_layer),
-        )
-
-
 def _build_pyramid(
-    image,
-    scale_factors,
-    dims,
+    image: da.Array | np.ndarray,
+    scale_factors: list[dict[str, int]] | list[int] | tuple[int, ...],
+    dims: Sequence[str],
     method: str | Methods = "nearest",
-    chunks=None,
-):
+    chunks: tuple[int, ...] | None | str = None,
+) -> list[da.Array]:
+    """Build a pyramid of downscaled images."""
+    if isinstance(image, np.ndarray):
+        if chunks is not None:
+            image = da.from_array(image, chunks=chunks)
+        else:
+            image = da.from_array(image)
+
     if isinstance(method, str):
         method = Methods(method)
-    return _core._build_pyramid(image, scale_factors, dims, method, chunks)
+
+    # scale_factors are passed as [2, 4, 8, 16, ...]
+    if isinstance(scale_factors, list | tuple) and all(
+        isinstance(s, int) for s in scale_factors
+    ):
+        scales: list[dict[str, int]] = []
+        for i in range(1, len(scale_factors) + 1):
+            scale = {d: 2**i if d in SPATIAL_DIMS else 1 for d in dims}
+            if "z" in dims:
+                scale["z"] = 1
+            scales.append(scale)
+        scale_factors = scales
+    else:
+        scale_factors = cast(list[dict[str, int]], scale_factors)
+
+    # Make sure scale_factors are represented in the same order as dims and that
+    # dimensions not explicitly passed via scale_factors default to 1.
+    for i, level in enumerate(scale_factors):
+        scale_factors[i] = {d: level.get(d, 1) for d in dims}
+
+    images: list[da.Array] = [image]
+
+    for idx, factor in enumerate(scale_factors):
+        if idx == 0:
+            relative_factors = np.asarray(list(scale_factors[0].values()))
+        else:
+            relative_factors = np.asarray(list(factor.values())) / np.asarray(
+                list(scale_factors[idx - 1].values())
+            )
+
+        target_shape = []
+        for s, d, f in zip(images[-1].shape, dims, relative_factors, strict=False):
+            if d in SPATIAL_DIMS:
+                if s // f == 0:
+                    target_shape.append(1)
+                    warnings.warn(
+                        f"Dimension {d} is too small to downsample further.",
+                        UserWarning,
+                        stacklevel=3,
+                    )
+                else:
+                    target_shape.append(int(s // f))
+            else:
+                target_shape.append(int(s))
+
+        if method not in method_dispatch:
+            raise ValueError(f"Unknown downsampling method: {method}")
+
+        new_image = method_dispatch[method]["func"](
+            images[-1],
+            output_shape=tuple(target_shape),
+            **method_dispatch[method]["kwargs"],
+        )
+
+        images.append(new_image)
+
+    return images
 
 
 __all__ = [
