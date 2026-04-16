@@ -31,6 +31,11 @@ def _parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--group", action="append")
     parser.add_argument("--suite", action="append")
     parser.add_argument("--match")
+    parser.add_argument(
+        "--implementation",
+        choices=("python", "native", "both"),
+        default="both",
+    )
     parser.add_argument("--verify-only", action="store_true")
     return parser.parse_known_args(argv)
 
@@ -106,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     def add_cmdline_args(cmd: list[str], _args: argparse.Namespace) -> None:
+        cmd.extend(["--implementation", parsed.implementation])
         for suite in suites or []:
             cmd.extend(["--suite", suite])
         for group in groups or []:
@@ -119,11 +125,16 @@ def main(argv: list[str] | None = None) -> int:
     runner.metadata["selected_suites"] = ",".join(suites or available_suites())
 
     for case in cases:
-        runner.bench_time_func(f"{case.benchmark_base_name}.python", case.python_timer)
-        runner.bench_time_func(
-            f"{case.benchmark_base_name}.{case.converted_variant}",
-            case.converted_timer,
-        )
+        if parsed.implementation in {"python", "both"}:
+            runner.bench_time_func(
+                f"{case.benchmark_base_name}.python",
+                case.python_timer,
+            )
+        if parsed.implementation in {"native", "both"}:
+            runner.bench_time_func(
+                f"{case.benchmark_base_name}.{case.converted_variant}",
+                case.converted_timer,
+            )
 
     return 0
 

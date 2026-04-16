@@ -13,17 +13,16 @@ if it preserves the repo's structure and leaves a clear proof path behind it.
 3. Native entrypoints:
    `cpp/tools/` should expose standalone CLI, self-test, and benchmark
    executables over the native core.
-4. Thin development oracle:
-   `ome_zarr_c/` should mostly adapt imports and unavoidable parity-oracle
-   runtime integration points while the standalone C++ target is still under
-   construction.
+4. Frozen Python development oracle:
+   `source_code_v.0.15.0/` remains importable for tests and benchmarks that
+   compare upstream behavior against standalone native C++.
 5. Differential proof:
    `tests/` must compare the frozen upstream behavior against the converted
    behavior on the same runtime.
 
 The intended end-state product is a standalone C++ library plus native
-executables. The Python-visible layers are current-state scaffolding, not the
-final delivery target.
+executables. Repo-maintained Python compatibility packages are not part of the
+delivery target.
 
 Existing mixed files under `cpp/` that combine semantics and Python glue are
 not grandfathered in. They are migration debt and should be split.
@@ -50,9 +49,9 @@ Port in this order unless there is a compelling reason not to:
   paths.
 - Reinstalling the editable package after each native edit prevented false
   confidence from stale extension binaries.
-- Thin wrappers made parity bugs easier to spot. A recent example was numeric
-  metadata version coercion in `format`, which was fixed by moving the decision
-  logic into the native layer and testing the edge case explicitly.
+- Small oracle-facing probes made parity bugs easier to spot. A recent example
+  was numeric metadata version coercion in `format`, which was fixed by moving
+  the decision logic into the native layer and testing the edge case explicitly.
 
 ## What failed or blocked progress
 
@@ -69,7 +68,8 @@ Port in this order unless there is a compelling reason not to:
 
 ## Architectural do's
 
-- Keep behavior in pure C++ and compatibility at the boundary only.
+- Keep behavior in pure C++ and use the frozen Python snapshot only as an
+  external oracle.
 - Keep `cpp/native/` independently buildable so it can become the shipped
   library without dragging Python glue along with it.
 - Separate pure logic from store mutation when designing the port.
@@ -81,12 +81,12 @@ Port in this order unless there is a compelling reason not to:
 
 ## Architectural don'ts
 
-- Do not use a wrapper-heavy design to hide unported logic.
+- Do not use a Python-package design to hide unported logic.
 - Do not reintroduce a pybind harness or mistake any Python-facing development
   oracle for the final product architecture.
 - Do not add new Python-integrated semantics to mixed C++ files just because
   they are already impure.
-- Do not count blocked store-backed surfaces as done because a partial wrapper
+- Do not count blocked store-backed surfaces as done because a partial helper
   exists.
 - Do not let mocked tests stand in for live persistent-store parity.
 - Do not broaden the port into larger surfaces before the smaller slice is both

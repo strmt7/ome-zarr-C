@@ -29,13 +29,11 @@ STALE_NATIVE_CLI_PATTERN = re.compile(
     re.IGNORECASE,
 )
 REMOVED_RUNTIME_PATTERN = re.compile(
-    r"\b(?:ome_zarr_c\.cli|cpp/bindings/cli_bindings\.cpp|"
-    r"ome_zarr_c\.utils|cpp/bindings/utils_bindings\.cpp|"
-    r"ome_zarr_c\.csv|cpp/bindings/csv_bindings\.cpp|"
-    r"ome_zarr_c\.conversions|"
-    r"ome_zarr_c\.data|cpp/bindings/data_bindings\.cpp|"
-    r"ome_zarr_c\.axes|"
-    r"ome_zarr_c\.reader|cpp/bindings/reader_bindings\.cpp|"
+    r"\b(?:ome_zarr_c|cpp/bindings/cli_bindings\.cpp|"
+    r"cpp/bindings/utils_bindings\.cpp|"
+    r"cpp/bindings/csv_bindings\.cpp|"
+    r"cpp/bindings/data_bindings\.cpp|"
+    r"cpp/bindings/reader_bindings\.cpp|"
     r"tests/test_scaler_runtime_equivalence\.py|"
     r"tests/test_utils_download_runtime\.py|"
     r"tests/test_utils_info_equivalence\.py)\b"
@@ -46,10 +44,10 @@ STALE_DISTRO_NATIVE_DEPS_PATTERN = re.compile(
 )
 MISLEADING_BENCHMARK_LABEL_PATTERNS = (
     re.compile(r"\b(?:C\+\+|cpp)\s+harness\b", re.IGNORECASE),
-    re.compile(r"\bPython-visible\s+harness\b", re.IGNORECASE),
     re.compile(r"\bC\+\+\s+median\b"),
     re.compile(r"\bGeometric-mean\s+C\+\+\s+relative speed vs Python\b"),
     re.compile(r"\bCase classification:.*\bC\+\+\s+(?:faster|slower)\b"),
+    re.compile(r"\bcompat/oracle\b", re.IGNORECASE),
 )
 STALE_NATIVE_BACKED_PATTERN = re.compile(r"\bnative[- ]backed\b", re.IGNORECASE)
 
@@ -82,6 +80,9 @@ def main() -> int:
     native_toolchain_installer = ROOT / "scripts/install_latest_native_toolchain.sh"
     setup_py = ROOT / "setup.py"
     pyproject_toml = ROOT / "pyproject.toml"
+    removed_python_package = ROOT / "ome_zarr_c"
+    benchmark_python_dir = ROOT / "benchmarks/python"
+    benchmark_native_dir = ROOT / "benchmarks/native"
     removed_binding_files = (
         ROOT / "cpp/bindings/common.hpp",
         ROOT / "cpp/bindings/format_bindings.cpp",
@@ -108,6 +109,12 @@ def main() -> int:
             issues.append(
                 f"Removed binding-layer file still exists: {removed.relative_to(ROOT)}"
             )
+    if removed_python_package.exists():
+        issues.append("Removed Python compatibility package directory still exists.")
+    if not benchmark_python_dir.exists():
+        issues.append("benchmarks/python is missing.")
+    if not benchmark_native_dir.exists():
+        issues.append("benchmarks/native is missing.")
 
     agents_text = read_text(ROOT / "AGENTS.md")
     docs_index_text = read_text(ROOT / "docs/index.md")
@@ -132,11 +139,7 @@ def main() -> int:
         issues.append("docs/index.md is missing the native build/self-test doc.")
     if "docs/reference/native-dependency-manifest.json" not in docs_index_text:
         issues.append("docs/index.md is missing the native dependency manifest.")
-    if "transitional parity workspace" not in readme_text:
-        issues.append(
-            "README.md no longer states the current transitional workspace status."
-        )
-    if "standalone C++ only" not in readme_text:
+    if "standalone C++ product" not in readme_text:
         issues.append("README.md no longer states the standalone C++ target.")
     if "ome_zarr_native_selftest" not in readme_text:
         issues.append("README.md is missing the native self-test command.")
@@ -164,38 +167,12 @@ def main() -> int:
         issues.append("README.md is missing the native dependency manifest reference.")
     if "install_latest_native_toolchain.sh" not in readme_text:
         issues.append("README.md is missing the native toolchain installer reference.")
+    if "benchmarks/python/" not in readme_text:
+        issues.append("README.md is missing the benchmarks/python layout.")
+    if "benchmarks/native/" not in readme_text:
+        issues.append("README.md is missing the benchmarks/native layout.")
     if "scripts/compare_iteration_benchmarks.py" not in readme_text:
         issues.append("README.md is missing the iteration benchmark helper command.")
-    if "--paired-case utils.download=local.download" not in readme_text:
-        issues.append(
-            "README.md is missing the native download iteration benchmark example."
-        )
-    if "--paired-case utils.view=local.view_prepare" not in readme_text:
-        issues.append(
-            "README.md is missing the native view iteration benchmark example."
-        )
-    if (
-        "--paired-case runtime.utils.info_v3_image_with_stats=local.info_stats"
-        not in readme_text
-    ):
-        issues.append(
-            "README.md is missing the native info --stats iteration benchmark example."
-        )
-    if (
-        "--paired-case runtime.data.create_zarr_coins_v05=local.create_coins"
-        not in readme_text
-    ):
-        issues.append(
-            "README.md is missing the native create iteration benchmark example."
-        )
-    if "--paired-case csv.csv_to_zarr=local.csv_to_labels" not in readme_text:
-        issues.append(
-            "README.md is missing the native csv_to_labels iteration benchmark example."
-        )
-    if "--paired-case cli.scale_wrapper=local.scale_nearest" not in readme_text:
-        issues.append(
-            "README.md is missing the native scale iteration benchmark example."
-        )
     if "ome_zarr_native_bench_format" in readme_text and not native_bench.exists():
         issues.append(
             "README.md references ome_zarr_native_bench_format, "
@@ -240,9 +217,12 @@ def main() -> int:
             "pybind11",
             "ome_zarr_c._core",
             "cpp/bindings/",
+            "find_packages",
         )
     ):
         issues.append("setup.py still references removed pybind binding build inputs.")
+    if "packages=[]" not in setup_text.replace(" ", ""):
+        issues.append("setup.py must remain metadata-only with packages=[].")
     if "pybind11" in pyproject_text:
         issues.append("pyproject.toml still depends on removed pybind tooling.")
     if "install_latest_native_toolchain.sh" not in native_dev_text:

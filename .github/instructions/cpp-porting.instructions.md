@@ -5,23 +5,22 @@
   2. Maximize measured performance only after parity is already proven.
 - Do not modify the frozen upstream snapshot under `source_code_v.0.15.0/`.
 - Port one small upstream surface at a time.
-- Keep Python wrappers as thin transitional compatibility/oracle layers only.
 - Keep real semantics in `cpp/native/` and standalone entrypoints in
   `cpp/tools/`.
 - The target shipped product is standalone C++, not a Python adapter. No active
   binding layer remains in current `main`; do not reintroduce one without
   explicit approval and a documented unavoidable parity need.
-- Once a standalone-native runtime surface exists and parity is proven, treat
-  the matching Python-harness path as shrink-only debt. Do not add new
-  semantics there; reduce or delete it in later slices.
+- Once a standalone-native runtime surface exists and parity is proven, delete
+  matching Python-harness scaffolding unless it is strictly frozen-upstream
+  oracle code.
 - When a standalone-native runtime replacement already exists, prefer deleting
-  the matching wrapper/binding/runtime scaffolding in the same slice rather
-  than leaving dormant compatibility code behind. Keep only the smallest
-  oracle-only residue that is still actively verified and explain it
-  concretely if it cannot be removed yet.
-- If tests or benchmarks for a replaced surface can run through the Python
-  oracle plus standalone-native probe/bench tooling, rewire them and delete
-  the pybind/Python wrapper path instead of preserving it as benchmark glue.
+  matching binding/runtime scaffolding in the same slice rather than leaving
+  dormant compatibility code behind. Keep only oracle code that imports the
+  frozen upstream snapshot directly.
+- If tests or benchmarks for a replaced surface can run through the frozen
+  Python oracle plus standalone-native probe/bench tooling, rewire them and
+  delete the pybind/Python package path instead of preserving it as benchmark
+  glue.
 - Do not ship plan-only or helper-only standalone CLI commands. Public native
   CLI surfaces should correspond to real runtime commands or durable product
   APIs that are intended to survive the migration.
@@ -33,8 +32,7 @@
   the latest pinned tool and library versions. Do not quietly rely on older
   host packages when the manifest specifies newer native releases.
 - Do not put Python objects, Python attribute dispatch, or Python C-API-driven
-  semantics into C++ implementation code unless the boundary can be proven
-  unavoidable for the Python-visible contract.
+  semantics into C++ implementation code.
 - Verify the frozen snapshot manifest before claiming upstream immutability.
 - Preserve upstream exceptions and edge-case behavior unless an intentional
   divergence is explicitly documented.
@@ -63,9 +61,9 @@
 - When working on pure-native performance, also use the standalone native build
   and native benchmark tooling so Python-boundary overhead does not get
   confused with core semantic cost.
-- Never call a Python compatibility/oracle package-path benchmark "C++" or
-  "native C++". Pure-native C++ performance claims require standalone native
-  C++ executable/library timing.
+- Never call a Python package-path benchmark "C++" or "native C++".
+  Pure-native C++ performance claims require standalone native C++
+  executable/library timing.
 - When a change affects `cpp/native/`, `cpp/tools/`, or `CMakeLists.txt`,
   rebuild the standalone native targets and rerun the native self-test before
   claiming the native path is healthy.

@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "types.hpp"
+
 namespace ome_zarr_c::native_code {
 
 struct ReaderSpecFlags {

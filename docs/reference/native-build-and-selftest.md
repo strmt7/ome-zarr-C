@@ -136,8 +136,9 @@ Current scope:
 - `view`: standalone local validator-serving runtime with real browser launch and CORS-enabled HTTP serving
 - `csv_to_labels`: standalone local CSV-to-label-properties mutation for image and plate roots
 
-This still does not replace the full historical Python package/library surface.
-The native runtime path is already expanded command by command, and every
+This still does not expose every historical upstream library surface as a
+stable native library API. The native runtime path is already expanded command
+by command, and every
 standalone command must be parity-checked against the frozen Python oracle
 before it is treated as acceptable.
 
@@ -151,82 +152,24 @@ For a fast iteration comparison on the touched `format` hotspot:
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
 ```
 
-For direct Python-vs-native comparison on the current standalone runtime
-commands:
+For direct Python-vs-native comparison on the current standalone-native
+benchmark cases:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite core \
-  --match info_v2_image \
-  --python-match info_v2_image \
-  --native-match local.info \
-  --paired-case runtime.utils.info_v2_image=local.info
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --suite public-api \
-  --match finder \
-  --python-match finder \
-  --native-match local.finder \
-  --paired-case utils.finder=local.finder
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite public-api \
-  --match download \
-  --python-match utils.download \
-  --native-match local.download \
-  --paired-case utils.download=local.download
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite public-api \
-  --match view \
-  --python-match utils.view \
-  --native-match local.view_prepare \
-  --paired-case utils.view=local.view_prepare
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite core \
-  --match info_v3_image_with_stats \
-  --python-match info_v3_image_with_stats \
-  --native-match local.info_stats \
-  --paired-case runtime.utils.info_v3_image_with_stats=local.info_stats
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite core \
-  --match runtime.data.create_zarr_coins_v05 \
-  --python-match runtime.data.create_zarr_coins_v05 \
-  --native-match local.create_coins \
-  --paired-case runtime.data.create_zarr_coins_v05=local.create_coins
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite public-api \
-  --match csv.csv_to_zarr \
-  --python-match csv.csv_to_zarr \
-  --native-match local.csv_to_labels \
-  --paired-case csv.csv_to_zarr=local.csv_to_labels
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite public-api \
-  --match scale_wrapper \
-  --python-match cli.scale_wrapper \
-  --native-match local.scale_nearest \
-  --paired-case cli.scale_wrapper=local.scale_nearest
+  --match format \
+  --native-match format
 ```
 
-The standalone `view` pairing intentionally compares Python `utils.view` against
-native `local.view_prepare`, because the long-lived HTTP server itself is not a
-bounded benchmark target. The comparison measures validator URL and serving
-setup cost, while the subprocess CLI tests cover the real server behavior.
-
-For heavier end-to-end cases such as native `create`, keep the bounded helper
-aggressively small instead of waiting on a broad pyperf run:
+For heavier cases, keep the bounded helper aggressively small instead of
+waiting on a broad pyperf run:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite core \
-  --match runtime.data.create_zarr_coins_v05 \
-  --python-match runtime.data.create_zarr_coins_v05 \
-  --native-match local.create_coins \
-  --paired-case runtime.data.create_zarr_coins_v05=local.create_coins \
+  --suite public-api \
+  --match data \
+  --native-match data \
   --processes 1 \
   --values 1 \
   --warmups 1 \

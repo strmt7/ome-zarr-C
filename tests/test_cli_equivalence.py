@@ -28,7 +28,7 @@ _py_writer = __import__("ome_zarr.writer", fromlist=["dummy"])
 _REAL_TO_ZARR = da.to_zarr
 
 
-def _compat_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
+def _zarr_api_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
     if zarr_array_kwargs is not None:
         kwargs.update(zarr_array_kwargs)
     chunk_key_encoding = kwargs.get("chunk_key_encoding")
@@ -162,7 +162,7 @@ def _normalize_output(text: str, replacements: dict[str, str]):
 def _run_main(main_func, args: list[str], replacements: dict[str, str]):
     stream = io.StringIO()
     patched = (
-        patch.object(_py_writer.da, "to_zarr", _compat_to_zarr)
+        patch.object(_py_writer.da, "to_zarr", _zarr_api_to_zarr)
         if main_func is _py_cli.main and args and args[0] in {"create", "scale"}
         else nullcontext()
     )

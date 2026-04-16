@@ -12,9 +12,8 @@ import pyperf
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Summarize paired Python/converted-path pyperf benchmark results. "
-            "Only .native benchmark names are reported as native C++; "
-            ".compat names are reported as compatibility/oracle data."
+            "Summarize paired frozen-upstream Python vs standalone native C++ "
+            "pyperf benchmark results."
         )
     )
     parser.add_argument("input", help="Path to the pyperf JSON results file.")
@@ -28,8 +27,6 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 def _split_name(name: str) -> tuple[str, str]:
     if name.endswith(".python"):
         return name[: -len(".python")], "python"
-    if name.endswith(".compat"):
-        return name[: -len(".compat")], "compat"
     if name.endswith(".native"):
         return name[: -len(".native")], "native"
     raise ValueError(f"Unexpected benchmark name: {name}")
@@ -46,9 +43,9 @@ def _format_seconds(seconds: float) -> str:
 
 
 def _variant_label(variant: str) -> str:
-    if variant == "native":
-        return "native C++"
-    return "compat/oracle"
+    if variant != "native":
+        raise ValueError(f"Unexpected benchmark variant: {variant}")
+    return "native C++"
 
 
 def _status(relative_ratio: float, variant: str) -> str:
@@ -76,10 +73,8 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
     variants = sorted({str(row["variant"]) for row in paired_rows})
     if variants == ["native"]:
         summary_label = "native C++"
-    elif variants == ["compat"]:
-        summary_label = "compat/oracle"
     else:
-        summary_label = "converted path (native C++ plus compat/oracle)"
+        raise ValueError(f"Unexpected benchmark variants: {variants}")
 
     grouped: dict[str, list[float]] = defaultdict(list)
     for row in paired_rows:
@@ -149,8 +144,6 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"Incomplete benchmark pair for {base_name}")
         if "native" in pair:
             converted_variant = "native"
-        elif "compat" in pair:
-            converted_variant = "compat"
         else:
             raise SystemExit(f"Incomplete benchmark pair for {base_name}")
 

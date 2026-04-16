@@ -8,10 +8,11 @@ This repository tracks a stricter `pure-native` percentage alongside the older
 - Count only upstream surfaces whose decision logic and behavioral semantics
   live in `cpp/native/`.
 - Count non-callable scaffold lines only when they are listed explicitly in the
-  manifest for an oracle wrapper whose callable semantics are already
-  native-owned.
+  manifest and point to native C++ files that own the equivalent project
+  metadata or type scaffolding.
 - Do not count mixed logic that still lives outside `cpp/native/`.
-- Do not count Python wrappers or development-oracle files as C++ semantics.
+- Do not count Python wrappers, Python package files, or development helper
+  files as C++ semantics.
 - Use the frozen upstream source in `source_code_v.0.15.0/ome_zarr/` as the
   immutable line-count basis.
 
@@ -57,8 +58,8 @@ At the current working commit, the strict pure-native report is:
 That figure includes:
 
 - callable surfaces whose semantics live in `cpp/native/`
-- explicitly listed `non_callable_scaffold` entries for development-oracle
-  wrappers
+- explicitly listed `non_callable_scaffold` entries for native metadata and type
+  scaffolding
 - abstract contract stubs excluded from callable accounting and covered only
   through visible scaffold entries
 
