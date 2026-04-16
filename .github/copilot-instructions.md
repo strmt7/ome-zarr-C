@@ -42,7 +42,10 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Load context selectively: start with the smallest sufficient set of docs,
   code, tests, and skills, then widen only when evidence says it is necessary.
 - Differential tests are required for ported surfaces.
-- Benchmarks are required before claiming speedups.
+- Benchmarks are required before claiming that C++ is faster. Report benchmark
+  outcomes as absolute C++ relative speed vs Python (`python_time / cpp_time`).
+  Do not invert slower cases into larger "slower" multipliers; report the
+  direct ratio, for example `0.748x`, plus a clear status.
 - Use repo-local skills under `.agents/skills/` when they fit the task.
 - Keep frozen snapshots under `source_code_v*/` excluded from security scanning,
   and update the exclusion whenever a new snapshot is added.
