@@ -45,7 +45,6 @@ ext_modules = [
             "cpp/bindings/format_bindings.cpp",
             "cpp/bindings/module.cpp",
             "cpp/bindings/scale_bindings.cpp",
-            "cpp/bindings/writer_bindings.cpp",
             "cpp/native/axes.cpp",
             "cpp/native/cli.cpp",
             "cpp/native/conversions.cpp",

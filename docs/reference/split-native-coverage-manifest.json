@@ -674,7 +674,6 @@
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_wells",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
@@ -685,9 +684,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_blosc_compressor",
-      "binding_files": [
-        "cpp/bindings/writer_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -696,7 +693,6 @@
       "upstream_file": "writer.py",
       "qualname": "check_group_fmt",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
@@ -708,7 +704,6 @@
       "upstream_file": "writer.py",
       "qualname": "check_format",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
@@ -720,7 +715,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_multiscale",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp",
         "cpp/bindings/scale_bindings.cpp"
       ],
@@ -734,7 +728,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_multiscales_metadata",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
@@ -746,7 +739,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_plate_metadata",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
@@ -757,9 +749,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_well_metadata",
-      "binding_files": [
-        "cpp/bindings/writer_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -768,7 +758,6 @@
       "upstream_file": "writer.py",
       "qualname": "_write_pyramid_to_zarr",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp"
       ],
       "native_files": [
@@ -779,9 +768,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_label_metadata",
-      "binding_files": [
-        "cpp/bindings/writer_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -789,9 +776,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "get_metadata",
-      "binding_files": [
-        "cpp/bindings/writer_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -799,9 +784,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "add_metadata",
-      "binding_files": [
-        "cpp/bindings/writer_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -810,7 +793,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_multiscale_labels",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp",
         "cpp/bindings/scale_bindings.cpp"
       ],
@@ -824,7 +806,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_labels",
       "binding_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "cpp/bindings/format_bindings.cpp",
         "cpp/bindings/scale_bindings.cpp"
       ],

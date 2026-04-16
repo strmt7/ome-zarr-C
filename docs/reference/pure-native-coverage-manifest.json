@@ -939,7 +939,6 @@
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_wells",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -961,7 +960,6 @@
       "upstream_file": "writer.py",
       "qualname": "check_group_fmt",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -973,7 +971,6 @@
       "upstream_file": "writer.py",
       "qualname": "check_format",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -985,7 +982,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_multiscale",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -997,7 +993,6 @@
       "upstream_file": "writer.py",
       "qualname": "_write_pyramid_to_zarr",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1009,7 +1004,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_multiscales_metadata",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1021,7 +1015,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_plate_metadata",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1033,7 +1026,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_well_metadata",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1044,7 +1036,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_label_metadata",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1055,7 +1046,6 @@
       "upstream_file": "writer.py",
       "qualname": "get_metadata",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1066,7 +1056,6 @@
       "upstream_file": "writer.py",
       "qualname": "add_metadata",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1077,7 +1066,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_multiscale_labels",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1090,7 +1078,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_labels",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1602,7 +1589,6 @@
       "upstream_file": "writer.py",
       "qualname": "_blosc_compressor",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1613,7 +1599,6 @@
       "upstream_file": "writer.py",
       "qualname": "_resolve_storage_options",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1624,7 +1609,6 @@
       "upstream_file": "writer.py",
       "qualname": "write_image",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -1697,7 +1681,6 @@
       "entry_type": "non_callable_scaffold",
       "upstream_file": "writer.py",
       "boundary_files": [
-        "cpp/bindings/writer_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
