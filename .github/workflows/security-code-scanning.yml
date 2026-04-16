@@ -58,15 +58,27 @@ jobs:
           dependency-caching: true
           config-file: ./.github/codeql/codeql-config.yml
 
-      - name: Install C/C++ build prerequisites
+      - name: Install native C/C++ toolchain for CodeQL
         if: matrix.language == 'c-cpp'
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install "setuptools>=82.0.1" "wheel>=0.46.3" "pybind11>=3.0.3"
+          PREFIX="${RUNNER_TEMP}/ome-zarr-native-toolchain"
+          ./scripts/install_latest_native_toolchain.sh "${PREFIX}"
+          {
+            echo "PATH=${PREFIX}/bin:${PATH}"
+            echo "CMAKE_PREFIX_PATH=${PREFIX}"
+            echo "LD_LIBRARY_PATH=${PREFIX}/lib:${PREFIX}/lib64:${LD_LIBRARY_PATH:-}"
+          } >> "${GITHUB_ENV}"
 
-      - name: Build C/C++ extension for CodeQL
+      - name: Build native C/C++ targets for CodeQL
         if: matrix.language == 'c-cpp'
-        run: python setup.py build
+        run: |
+          cmake -S . -B build-codeql -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}"
+          cmake --build build-codeql -j2 --target \
+            ome_zarr_native_selftest \
+            ome_zarr_native_cli \
+            ome_zarr_native_probe
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
