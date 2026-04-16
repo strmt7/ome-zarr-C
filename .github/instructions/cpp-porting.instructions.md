@@ -6,10 +6,15 @@
 - Do not modify the frozen upstream snapshot under `source_code_v.0.15.0/`.
 - Port one small upstream surface at a time.
 - Keep real semantics in `cpp/native/` and standalone entrypoints in
-  `cpp/tools/`.
+  `cpp/tools/`. Optional FFI entrypoints belong in `cpp/api/` as a thin C ABI
+  over native semantics.
 - The target shipped product is standalone C++, not a Python adapter. No active
   binding layer remains in current `main`; do not reintroduce one without
   explicit approval and a documented unavoidable parity need.
+- A C ABI may expose raw buffers and JSON for external callers such as NumPy,
+  Zarr-owning workflows, CFFI, ctypes, C, C++, Rust, or Julia. It must not
+  include Python objects, CPython headers, pybind, or embedded interpreter
+  calls.
 - Once a standalone-native runtime surface exists and parity is proven, delete
   matching Python-harness scaffolding unless it is strictly frozen-upstream
   oracle code.
@@ -33,6 +38,9 @@
   host packages when the manifest specifies newer native releases.
 - Do not put Python objects, Python attribute dispatch, or Python C-API-driven
   semantics into C++ implementation code.
+- For new ABI entrypoints, add root tests that exercise at least one real
+  external package boundary when relevant, such as NumPy contiguous memory or
+  Zarr-created local stores.
 - Verify the frozen snapshot manifest before claiming upstream immutability.
 - Preserve upstream exceptions and edge-case behavior unless an intentional
   divergence is explicitly documented.

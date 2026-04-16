@@ -43,6 +43,11 @@ porting work.
   measure pure-native semantic cost.
 - Keep standalone native CLI surfaces limited to real runtime commands or
   durable product APIs.
+- Put optional external interop in `cpp/api/` as a thin C ABI over native
+  semantics. Use raw buffers and JSON strings, not Python objects or pybind.
+- Test ABI array surfaces with real contiguous NumPy memory through `ctypes`
+  or equivalent FFI, and test store/path surfaces against real Zarr-created
+  stores when possible.
 - Once a standalone-native runtime surface exists and parity is proven, remove
   any corresponding binding/runtime scaffolding instead of adding fresh
   semantics there.
@@ -76,6 +81,8 @@ porting work.
 - Do not put Python objects, Python attribute dispatch, or Python C-API-driven
   semantics in C++ implementation code unless no practical native alternative
   can be demonstrated.
+- Do not confuse a C ABI with a Python adapter. The ABI may be loaded by
+  Python libraries, but it must remain object-free and native on the C++ side.
 - Do not present mixed pybind-heavy code as pure-native C++.
 - Do not present any Python package layout as the intended final product. The
   target delivery shape is standalone C++.

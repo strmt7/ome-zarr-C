@@ -1,18 +1,21 @@
 ---
 name: pybind11-runtime-parity
-description: Use when a pybind11 port crosses Python runtime behavior such as exceptions, truthiness, iterators, imports, or Python object callbacks and must remain parity-safe.
+description: Legacy reference only. Current main does not use pybind11 ports; use this only to understand old debt before removing it.
 origin: repo-local, grounded in official pybind11 docs
 ---
 
 # pybind11 Runtime Parity
 
-Use this skill when a port is no longer just arithmetic or struct marshaling
-and instead interacts with Python objects, imports, generators, iterators, or
-exception state.
+Do not use this skill to add new code in current `main`. The active
+architecture is standalone native C++ plus optional C ABI interop. If old
+pybind debt is encountered, remove or replace it rather than extending it.
+
+This file remains only as a historical warning about the classes of runtime
+behavior that made old binding ports unsafe.
 
 ## Rules
 
-- Preserve Python-visible behavior before simplifying the C++.
+- Preserve frozen-upstream behavior before simplifying the C++.
 - Catch `py::error_already_set` for exceptions that originate in Python code or
   Python C API calls; do not assume pybind11 C++ exception wrappers catch them.
 - Use Python truth-value evaluation for generic Python objects instead of
@@ -26,5 +29,6 @@ exception state.
 - If performance work touches the boundary, prefer typed buffers or native
   structs over repeated Python-object lookups in hot loops.
 
-Read `references/official-guidance.md` before changing iterator semantics,
-exception handling, or Python-object lifetimes.
+Read `references/official-guidance.md` only when removing or auditing old
+binding debt. New interop belongs in `cpp/api/` as raw C ABI buffers and JSON,
+not pybind runtime objects.

@@ -6,6 +6,7 @@ alwaysApply: true
 
 - Never modify `source_code_v.0.15.0/`.
 - Port one upstream surface at a time.
-- Keep wrappers thin and preserve upstream behavior first.
+- Keep C ABI wrappers thin and preserve upstream behavior first.
+- Do not add Python-object, pybind, or embedded-interpreter semantics to C++.
 - Add differential tests for every port.
 - Benchmark before claiming performance gains.

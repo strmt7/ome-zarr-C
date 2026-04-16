@@ -5,8 +5,8 @@ snapshot to C++ without modifying the snapshot itself.
 
 Current `main` uses Python only as a development oracle for parity tests,
 fixture generation, and benchmark comparison. The intended product path is the
-standalone C++ implementation under `cpp/native/` and `cpp/tools/`; no
-repo-maintained Python compatibility package is active.
+standalone C++ implementation under `cpp/native/`, `cpp/api/`, and
+`cpp/tools/`; no repo-maintained Python compatibility package is active.
 
 ## Primary goals
 
@@ -176,27 +176,38 @@ repo-maintained Python compatibility package is active.
 52. Keep all timing and benchmark orchestration under `benchmarks/`. Python
     upstream timing helpers belong under `benchmarks/python/`; standalone
     native C++ timing helpers belong under `benchmarks/native/`.
+53. Optional external interoperability belongs in `cpp/api/` as a C ABI over
+    `cpp/native/` semantics. It may expose raw buffers and JSON strings for
+    `ctypes`, CFFI, C, C++, Rust, Julia, or similar callers, but it must not
+    include Python objects, pybind glue, CPython headers, embedded interpreter
+    calls, or package-specific Python adapter logic.
+54. For ABI work, test at least one real external package boundary when it is
+    relevant. NumPy-style array entrypoints must be tested with real contiguous
+    NumPy memory through `ctypes`; local store/path entrypoints must be tested
+    against frozen-upstream behavior on real Zarr-created stores when possible.
 
 ## Fast load order
 
 1. `docs/reference/architecture-first-porting.md`
 2. `docs/reference/standalone-cpp-target.md`
 3. `docs/reference/native-build-and-selftest.md`
-4. `docs/reference/native-dependency-manifest.json`
-5. `docs/reference/pure-native-cpp-policy.md`
-6. `docs/reference/ai-agent-context-routing.md`
-7. `docs/reference/porting-contract.md`
-8. `docs/reference/ai-agent-dos-and-donts.md`
-9. `docs/reference/immutable-parity-proof.md`
-10. `docs/reference/ai-agent-skills.md`
-11. the touched upstream implementation file under `source_code_v.0.15.0/`
-12. the matching C++ file, benchmark helper, and nearest test module
+4. `docs/reference/native-c-api-interop.md`
+5. `docs/reference/native-dependency-manifest.json`
+6. `docs/reference/pure-native-cpp-policy.md`
+7. `docs/reference/ai-agent-context-routing.md`
+8. `docs/reference/porting-contract.md`
+9. `docs/reference/ai-agent-dos-and-donts.md`
+10. `docs/reference/immutable-parity-proof.md`
+11. `docs/reference/ai-agent-skills.md`
+12. the touched upstream implementation file under `source_code_v.0.15.0/`
+13. the matching C++ file, benchmark helper, and nearest test module
 
 ## Repository map
 
 - `source_code_v.0.15.0/`: immutable upstream reference snapshot
 - `cpp/`: C++ implementations
 - `cpp/native/`: pure-native semantics only
+- `cpp/api/`: optional C ABI interoperability boundary over native semantics
 - `cpp/tools/`: standalone native CLI, self-test, and bounded native benchmarks
 - `tests/`: parity and regression tests
 - `benchmarks/`: Python-upstream and standalone-native benchmark code
@@ -217,6 +228,7 @@ timeout 180s .venv/bin/python -m pytest -q \
   tests/test_reader_equivalence.py \
   tests/test_scale_equivalence.py \
   tests/test_scaler_equivalence.py \
+  tests/test_native_c_api_interop.py \
   tests/test_utils_equivalence.py \
   tests/test_writer_equivalence.py
 .venv/bin/python scripts/check_native_cpp.py --all
@@ -226,7 +238,7 @@ timeout 180s .venv/bin/python -m pytest -q \
 .venv/bin/python -m ruff format --check .
 ./scripts/install_latest_native_toolchain.sh /usr/local
 /usr/local/bin/cmake -S . -B /tmp/ome-zarr-c-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release
-/usr/local/bin/cmake --build /tmp/ome-zarr-c-cmake -j2 --target ome_zarr_native_selftest
+/usr/local/bin/cmake --build /tmp/ome-zarr-c-cmake -j2
 ctest --test-dir /tmp/ome-zarr-c-cmake --output-on-failure
 ```
 

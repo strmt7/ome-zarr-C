@@ -1,13 +1,13 @@
 ---
 name: python-testing
-description: Choose Python-side parity tests, wrapper tests, and syntax checks without weakening coverage.
+description: Choose Python-side parity tests and syntax checks without weakening coverage.
 origin: adapted from ZMB-UZH/omero-docker-extended
 ---
 
 # Python Testing
 
-Use this skill when the touched surface includes Python wrappers or Python-only
-compatibility logic.
+Use this skill when the touched surface includes Python parity tests,
+development-harness code, or Python-only tooling.
 
 ## Rules
 

@@ -41,6 +41,7 @@ directory.
 - `source_code_v.0.15.0/`: frozen upstream release snapshot
 - `cpp/`: C++ implementations
 - `cpp/native/`: pure-native semantic implementation
+- `cpp/api/`: optional C ABI interoperability boundary for external callers
 - `cpp/tools/`: standalone native self-test and benchmark executables
 - `tests/`: differential and regression tests
 - `benchmarks/`: Python-upstream and native-C++ timing suites
@@ -217,9 +218,19 @@ Run the standalone native verification path:
 
 ```bash
 ./build-cpp/ome_zarr_native_selftest
+./build-cpp/ome_zarr_native_api_selftest
 ./build-cpp/ome_zarr_native_cli --help
 ctest --test-dir build-cpp --output-on-failure
 ```
+
+The build also produces `libome_zarr_native_api.so` on Linux, or the platform
+equivalent shared library, for tools that need an FFI boundary instead of a
+CLI process. That C ABI is optional and does not embed Python, pybind, or a
+repo-maintained Python package. It exposes JSON calls for metadata-shaped
+results and typed contiguous buffers for array consumers such as NumPy,
+CuPy-compatible host buffers, CFFI, ctypes, Rust, Julia, or C/C++ callers.
+See `docs/reference/native-c-api-interop.md` for the ABI contract and tested
+NumPy/Zarr interop examples.
 
 Run the bounded native benchmarks:
 
@@ -269,6 +280,21 @@ Current standalone native CLI commands:
 ```
 
 All upstream CLI commands now have standalone-native replacements.
+
+Current optional native C ABI entrypoints:
+
+```text
+ome_zarr_native_api_project_metadata
+ome_zarr_native_api_call_json
+ome_zarr_native_api_rgb_to_5d_u8
+```
+
+`ome_zarr_native_api_call_json` currently covers native conversions, CSV value
+parsing, format metadata, local Zarr location signatures, and scale metadata.
+`ome_zarr_native_api_rgb_to_5d_u8` accepts a caller-owned contiguous `uint8`
+buffer plus shape metadata and returns an owned 5D buffer matching the frozen
+upstream `ome_zarr.data.rgb_to_5d` layout. The caller frees returned memory
+with the matching API free function.
 
 For heavier end-to-end iteration comparisons such as `create`, lower the
 pyperf worker count explicitly so the bounded run stays practical:

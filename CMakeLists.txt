@@ -98,6 +98,21 @@ target_include_directories(
         ${ZSTD_INCLUDE_DIR})
 target_link_libraries(ome_zarr_native PUBLIC ${BLOSC_LIBRARY} ${ZSTD_LIBRARY})
 
+add_library(
+    ome_zarr_native_api
+    SHARED
+    cpp/api/ome_zarr_native_api.cpp
+)
+target_link_libraries(ome_zarr_native_api PRIVATE ome_zarr_native)
+target_include_directories(
+    ome_zarr_native_api
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/cpp/api)
+target_compile_definitions(
+    ome_zarr_native_api
+    PRIVATE
+        OME_ZARR_NATIVE_API_BUILD)
+
 if(MSVC)
     target_compile_options(ome_zarr_native PRIVATE /O2 /permissive-)
 else()
@@ -114,6 +129,7 @@ if(OME_ZARR_C_NATIVE_ENABLE_LTO)
         message(FATAL_ERROR "LTO requested but not supported: ${ipo_error}")
     endif()
     set_property(TARGET ome_zarr_native PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    set_property(TARGET ome_zarr_native_api PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
 if(OME_ZARR_C_NATIVE_BUILD_BENCHMARKS)
@@ -138,6 +154,13 @@ if(OME_ZARR_C_NATIVE_BUILD_TESTS)
     )
     target_link_libraries(ome_zarr_native_selftest PRIVATE ome_zarr_native)
     add_test(NAME ome_zarr_native_selftest COMMAND ome_zarr_native_selftest)
+
+    add_executable(
+        ome_zarr_native_api_selftest
+        cpp/tools/native_api_selftest.cpp
+    )
+    target_link_libraries(ome_zarr_native_api_selftest PRIVATE ome_zarr_native_api)
+    add_test(NAME ome_zarr_native_api_selftest COMMAND ome_zarr_native_api_selftest)
 endif()
 
 add_executable(

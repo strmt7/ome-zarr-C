@@ -1,18 +1,15 @@
-# Official Guidance
+# Native C++ Performance Guidance
 
-- `pybind11` STL conversion docs:
-  automatic STL conversions copy data on Python/C++ transitions and can hurt
-  both semantics and performance in hot paths. Prefer opaque or more direct
-  representations when the boundary is performance-critical.
-- `pybind11` NumPy docs:
-  `py::array_t<T>` and buffer-oriented access allow typed array entrypoints,
-  while unchecked proxies avoid repeated bounds and dimension checks in hot
-  loops when indices are already known valid.
-- `pybind11` GIL docs:
-  pybind11 never releases the GIL implicitly; `gil_scoped_release` is only safe
-  when the code cannot access Python state until the GIL is reacquired.
-- `pyperf` system docs:
-  benchmark tuning should reduce machine jitter and use stable CPU-frequency
+- Use typed native data and contiguous memory in hot paths. Keep generic JSON
+  or string conversion at the API edge, not inside loops.
+- Prefer pre-sized vectors, `reserve`, move-friendly construction, and
+  stack/compile-time constants for genuinely static data.
+- Avoid repeated filesystem scans, metadata parsing, dynamic allocation, and
+  serialization on the success path.
+- Use C ABI buffer entrypoints for external array consumers when the contract
+  allows it. The C++ side should see pointers, lengths, shapes, and explicit
+  ownership, not package objects.
+- Benchmark tuning should reduce machine jitter and use stable CPU-frequency
   settings before trusting fine-grained timing comparisons.
 
 Repo-validated heuristics that also align with the reviewed external guide:
@@ -29,7 +26,7 @@ Repo-validated heuristics that also align with the reviewed external guide:
 
 Primary references:
 
-- https://pybind11.readthedocs.io/en/stable/advanced/cast/stl.html
-- https://pybind11.readthedocs.io/en/stable/advanced/pycpp/numpy.html
-- https://pybind11.readthedocs.io/en/stable/advanced/misc.html
+- https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines
+- https://en.cppreference.com/w/cpp/container/vector/reserve
+- https://en.cppreference.com/w/cpp/language/move_constructor
 - https://pyperf.readthedocs.io/en/latest/system.html

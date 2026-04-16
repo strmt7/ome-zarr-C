@@ -7,7 +7,8 @@ Use `AGENTS.md` as the universal project contract and
 
 - Never modify `source_code_v.0.15.0/`.
 - Prefer small, file-by-file ports with differential parity tests.
-- Keep Python wrappers compatibility-focused and C++ cores behavior-focused.
+- Keep C ABI wrappers thin and C++ cores behavior-focused.
+- Do not add Python-object, pybind, or embedded-interpreter semantics to C++.
 - Use `.agents/skills/` when they fit the task.
 - Do not claim speed or parity beyond what tests and benchmarks prove.
 

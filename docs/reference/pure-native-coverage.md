@@ -11,8 +11,8 @@ This repository tracks a stricter `pure-native` percentage alongside the older
   manifest and point to native C++ files that own the equivalent project
   metadata or type scaffolding.
 - Do not count mixed logic that still lives outside `cpp/native/`.
-- Do not count Python wrappers, Python package files, or development helper
-  files as C++ semantics.
+- Do not count Python test harness code, Python package metadata, or
+  development helper files as C++ semantics.
 - Use the frozen upstream source in `source_code_v.0.15.0/ome_zarr/` as the
   immutable line-count basis.
 
