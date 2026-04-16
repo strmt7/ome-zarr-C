@@ -1,15 +1,17 @@
 {
   "metric_name": "pure_native_coverage",
-  "description": "Count upstream callable surfaces whose behavior is owned by semantics under cpp/native, plus explicitly listed non-callable module scaffolding. Python files listed as boundary files are development-oracle wrappers only; no active binding layer is part of the current architecture.",
+  "description": "Count upstream callable surfaces whose behavior is owned by semantics under cpp/native, plus explicitly listed non-callable module scaffolding with native C++ ownership. No Python package boundary files are part of the current architecture.",
   "upstream_root": "source_code_v.0.15.0/ome_zarr",
   "entries": [
     {
       "entry_type": "non_callable_scaffold",
       "upstream_file": "__init__.py",
-      "boundary_files": [
-        "ome_zarr_c/__init__.py"
-      ],
-      "native_files": []
+      "boundary_files": [],
+      "native_files": [
+        "cpp/native/version.hpp",
+        "cpp/tools/native_cli.cpp",
+        "cpp/tools/native_selftest.cpp"
+      ]
     },
     {
       "upstream_file": "axes.py",
@@ -173,9 +175,7 @@
     {
       "upstream_file": "dask_utils.py",
       "qualname": "_better_chunksize",
-      "boundary_files": [
-        "ome_zarr_c/dask_utils.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/dask_utils.cpp"
       ]
@@ -183,9 +183,7 @@
     {
       "upstream_file": "dask_utils.py",
       "qualname": "resize",
-      "boundary_files": [
-        "ome_zarr_c/dask_utils.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/dask_utils.cpp"
       ]
@@ -193,9 +191,7 @@
     {
       "upstream_file": "dask_utils.py",
       "qualname": "local_mean",
-      "boundary_files": [
-        "ome_zarr_c/dask_utils.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/dask_utils.cpp"
       ]
@@ -203,9 +199,7 @@
     {
       "upstream_file": "dask_utils.py",
       "qualname": "zoom",
-      "boundary_files": [
-        "ome_zarr_c/dask_utils.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/dask_utils.cpp"
       ]
@@ -213,9 +207,7 @@
     {
       "upstream_file": "dask_utils.py",
       "qualname": "downscale_nearest",
-      "boundary_files": [
-        "ome_zarr_c/dask_utils.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/dask_utils.cpp"
       ]
@@ -223,9 +215,7 @@
     {
       "entry_type": "non_callable_scaffold",
       "upstream_file": "dask_utils.py",
-      "boundary_files": [
-        "ome_zarr_c/dask_utils.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/dask_utils.cpp"
       ]
@@ -271,9 +261,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "format_from_version",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -281,9 +269,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "format_implementations",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -291,9 +277,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "detect_format",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -301,9 +285,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "Format._get_metadata_version",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -311,9 +293,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "Format.__repr__",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -321,9 +301,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "Format.__eq__",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -331,9 +309,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.zarr_format",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -341,9 +317,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.chunk_key_encoding",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -351,9 +325,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.matches",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -361,9 +333,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV02.chunk_key_encoding",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -371,9 +341,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.generate_well_dict",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -381,9 +349,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.validate_well_dict",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -391,9 +357,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.generate_coordinate_transformations",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -401,9 +365,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.validate_coordinate_transformations",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -411,9 +373,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV05.zarr_format",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -421,9 +381,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV05.chunk_key_encoding",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -709,9 +667,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.methods",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -719,9 +675,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.func",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -729,9 +683,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.resize_image",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -739,9 +691,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.nearest",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -749,9 +699,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.__nearest",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -759,9 +707,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.local_mean",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -769,9 +715,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.zoom",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -779,9 +723,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler._by_plane",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -789,9 +731,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "_build_pyramid",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp",
         "cpp/native/dask_utils.cpp"
@@ -847,9 +787,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_get_valid_axes",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -857,9 +795,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_extract_dims_from_axes",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -867,9 +803,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_well_images",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -877,9 +811,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_acquisitions",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -887,9 +819,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_rows_columns",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -897,9 +827,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_datasets",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -907,9 +835,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_wells",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -918,9 +844,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_retuple",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -928,9 +852,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "check_group_fmt",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -939,9 +861,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "check_format",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -950,9 +870,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_multiscale",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -961,9 +879,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_write_pyramid_to_zarr",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -972,9 +888,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_multiscales_metadata",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -983,9 +897,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_plate_metadata",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp"
@@ -994,9 +906,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_well_metadata",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -1004,9 +914,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_label_metadata",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -1014,9 +922,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "get_metadata",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -1024,9 +930,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "add_metadata",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -1034,9 +938,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_multiscale_labels",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp",
@@ -1046,9 +948,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_labels",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp",
@@ -1160,9 +1060,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.version",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1170,9 +1068,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.init_store",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1180,9 +1076,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.generate_well_dict",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1190,9 +1084,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.validate_well_dict",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1200,9 +1092,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.generate_coordinate_transformations",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1210,9 +1100,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV01.validate_coordinate_transformations",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1220,9 +1108,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV02.version",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1230,9 +1116,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV03.version",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1240,9 +1124,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV04.version",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1250,9 +1132,7 @@
     {
       "upstream_file": "format.py",
       "qualname": "FormatV05.version",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1260,9 +1140,7 @@
     {
       "entry_type": "non_callable_scaffold",
       "upstream_file": "format.py",
-      "boundary_files": [
-        "ome_zarr_c/format.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/format.cpp"
       ]
@@ -1472,9 +1350,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.__create_group",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -1482,9 +1358,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.__assert_values",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -1492,9 +1366,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.gaussian",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -1502,9 +1374,7 @@
     {
       "upstream_file": "scale.py",
       "qualname": "Scaler.laplacian",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp"
       ]
@@ -1512,9 +1382,7 @@
     {
       "entry_type": "non_callable_scaffold",
       "upstream_file": "scale.py",
-      "boundary_files": [
-        "ome_zarr_c/scale.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/scale.cpp",
         "cpp/native/dask_utils.cpp"
@@ -1541,9 +1409,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_blosc_compressor",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -1551,9 +1417,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_resolve_storage_options",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -1561,9 +1425,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "write_image",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp",
@@ -1611,10 +1473,12 @@
     {
       "entry_type": "non_callable_scaffold",
       "upstream_file": "types.py",
-      "boundary_files": [
-        "ome_zarr_c/types.py"
-      ],
-      "native_files": []
+      "boundary_files": [],
+      "native_files": [
+        "cpp/native/types.hpp",
+        "cpp/native/io.hpp",
+        "cpp/native/reader.hpp"
+      ]
     },
     {
       "entry_type": "non_callable_scaffold",
@@ -1633,9 +1497,7 @@
     {
       "entry_type": "non_callable_scaffold",
       "upstream_file": "writer.py",
-      "boundary_files": [
-        "ome_zarr_c/writer.py"
-      ],
+      "boundary_files": [],
       "native_files": [
         "cpp/native/writer.cpp",
         "cpp/native/format.cpp",

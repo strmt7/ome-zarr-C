@@ -13,7 +13,7 @@ porting work.
 ## Do
 
 - Read `docs/reference/architecture-first-porting.md` before widening a port.
-- Read the exact upstream implementation before touching the wrapper or C++.
+- Read the exact upstream implementation before touching C++ or tests.
 - Port the smallest self-contained surface first.
 - Write differential tests first or alongside the native change.
 - Rebuild the editable install after every native edit.
@@ -24,8 +24,8 @@ porting work.
   parity tests.
 - Document blockers explicitly when the runtime cannot prove a live surface.
 - Keep README and reference docs synchronized with what is actually verified.
-- Keep the current transitional Python-harness state and the target standalone
-  C++ product state clearly separated in docs.
+- Keep the frozen Python oracle and the standalone C++ product path clearly
+  separated in docs.
 - Treat GitHub `main` as the shared source of truth and reconcile local state
   against `origin/main` before trusting it.
 - Prefer `--no-build-isolation` in offline or sandboxed rebuilds once local
@@ -40,21 +40,19 @@ porting work.
   the upgrade after rerunning parity and benchmark validation on the upgraded
   stack.
 - Use the standalone native build and native benchmark tools when you need to
-  measure pure-native semantic cost separately from Python-visible boundary
-  overhead.
+  measure pure-native semantic cost.
 - Keep standalone native CLI surfaces limited to real runtime commands or
   durable product APIs.
-- Once a standalone-native runtime surface exists and parity is proven, treat
-  the corresponding binding/runtime path as shrink-only debt and reduce it in
-  later slices instead of adding fresh semantics there. Remove matching Python
-  package hooks once they are no longer needed for oracle work.
-- When a standalone-native runtime replacement already exists, delete the
-  matching wrapper exports, pybind registrations, obsolete runtime tests, and
-  stale benchmark references in the same slice unless a remaining oracle-only
-  dependency is still active and can be stated precisely.
-- If a replaced surface can be verified and benchmarked through the Python
-  oracle plus standalone-native probe/bench tools, remove the old pybind or
-  Python-wrapper surface instead of leaving it behind as compatibility glue.
+- Once a standalone-native runtime surface exists and parity is proven, remove
+  any corresponding binding/runtime scaffolding instead of adding fresh
+  semantics there.
+- When a standalone-native runtime replacement already exists, delete pybind
+  registrations, obsolete runtime tests, and stale benchmark references in the
+  same slice unless a remaining oracle-only dependency is still active and can
+  be stated precisely.
+- If a replaced surface can be verified and benchmarked through the frozen
+  Python oracle plus standalone-native probe/bench tools, remove old pybind or
+  Python package surfaces instead of leaving them behind as glue.
 - Use Ruff only for Python or Markdown-like files. If linting a subset, pass
   those paths explicitly and keep `cpp/` out of the Ruff target list.
 - Start with the smallest sufficient context slice and broaden only when the
@@ -67,8 +65,8 @@ porting work.
   C++ is faster; below `1.0` means native C++ is slower. Do not invert slower
   cases into larger "slower" multipliers; report the direct ratio, for example
   `0.748x`.
-- Label Python package-path benchmark measurements as `compat/oracle`, not C++
-  and not native C++. Keep them out of pure-native C++ performance totals.
+- Label only standalone native C++ executable/library timings as native C++.
+  Do not publish Python package-path converted timings.
 
 ## Don't
 
@@ -79,8 +77,8 @@ porting work.
   semantics in C++ implementation code unless no practical native alternative
   can be demonstrated.
 - Do not present mixed pybind-heavy code as pure-native C++.
-- Do not present the transitional Python package layout as the intended final
-  product. The target delivery shape is standalone C++.
+- Do not present any Python package layout as the intended final product. The
+  target delivery shape is standalone C++.
 - Do not add new semantic logic to a binding-heavy file just because the file
   already exists.
 - Do not ship plan-only or helper-only standalone CLI commands as if they were
@@ -88,7 +86,7 @@ porting work.
 - Do not count a surface as complete if the public path is still blocked by the
   runtime.
 - Do not treat mocked store interactions as proof of real store parity.
-- Do not preserve an accidental wrapper bug just because tests were missing.
+- Do not preserve an accidental helper bug just because tests were missing.
 - Do not trust a stale extension binary after editing `cpp/`.
 - Do not claim full-suite green if the verified lane excluded known blockers.
 - Do not leave repo docs overstating coverage or verification.
@@ -101,5 +99,5 @@ porting work.
   other contract drift before pushing.
 - Do not describe a slower C++ result as a performance gain or invert it into
   a larger "slower" multiplier. Keep the direct relative-speed ratio.
-- Do not call a Python compatibility/oracle timing a C++ timing just because it
-  lives next to C++ parity work.
+- Do not call a Python package-path timing a C++ timing just because it lives
+  next to C++ parity work.

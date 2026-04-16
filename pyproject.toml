@@ -44,6 +44,12 @@ OriginalRelease = "https://github.com/ome/ome-zarr-py/releases/tag/v0.15.0"
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+filterwarnings = [
+    # The frozen upstream v0.15.0 oracle constructs Deprecated.Scaler at import/runtime.
+    # The snapshot is immutable; keep parity tests clean without hiding new warnings.
+    "ignore:Call to deprecated class Scaler.*:DeprecationWarning:ome_zarr\\.data",
+    "ignore:Call to deprecated class Scaler.*:DeprecationWarning:ome_zarr\\.writer",
+]
 
 [tool.ruff]
 extend-exclude = ["source_code_v.0.15.0"]

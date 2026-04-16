@@ -30,7 +30,7 @@ _py_writer = importlib.import_module("ome_zarr.writer")
 _REAL_TO_ZARR = da.to_zarr
 
 
-def _compat_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
+def _zarr_api_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
     if zarr_array_kwargs is not None:
         kwargs.update(zarr_array_kwargs)
     chunk_key_encoding = kwargs.get("chunk_key_encoding")
@@ -248,7 +248,7 @@ def warning_snapshot(caught: list[warnings.WarningMessage]) -> list[tuple[str, s
 def run_write_image(func, root: Path, *args, **kwargs):
     stream = io.StringIO()
     patched = (
-        patch.object(_py_writer.da, "to_zarr", _compat_to_zarr)
+        patch.object(_py_writer.da, "to_zarr", _zarr_api_to_zarr)
         if func.__module__.startswith("ome_zarr.")
         else nullcontext()
     )
@@ -276,7 +276,7 @@ def run_write_image(func, root: Path, *args, **kwargs):
 
 def run_create_zarr(func, root: Path, *, method, label_name: str, fmt, seed: int):
     patched = (
-        patch.object(_py_writer.da, "to_zarr", _compat_to_zarr)
+        patch.object(_py_writer.da, "to_zarr", _zarr_api_to_zarr)
         if func.__module__.startswith("ome_zarr.")
         else nullcontext()
     )
@@ -295,7 +295,7 @@ def run_create_zarr(func, root: Path, *, method, label_name: str, fmt, seed: int
 def run_cli_main(main_func, args: list[str], replacements: dict[str, str]):
     stream = io.StringIO()
     patched = (
-        patch.object(_py_writer.da, "to_zarr", _compat_to_zarr)
+        patch.object(_py_writer.da, "to_zarr", _zarr_api_to_zarr)
         if main_func.__module__.startswith("ome_zarr.")
         and args
         and args[0] in {"create", "scale"}

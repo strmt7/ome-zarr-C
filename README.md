@@ -10,10 +10,11 @@ snapshot in native C++ modules. Under the stricter current architecture,
 entrypoints, and no active binding layer remains. The working rule for
 converted code is behavioral parity first, performance claims second.
 
-Current `main` is still a transitional parity workspace with Python-oracle
-support. The target end-state product is standalone C++ only: Python remains
-in this repo today for parity tests, fixture generation, and benchmark
-comparison, but it is not the intended runtime delivery shape.
+Current `main` uses Python only as a development oracle for tests, fixture
+generation, and benchmark comparison against the frozen upstream snapshot. The
+active converted implementation and runtime entrypoints are standalone native
+C++; repo-maintained Python compatibility packages are not part of the
+architecture.
 
 ## Goals
 
@@ -41,57 +42,29 @@ directory.
 - `cpp/`: C++ implementations
 - `cpp/native/`: pure-native semantic implementation
 - `cpp/tools/`: standalone native self-test and benchmark executables
-- `ome_zarr_c/`: transitional Python compatibility/oracle layer
 - `tests/`: differential and regression tests
+- `benchmarks/`: Python-upstream and native-C++ timing suites
 - `docs/`: project references, design notes, and benchmark material
 
 ## Verified Parity Surfaces
 
-These are parity-proven surfaces. This is not the same as a shipped standalone
-C++ API guarantee for every upstream Python entrypoint; the Python package is
-still a development oracle and compatibility layer, not the target runtime
-product.
+Verified surfaces are proven through root-level tests under `tests/` and the
+standalone native self-test. Python is used only to execute the frozen upstream
+oracle; no repo-maintained Python compatibility package is shipped.
 
-The following upstream behaviors are currently proven by differential tests on
-this runtime:
+Current verified native areas include:
 
-- `ome_zarr_c.format`
-  - format implementation ordering
-  - `format_from_version`
-  - `detect_format`
-  - per-format matching
-  - per-format Zarr/chunk-key properties
-  - metadata version lookup
-  - well-dict validation
-  - coordinate-transformation generation and validation
-- `ome_zarr_c.writer`
-  - `_blosc_compressor`
-  - `_get_valid_axes`
-  - `_extract_dims_from_axes`
-  - `_retuple`
-  - `_resolve_storage_options`
-  - `_validate_well_images`
-  - `_validate_plate_acquisitions`
-  - `_validate_plate_rows_columns`
-  - `_validate_datasets`
-  - `_validate_plate_wells`
-- `ome_zarr_c.dask_utils`
-  - `_better_chunksize`
-  - `downscale_nearest`
-  - `local_mean`
-  - `resize`
-  - `zoom`
-- `ome_zarr_c.scale`
-  - `_build_pyramid`
-  - `Scaler.resize_image`
-  - `Scaler.nearest`
-  - `Scaler.gaussian`
-  - `Scaler.laplacian`
-  - `Scaler.local_mean`
-  - `Scaler.zoom`
-
-Each converted surface is validated against the frozen upstream release with
-parity tests under `tests/`.
+- `cpp/native/axes.*`
+- `cpp/native/conversions.*`
+- `cpp/native/csv.*`
+- `cpp/native/data.*`
+- `cpp/native/dask_utils.*`
+- `cpp/native/format.*`
+- `cpp/native/io.*`
+- `cpp/native/reader.*`
+- `cpp/native/scale.*`
+- `cpp/native/utils.*`
+- `cpp/native/writer.*`
 
 ## Split-Native Coverage
 
@@ -140,12 +113,12 @@ benchmark qualification before making any performance or compatibility claim.
 
 ## Deployment
 
-## Transitional Python-Oriented Dev Harness
+## Python Oracle Dev Harness
 
 The current parity and benchmark harness still uses Python because it compares
-the converted behavior directly against the frozen upstream package on the same
-machine. That harness is for development-time proof, not the intended final
-product shape.
+native C++ behavior directly against the frozen upstream package on the same
+machine. That harness is for development-time proof and benchmark comparison,
+not the runtime product shape.
 
 Python dev-harness prerequisites:
 
@@ -156,7 +129,8 @@ Typical Linux package examples:
 - Debian or Ubuntu: `python3.12-dev`
 - Fedora: `python3.12-devel`
 
-Create a local environment and install the editable package for parity work:
+Create a local environment and install the metadata-only editable project for
+parity and benchmark dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -268,7 +242,7 @@ script:
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
 ```
 
-That script emits one table with the Python-visible `pyperf` numbers and the
+That script emits one table with frozen-upstream Python `pyperf` numbers and
 matching standalone-native benchmark numbers for the same touched surface.
 
 For direct Python-vs-native comparison on the real standalone runtime paths
@@ -276,60 +250,9 @@ touched in the current iterations:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite core \
-  --match info_v2_image \
-  --python-match info_v2_image \
-  --native-match local.info \
-  --paired-case runtime.utils.info_v2_image=local.info
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --suite public-api \
-  --match finder \
-  --python-match finder \
-  --native-match local.finder \
-  --paired-case utils.finder=local.finder
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite public-api \
-  --match download \
-  --python-match utils.download \
-  --native-match local.download \
-  --paired-case utils.download=local.download
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite public-api \
-  --match view \
-  --python-match utils.view \
-  --native-match local.view_prepare \
-  --paired-case utils.view=local.view_prepare
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite core \
-  --match info_v3_image_with_stats \
-  --python-match info_v3_image_with_stats \
-  --native-match local.info_stats \
-  --paired-case runtime.utils.info_v3_image_with_stats=local.info_stats
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite core \
-  --match runtime.data.create_zarr_coins_v05 \
-  --python-match runtime.data.create_zarr_coins_v05 \
-  --native-match local.create_coins \
-  --paired-case runtime.data.create_zarr_coins_v05=local.create_coins
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite public-api \
-  --match csv.csv_to_zarr \
-  --python-match csv.csv_to_zarr \
-  --native-match local.csv_to_labels \
-  --paired-case csv.csv_to_zarr=local.csv_to_labels
-
-timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite public-api \
-  --match scale_wrapper \
-  --python-match cli.scale_wrapper \
-  --native-match local.scale_nearest \
-  --paired-case cli.scale_wrapper=local.scale_nearest
+  --match format \
+  --native-match format
 ```
 
 Current standalone native CLI commands:
@@ -345,20 +268,16 @@ Current standalone native CLI commands:
 ./build-cpp/ome_zarr_native_cli csv_to_labels /tmp/demo/props.csv cell_id score#d /tmp/demo/image.zarr cell_id
 ```
 
-All upstream CLI commands now have standalone-native replacements. The
-remaining migration target is deleting the transitional Python-visible binding
-and package layers from the delivered product path.
+All upstream CLI commands now have standalone-native replacements.
 
 For heavier end-to-end iteration comparisons such as `create`, lower the
 pyperf worker count explicitly so the bounded run stays practical:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
-  --suite core \
-  --match runtime.data.create_zarr_coins_v05 \
-  --python-match runtime.data.create_zarr_coins_v05 \
-  --native-match local.create_coins \
-  --paired-case runtime.data.create_zarr_coins_v05=local.create_coins \
+  --suite public-api \
+  --match data \
+  --native-match data \
   --processes 1 \
   --values 1 \
   --warmups 1 \
@@ -382,17 +301,8 @@ timeout 180s .venv/bin/python -m pytest -q \
 .venv/bin/python -m ruff format --check .
 ```
 
-Current full-suite pytest warnings come from the frozen upstream `v0.15.0`
-oracle surfaces still exercising the deprecated `Scaler` API during parity
-tests. They are upstream-behavior warnings, not evidence that the standalone
-native build path is pinned to stale host packages.
-
-After editing native code under `cpp/`, rebuild the editable install before
-re-running tests so the suite exercises the current extension binary:
-
-```bash
-.venv/bin/python -m pip install -e . --no-build-isolation
-```
+Current full-suite pytest warnings, if any, must be investigated. They should
+not be dismissed as performance or native-toolchain issues without evidence.
 
 ## Porting Approach
 
@@ -407,15 +317,15 @@ Converted code is added in small, reviewable slices:
 ## Benchmarking
 
 The repository ships a paired `pyperf` benchmark suite under `benchmarks/`.
-It compares the frozen upstream Python implementation with either a
-compatibility/oracle path or a standalone native C++ path on the same benchmark
-inputs and aborts if the timed input loses parity. A Python package-path
-measurement is never reported as pure native C++ performance.
+It compares the frozen upstream Python implementation with standalone native
+C++ benchmark entrypoints on the same benchmark inputs. Python timing helpers
+live under `benchmarks/python/`; native C++ timing helpers live under
+`benchmarks/native/`. Benchmark orchestration stays in `benchmarks/`; tests
+stay in the root `tests/` folder.
 
 For standalone-C++ performance work, also use the native-only CMake benchmark
-tooling. The `pyperf` suite measures Python-visible public behavior, while the
-native benchmark measures pure-native semantic cost without pybind/Python
-boundary overhead.
+tooling. The `pyperf` suite is for paired upstream-vs-native comparison, while
+the native benchmark executable measures pure-native semantic cost directly.
 
 Common benchmark commands:
 
@@ -429,8 +339,8 @@ Common benchmark commands:
 
 The suite now has three layers:
 
-- `core`: converted kernels plus deterministic runtime flows
-- `public-api`: coverage-checked timings for the documented upstream public API
+- `core`: standalone-native-qualified kernels and deterministic helpers
+- `public-api`: native-qualified documented public API timing subset
 - `realdata`: paired `parse_url`/`info`/reader timings on public OME-Zarr data
 
 The real-data suite downloads public benchmark fixtures into
@@ -441,47 +351,32 @@ available only when `OME_ZARR_BENCH_INCLUDE_LARGE=1`.
 See `docs/reference/benchmark-suite.md` for the methodology and
 `docs/reference/public-benchmark-fixtures.md` for fixture provenance.
 
-Latest completed bounded all-suite `pyperf` snapshot on `2026-04-16` on the
-current portable `-O3` build. This is a mixed converted-path snapshot and must
-not be treated as a pure native C++ total:
+No tracked benchmark result snapshot is currently committed after retiring the
+old Python package-path benchmark layer. Generate fresh results before making a
+new performance claim:
 
-- command mode: fixed-loop iteration gate, `--processes 1 --values 1
-  --warmups 0 --loops 1`
-- paired cases: `62`
-- overall converted-path relative speed vs Python: `2.988x` by geometric mean
-- classification: `38` above Python, `12` roughly equal, `12` below Python
-- public API coverage checker: `89` documented callables, `16` excluded
-  callables, `77` covered callable entrypoints, `0` uncovered callables
-
-Notable wins in that completed snapshot:
-
-- `data.rgb_to_5d_batch`: `7505.487x`
-- `data.make_circle_batch`: `410.486x`
-- `conversions.rgba_to_int`: `323.628x`
-- `data.rgb_to_5d`: `141.721x`
-- `conversions.int_to_rgba`: `75.599x`
-- `runtime.cli.create_info_v05`: `24.753x`
-- `runtime.data.create_zarr_coins_v05`: `23.868x`
-- `runtime.data.create_zarr_astronaut_v05`: `19.977x`
-
-C++-slower paths in the same completed snapshot:
-
-- `utils.view`: `0.016x`
-- `utils.find_multiscales`: `0.129x`
-- `reader.matches`: `0.325x`
-- `utils.finder`: `0.585x`
-- `format.well_and_coord`: `0.844x`
-- `format.matches`: `0.857x`
-- `Scaler.resize_image`: `0.880x`
+```bash
+.venv/bin/python -m benchmarks.run \
+  --suite public-api \
+  --fast \
+  --quiet \
+  --processes 1 \
+  --values 1 \
+  --warmups 1 \
+  --min-time 0.005 \
+  --output /tmp/ome-zarr-c-native-public-api.json
+.venv/bin/python -m benchmarks.report \
+  /tmp/ome-zarr-c-native-public-api.json \
+  --markdown-out /tmp/ome-zarr-c-native-public-api.md
+```
 
 For read-only surfaces that print absolute paths, parity tests should run the
 upstream and converted implementations against the same fixture path so the
 comparison measures behavior rather than path differences.
 
-The remaining local test warnings are upstream-compatibility warnings, not
-evidence of stale C++ dependencies. They come from deprecated upstream
-`Scaler` APIs that remain intentionally covered because the converted package
-must keep matching `ome-zarr-py v0.15.0`.
+Any remaining local test warning must be investigated on its own evidence; do
+not treat warnings as acceptable just because they come from an upstream-facing
+test path.
 
 ## Security and Scan Scope
 

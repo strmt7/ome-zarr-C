@@ -12,16 +12,14 @@ That means:
 - shipped runtime code should be C++ only
 - Python is allowed in this repository for parity proofs, fixture generation,
   benchmark comparison, and other development-time oracle work
-- Python adapters, pybind glue, and Python package metadata are transitional
-  scaffolding, not the target product
+- Python adapters, pybind glue, and repo-maintained Python compatibility
+  packages are not the target product
 
 ## Current state vs target state
 
-Current `main` is still a transitional workspace:
+Current `main` is a standalone-native workspace with a Python oracle:
 
 - `cpp/native/` contains pure-native semantic code
-- `ome_zarr_c/` provides a Python-visible development oracle for parity tests
-  and benchmarks
 - no active binding layer remains
 - `tests/` and `benchmarks/` compare the converted behavior against the frozen
   Python upstream
@@ -41,8 +39,8 @@ Target end state:
 2. Do not treat the Python package shape as the product contract.
 3. Prefer moving reusable logic into `cpp/native/` even if a temporary Python
    harness still consumes it.
-4. When a pure-native benchmark and a Python-visible benchmark disagree, use
-   that difference to identify boundary overhead rather than guessing.
+4. When a pure-native benchmark and an upstream-Python benchmark disagree, use
+   that difference to identify remaining semantic or boundary overhead.
 5. Keep the current state and target state documented separately so repo docs
    stay truthful while the migration is in progress.
 6. Keep the standalone-native toolchain on the latest pinned stable versions
@@ -53,8 +51,8 @@ Target end state:
 
 1. Keep `cpp/native/` buildable without Python headers or pybind.
 2. Grow native build, self-test, and benchmark tooling around `cpp/native/`.
-3. Keep the Python development oracle shrink-only and do not add new shipped
-   runtime behavior there.
+3. Keep the Python development oracle restricted to the frozen upstream
+   snapshot and benchmark/test harness code.
 4. Move user-facing runtime claims away from the Python package shape and
    toward the standalone C++ target as native entrypoints become available.
 
@@ -74,7 +72,5 @@ These targets run without importing the Python runtime. Python remains in the
 repository separately for parity-proof workflows against the frozen upstream
 release.
 
-The largest remaining migration work is no longer a binding-layer gap. It is
-the controlled retirement of `ome_zarr_c/` and Python package metadata from the
-delivered product path now that all upstream CLI commands have
-standalone-native replacements.
+The largest remaining migration work is broadening native probes and runtime
+coverage without reintroducing Python package scaffolding.

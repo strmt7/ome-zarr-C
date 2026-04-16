@@ -5,7 +5,7 @@
 This repository contains:
 
 - an immutable upstream reference snapshot under `source_code_v.0.15.0/`
-- new C++ and Python compatibility code outside that snapshot
+- new C++, Python test-harness, benchmark, and workflow code outside that snapshot
 
 Security reports should focus on the repo-maintained code and workflow surfaces
 outside the frozen upstream snapshot unless the issue is specifically about how

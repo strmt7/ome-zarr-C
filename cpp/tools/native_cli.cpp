@@ -9,6 +9,7 @@
 #include "../native/create_runtime.hpp"
 #include "../native/local_runtime.hpp"
 #include "../native/scale_runtime.hpp"
+#include "../native/version.hpp"
 
 namespace {
 
@@ -40,6 +41,7 @@ std::string require_option_value(
     std::ostream& stream = code == 0 ? std::cout : std::cerr;
     stream
         << "Usage: ome_zarr_native_cli <command> [options]\n"
+        << "       ome_zarr_native_cli --version\n"
         << "\n"
         << "Commands:\n"
         << "  info <path>\n"
@@ -374,6 +376,12 @@ void dispatch(int argc, char** argv) {
     }
 
     const std::string command = argv[1];
+    if (command == "--version") {
+        std::cout << native_project_name << " " << native_project_version
+                  << " (upstream ome-zarr-py " << upstream_reference_version
+                  << ")\n";
+        return;
+    }
     if (command == "--help" || command == "-h") {
         print_usage_and_exit(0);
     }

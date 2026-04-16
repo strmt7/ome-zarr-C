@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../third_party/nlohmann/json.hpp"
+#include "types.hpp"
 
 #include <string>
 #include <vector>
@@ -57,7 +57,7 @@ bool io_protocol_is_http(const std::vector<std::string>& protocols);
 
 struct LocalIoSignature {
     bool is_none = false;
-    nlohmann::ordered_json value = nullptr;
+    JsonDict value = nullptr;
 };
 
 LocalIoSignature local_io_signature(

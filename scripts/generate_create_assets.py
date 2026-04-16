@@ -22,7 +22,7 @@ py_writer = importlib.import_module("ome_zarr.writer")
 REAL_TO_ZARR = da.to_zarr
 
 
-def compat_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
+def zarr_api_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
     if zarr_array_kwargs is not None:
         kwargs.update(zarr_array_kwargs)
     chunk_key_encoding = kwargs.get("chunk_key_encoding")
@@ -92,7 +92,7 @@ def main() -> int:
         for version in ("0.4", "0.5"):
             archive_name = f"{method}_v{version.replace('.', '')}_seed0.tar"
             archive_path = ASSET_ROOT / archive_name
-            with patch.object(py_writer.da, "to_zarr", compat_to_zarr):
+            with patch.object(py_writer.da, "to_zarr", zarr_api_to_zarr):
                 with TemporaryDirectory(prefix="ome-zarr-create-assets-") as temp_dir:
                     root = Path(temp_dir) / f"{method}.zarr"
                     random.seed(0)

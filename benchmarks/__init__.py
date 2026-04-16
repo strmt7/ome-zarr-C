@@ -1,1 +1,1 @@
-"""Benchmark tooling for parity, compatibility/oracle, and native C++ surfaces."""
+"""Benchmark tooling for frozen-upstream Python vs standalone native C++."""

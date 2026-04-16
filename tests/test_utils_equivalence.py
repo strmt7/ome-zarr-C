@@ -119,6 +119,27 @@ def _native_probe_path() -> Path:
     return probe_path
 
 
+@lru_cache(maxsize=1)
+def _run_native_selftest_stdout() -> str:
+    selftest_path = _native_cli_path().with_name("ome_zarr_native_selftest")
+    if not selftest_path.exists():
+        selftest_path = selftest_path.with_suffix(".exe")
+    assert selftest_path.exists(), "standalone native self-test binary was not built"
+
+    completed = subprocess.run(
+        [str(selftest_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout
+
+
+def assert_native_selftest_section(section: str) -> None:
+    stdout = _run_native_selftest_stdout()
+    assert f"[PASS] {section}" in stdout
+
+
 def _run_native_probe(args: list[str]):
     completed = subprocess.run(
         [str(_native_probe_path()), *args],

@@ -23,16 +23,16 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Do not expose plan-only or helper-only commands through the shipped
   standalone native CLI. Public native entrypoints must be real runtime
   commands or durable product APIs.
-- Once a standalone-native runtime surface exists and parity is proven, treat
-  the corresponding Python compatibility/oracle package path as shrink-only
-  debt instead of keeping duplicate product paths alive.
-- For runtime surfaces already replaced by standalone native code, remove the
-  matching wrapper exports, pybind registrations, and stale test/benchmark
-  references in the same slice unless a remaining oracle-only dependency is
-  explicitly justified and still exercised.
-- If parity and benchmark coverage can be preserved with the Python oracle plus
-  standalone-native probe/bench tooling, do not retain a pybind or Python
-  wrapper layer for that surface.
+- Once a standalone-native runtime surface exists and parity is proven, delete
+  corresponding repo-maintained Python package scaffolding instead of keeping
+  duplicate product paths alive.
+- For runtime surfaces already replaced by standalone native code, remove
+  pybind registrations and stale test/benchmark references in the same slice
+  unless a remaining frozen-upstream oracle dependency is explicitly justified
+  and still exercised.
+- If parity and benchmark coverage can be preserved with the frozen Python
+  oracle plus standalone-native probe/bench tooling, do not retain a pybind or
+  Python package layer for that surface.
 - Ruff is for Python files only. Never target `cpp/` or C/C++ files with Ruff; use
   native checks, compiler/test validation, and C++-appropriate tooling
   instead.
@@ -46,9 +46,8 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
   pure-native outcomes as absolute native C++ relative speed vs Python
   (`python_time / native_cpp_time`). Do not invert slower cases into larger
   "slower" multipliers; report the direct ratio, for example `0.748x`.
-- Never label Python compatibility/oracle package timings as C++ or native C++.
-  If the timed path goes through Python package code, call it `compat/oracle`
-  and exclude it from pure-native C++ totals.
+- Never label Python package-path timings as C++ or native C++. Pure-native
+  performance claims require standalone native C++ executable/library timing.
 - Use repo-local skills under `.agents/skills/` when they fit the task.
 - Keep frozen snapshots under `source_code_v*/` excluded from security scanning,
   and update the exclusion whenever a new snapshot is added.

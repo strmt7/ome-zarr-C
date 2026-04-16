@@ -27,7 +27,7 @@ def iter_cases(
     groups: list[str] | None = None,
     suites: list[str] | None = None,
 ):
-    selected_suites = suites or list(available_suites())
+    selected_suites = suites or ["core", "realdata"]
     unknown = [suite for suite in selected_suites if suite not in SUITE_CASES]
     if unknown:
         raise SystemExit(f"Unknown benchmark suite(s): {', '.join(unknown)}")

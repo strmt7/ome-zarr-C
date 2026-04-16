@@ -6,11 +6,10 @@ incrementally while keeping the imported upstream snapshot intact.
 ## Architecture priorities
 
 - Architecture is priority number 1. Preserve the repo's layered structure:
-  frozen upstream snapshot, native semantic core, thin compatibility wrappers,
+  frozen upstream snapshot, native semantic core, standalone native entrypoints,
   and differential proof tests.
-- The C++ layer should own upstream behavior. Python wrappers should stay as
-  small as possible and only bridge dynamic Python APIs, imports, and
-  compatibility surfaces that cannot sensibly live in the extension.
+- The C++ layer should own upstream behavior. Repo-maintained Python packages
+  must not be used as converted-product scaffolding.
 - Keep pure computational kernels separate from persistent-store and
   external-side-effect code. Convert the pure deterministic layer first.
 - Runtime blockers are architectural facts, not invitations to improvise. If a
@@ -21,7 +20,7 @@ incrementally while keeping the imported upstream snapshot intact.
 ## Hard boundaries
 
 - `source_code_v.0.15.0/` is immutable reference code.
-- All new implementation work happens in `cpp/`, `ome_zarr_c/`, `tests/`,
+- All new implementation work happens in `cpp/`, `tests/`, `benchmarks/`,
   `docs/`, and related repo-local support files.
 - Do not silently "improve" upstream behavior during a parity port.
 - Do not normalize output, exceptions, control flow, or side effects just
@@ -36,7 +35,7 @@ incrementally while keeping the imported upstream snapshot intact.
 3. Write differential tests against the frozen snapshot first or alongside the
    port.
 4. Implement the C++ core.
-5. Add only the thinnest Python wrapper needed for compatibility.
+5. Add or update standalone native entrypoints/probes needed for verification.
 6. Run the narrowest relevant parity suites.
 7. Only after parity is proven, run benchmarks on representative data.
 
@@ -101,7 +100,7 @@ incrementally while keeping the imported upstream snapshot intact.
 - CI workflows
 - Agent docs and skills
 - Benchmarks and fixtures
-- Compatibility wrappers that preserve upstream public behavior
+- Python oracle harness code that compares against the frozen upstream snapshot
 
 ## Not-done conditions
 

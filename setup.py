@@ -1,6 +1,6 @@
-from setuptools import find_packages, setup
+from setuptools import setup
 
 setup(
-    packages=find_packages(),
+    packages=[],
     zip_safe=False,
 )

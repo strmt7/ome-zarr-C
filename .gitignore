@@ -1,12 +1,99 @@
-.venv/
-build/
-build-cpp/
-build-cpp-tests/
-.native-toolchain/
-dist/
-*.so
-*.egg-info/
+# Generated reference:
+# https://www.toptal.com/developers/gitignore/api/python,c++,cmake,linux,macos,windows,visualstudiocode
+# Curated for this repository. Avoid broad entries such as Makefile, lib/,
+# and *.spec because they can hide intentional source, packaging, or docs files.
+
+# Python bytecode, caches, and virtual environments
 __pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.nox/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+.Python
+.venv/
+venv/
+env/
+ENV/
+__pypackages__/
+*.egg-info/
+.eggs/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Python packaging/build outputs
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+parts/
+sdist/
+wheels/
+share/python-wheels/
+MANIFEST
+
+# Native C/C++ compiler and linker outputs
+*.d
+*.o
+*.obj
+*.lo
+*.slo
+*.gch
+*.pch
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.la
+*.lai
+*.exe
+*.out
+*.app
+
+# CMake/generated native build products
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+*-prefix/
+CMakeUserPresets.json
+
+# Local tool caches and generated benchmark fixtures/results
 benchmarks/results/
 .benchmarks-fixtures/
+.native-toolchain/
+build-cpp/
+build-cpp-tests/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-generated files
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*

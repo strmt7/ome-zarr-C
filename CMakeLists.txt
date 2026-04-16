@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 4.3)
 
-project(ome_zarr_c_native LANGUAGES CXX)
+project(ome_zarr_c_native VERSION 0.0.1 LANGUAGES CXX)
 
 option(OME_ZARR_C_NATIVE_ENABLE_LTO "Enable link-time optimization for native targets." OFF)
 option(OME_ZARR_C_NATIVE_MARCH_NATIVE "Enable host-specific -march=native tuning for local native builds." OFF)
@@ -73,7 +73,9 @@ add_library(ome_zarr_native STATIC ${OME_ZARR_C_NATIVE_SOURCES})
 target_include_directories(ome_zarr_native PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/cpp/native)
 target_compile_definitions(
     ome_zarr_native
-    PUBLIC OME_ZARR_C_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+    PUBLIC
+        OME_ZARR_C_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
+        OME_ZARR_C_NATIVE_PROJECT_VERSION="${PROJECT_VERSION}")
 
 find_path(BLOSC_INCLUDE_DIR NAMES blosc.h REQUIRED)
 find_library(BLOSC_LIBRARY NAMES blosc REQUIRED)

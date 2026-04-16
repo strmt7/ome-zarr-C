@@ -3,10 +3,10 @@
 This repository incrementally ports the frozen `ome/ome-zarr-py` `v0.15.0`
 snapshot to C++ without modifying the snapshot itself.
 
-Current `main` is still a transitional parity workspace with Python-oracle
-support. The intended end-state product is a standalone C++ implementation:
-Python may remain in this repo for parity tests, fixture generation, and
-benchmark comparison, but it is not the target runtime product.
+Current `main` uses Python only as a development oracle for parity tests,
+fixture generation, and benchmark comparison. The intended product path is the
+standalone C++ implementation under `cpp/native/` and `cpp/tools/`; no
+repo-maintained Python compatibility package is active.
 
 ## Primary goals
 
@@ -135,33 +135,31 @@ benchmark comparison, but it is not the target runtime product.
     Local branches and local artifacts are disposable until their content is
     reconciled with `origin/main`.
 41. Do not expand the Python runtime footprint of the shipped product. Python
-    wrappers and Python package metadata are development harnesses only and
-    must not be mistaken for the intended final delivery shape. pybind
-    bindings are not part of the current architecture.
+    package metadata is development harness infrastructure only and must not
+    be mistaken for the intended final delivery shape. pybind bindings and
+    repo-maintained Python compatibility packages are not part of the current
+    architecture.
 42. When working on performance-sensitive native code, separate boundary
-    overhead from core semantics. Measure Python compatibility/oracle paths
-    only as parity aids, and measure pure-native kernels with native-only
-    tooling before drawing optimization conclusions.
+    overhead from core semantics. Measure frozen-upstream Python separately
+    from standalone native C++; do not introduce Python package-path converted
+    timings.
 43. Do not expose plan-only or helper-only commands in the shipped standalone
     native CLI. Native CLI surfaces must correspond to real runtime commands
     or durable product APIs, not temporary inspection shortcuts.
-44. When replacing transitional runtime behavior, extend the standalone native
-    library or CLI first. Do not widen the Python compatibility/oracle package
-    path unless the change is strictly for parity proof, fixture generation, or
-    benchmark comparison around the native runtime.
+44. When replacing runtime behavior, extend the standalone native library or
+    CLI first. Do not create a repo-maintained Python compatibility package as
+    benchmark glue or product scaffolding.
 45. Once a standalone-native runtime command or library entrypoint exists and
-    parity is proven for that surface, treat any corresponding Python-harness
-    runtime path as shrink-only debt. Do not add new semantic work there;
-    reduce, delegate, or delete it in subsequent slices.
+    parity is proven for that surface, delete corresponding Python-harness
+    runtime scaffolding unless it is strictly frozen-upstream oracle code.
 46. For runtime surfaces already replaced by the standalone native product,
-    deletion beats delegation. Remove the matching Python wrapper exports,
-    stale benchmark references, and obsolete runtime tests in the same slice
-    unless a remaining oracle-only dependency can be stated precisely and
-    verified.
+    deletion beats delegation. Remove stale benchmark references and obsolete
+    runtime tests in the same slice unless a remaining oracle-only dependency
+    can be stated precisely and verified.
 47. If parity proof and performance measurement for a surface can be carried by
-    standalone native tools plus the Python oracle, do not keep a pybind or
-    Python-wrapper version of that surface alive just to satisfy old tests or
-    benchmarks. Repoint the tests/benchmarks and delete the binding layer.
+    standalone native tools plus the frozen Python oracle, do not keep a pybind
+    or Python package version of that surface alive just to satisfy old tests
+    or benchmarks. Repoint the tests/benchmarks and delete the old layer.
 48. For the standalone native toolchain, use the pinned latest-version manifest
     in `docs/reference/native-dependency-manifest.json` as the source of truth.
     Do not rely on stale distro package versions for CMake, Ninja, Zstd, or
@@ -171,9 +169,13 @@ benchmark comparison, but it is not the target runtime product.
     means native C++ is faster; below `1.0` means native C++ is slower. Do not
     invert slower cases into larger "slower" multipliers; report them directly,
     for example `0.748x`.
-50. Never call a Python compatibility/oracle package-path timing "C++" or
-    "native C++". If a benchmark goes through Python package code, label it
-    `compat/oracle` and keep it out of pure-native C++ performance totals.
+50. Never call a Python package-path timing "C++" or "native C++". Native C++
+    benchmark claims require standalone native C++ executable/library timing.
+51. Keep all correctness tests in the root `tests/` folder. Do not hide tests
+    in benchmark subdirectories.
+52. Keep all timing and benchmark orchestration under `benchmarks/`. Python
+    upstream timing helpers belong under `benchmarks/python/`; standalone
+    native C++ timing helpers belong under `benchmarks/native/`.
 
 ## Fast load order
 
@@ -188,16 +190,16 @@ benchmark comparison, but it is not the target runtime product.
 9. `docs/reference/immutable-parity-proof.md`
 10. `docs/reference/ai-agent-skills.md`
 11. the touched upstream implementation file under `source_code_v.0.15.0/`
-12. the matching wrapper, C++ file, and nearest test module
+12. the matching C++ file, benchmark helper, and nearest test module
 
 ## Repository map
 
 - `source_code_v.0.15.0/`: immutable upstream reference snapshot
 - `cpp/`: C++ implementations
 - `cpp/native/`: pure-native semantics only
-- `ome_zarr_c/`: transitional Python compatibility/oracle wrappers
 - `cpp/tools/`: standalone native CLI, self-test, and bounded native benchmarks
 - `tests/`: parity and regression tests
+- `benchmarks/`: Python-upstream and standalone-native benchmark code
 - `docs/`: repo rules, routing, and benchmarks
 - `.agents/skills/`: reusable repo-local workflows
 

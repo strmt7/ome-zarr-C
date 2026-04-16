@@ -33,6 +33,7 @@
 #include "../native/reader.hpp"
 #include "../native/scale.hpp"
 #include "../native/scale_runtime.hpp"
+#include "../native/version.hpp"
 #include "../native/utils.hpp"
 #include "../native/writer.hpp"
 
@@ -257,6 +258,15 @@ void test_axes() {
 }
 
 void test_cli() {
+    require_eq(
+        std::string(native_project_name),
+        std::string("ome-zarr-C"),
+        "native project name");
+    require_eq(
+        std::string(upstream_reference_version),
+        std::string("0.15.0"),
+        "upstream reference version");
+
     const auto spec = cli_parser_spec();
     require_eq(spec.global_arguments.size(), std::size_t{2}, "global argument count");
     require_eq(spec.commands.size(), std::size_t{7}, "command count");

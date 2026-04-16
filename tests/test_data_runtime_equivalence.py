@@ -23,7 +23,7 @@ _py_writer = importlib.import_module("ome_zarr.writer")
 _REAL_TO_ZARR = da.to_zarr
 
 
-def _compat_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
+def _zarr_api_to_zarr(*args, zarr_array_kwargs=None, **kwargs):
     if zarr_array_kwargs is not None:
         kwargs.update(zarr_array_kwargs)
     chunk_key_encoding = kwargs.get("chunk_key_encoding")
@@ -91,7 +91,7 @@ def _snapshot_tree(root: Path):
 
 def _run_create_zarr(func, root: Path, *, method, label_name: str, fmt, seed: int):
     patched = (
-        patch.object(_py_writer.da, "to_zarr", _compat_to_zarr)
+        patch.object(_py_writer.da, "to_zarr", _zarr_api_to_zarr)
         if func.__module__.startswith("ome_zarr.")
         else nullcontext()
     )
