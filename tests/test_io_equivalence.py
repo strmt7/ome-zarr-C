@@ -171,6 +171,31 @@ def test_zarr_location_matches_upstream_for_minimal_v3_image(tmp_path) -> None:
     assert expected == actual
 
 
+def test_zarr_location_matches_upstream_for_plate_root(tmp_path) -> None:
+    root = tmp_path / "plate.zarr"
+    field = root / "A" / "1" / "0"
+    _write_minimal_v2_image(field)
+    well_group = zarr.open_group(str(root / "A" / "1"), mode="w", zarr_format=2)
+    well_group.attrs.update(
+        {"well": {"version": "0.4", "images": [{"path": "0", "acquisition": 1}]}}
+    )
+    group = zarr.open_group(str(root), mode="w", zarr_format=2)
+    group.attrs.update(
+        {
+            "plate": {
+                "version": "0.4",
+                "rows": [{"name": "A"}],
+                "columns": [{"name": "1"}],
+                "wells": [{"path": "A/1", "rowIndex": 0, "columnIndex": 0}],
+            }
+        }
+    )
+
+    expected = _run_parse_url(_py_io.parse_url, root)
+    actual = _run_native_io_signature(root)
+    assert expected == actual
+
+
 def test_zarr_location_create_and_equality_match_upstream(tmp_path) -> None:
     root = tmp_path / "root.zarr"
     _write_minimal_v2_image(root)

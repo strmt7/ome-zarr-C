@@ -13,6 +13,7 @@ import dask.array as da
 import numpy as np
 import zarr
 from dask.graph_manipulation import bind
+from numcodecs import Blosc
 
 from .format import (
     CurrentFormat,
@@ -35,6 +36,78 @@ AxesType = str | list[str] | list[dict[str, str]] | None
 SPATIAL_DIMS = ("x", "y", "z")
 _DEFAULT_FORMAT = CurrentFormat()
 _DEFAULT_LABEL_SCALER = object()
+_KNOWN_AXES = {"x": "space", "y": "space", "z": "space", "c": "channel", "t": "time"}
+
+
+def _axes_to_dicts(axes: list[str] | list[dict[str, str]]) -> list[dict[str, str]]:
+    axes_dicts: list[dict[str, str]] = []
+    for axis in axes:
+        if isinstance(axis, str):
+            axis_dict = {"name": axis}
+            if axis in _KNOWN_AXES:
+                axis_dict["type"] = _KNOWN_AXES[axis]
+            axes_dicts.append(axis_dict)
+        else:
+            axes_dicts.append(axis)
+    return axes_dicts
+
+
+def _axes_names(axes: list[dict[str, str]]) -> list[str]:
+    names: list[str] = []
+    for axis in axes:
+        if "name" not in axis:
+            raise ValueError(f"Axis Dict {axis} has no 'name'")
+        names.append(str(axis["name"]))
+    return names
+
+
+def _validate_axes_03(axes: list[dict[str, str]]) -> None:
+    val_axes = tuple(_axes_names(axes))
+    if len(val_axes) == 2:
+        if val_axes != ("y", "x"):
+            raise ValueError(f"2D data must have axes ('y', 'x') {val_axes}")
+        return
+    if len(val_axes) == 3:
+        if val_axes not in [("z", "y", "x"), ("c", "y", "x"), ("t", "y", "x")]:
+            raise ValueError(
+                "3D data must have axes ('z', 'y', 'x') or ('c', 'y', 'x')"
+                f" or ('t', 'y', 'x'), not {val_axes}"
+            )
+        return
+    if len(val_axes) == 4:
+        if val_axes not in [
+            ("t", "z", "y", "x"),
+            ("c", "z", "y", "x"),
+            ("t", "c", "y", "x"),
+        ]:
+            raise ValueError("4D data must have axes tzyx or czyx or tcyx")
+        return
+    if val_axes != ("t", "c", "z", "y", "x"):
+        raise ValueError("5D data must have axes ('t', 'c', 'z', 'y', 'x')")
+
+
+def _validate_axes_types(axes: list[dict[str, str]]) -> None:
+    axes_types = [axis.get("type") for axis in axes]
+    known_types = list(_KNOWN_AXES.values())
+    unknown_types = [atype for atype in axes_types if atype not in known_types]
+    if len(unknown_types) > 1:
+        raise ValueError(
+            f"Too many unknown axes types. 1 allowed, found: {unknown_types}"
+        )
+
+    def _last_index(item: str, item_list: list[Any]) -> int:
+        return max(loc for loc, val in enumerate(item_list) if val == item)
+
+    if "time" in axes_types and _last_index("time", axes_types) > 0:
+        raise ValueError("'time' axis must be first dimension only")
+
+    if axes_types.count("channel") > 1:
+        raise ValueError("Only 1 axis can be type 'channel'")
+
+    if "channel" in axes_types and _last_index(
+        "channel", axes_types
+    ) > axes_types.index("space"):
+        raise ValueError("'space' axes must come after 'channel'")
 
 
 def _get_valid_axes(
@@ -42,38 +115,133 @@ def _get_valid_axes(
     axes: AxesType = None,
     fmt: Format = _DEFAULT_FORMAT,
 ) -> list[str] | list[dict[str, str]] | None:
-    return _core._get_valid_axes(ndim, axes, fmt.version)
+    if fmt.version in ("0.1", "0.2"):
+        if axes is not None:
+            LOGGER.info("axes ignored for version 0.1 or 0.2")
+        return None
+
+    if axes is None:
+        if ndim == 2:
+            axes = ["y", "x"]
+            LOGGER.info("Auto using axes %s for 2D data", axes)
+        elif ndim == 5:
+            axes = ["t", "c", "z", "y", "x"]
+            LOGGER.info("Auto using axes %s for 5D data", axes)
+        else:
+            raise ValueError(
+                "axes must be provided. Can't be guessed for 3D or 4D data"
+            )
+
+    if isinstance(axes, str):
+        axes = list(axes)
+
+    if ndim is not None and len(axes) != ndim:
+        raise ValueError(
+            f"axes length ({len(axes)}) must match number of dimensions ({ndim})"
+        )
+
+    axes_dicts = _axes_to_dicts(axes)
+    if fmt.version == "0.3":
+        _validate_axes_03(axes_dicts)
+        return _axes_names(axes_dicts)
+
+    _validate_axes_types(axes_dicts)
+    return axes_dicts
 
 
 def _extract_dims_from_axes(
     axes: list[str] | list[dict[str, str]] | None,
 ):
-    return _core._extract_dims_from_axes(axes)
+    if axes is None:
+        return ("t", "c", "z", "y", "x")
+
+    if all(isinstance(s, str) for s in axes):
+        return tuple(str(s) for s in axes)
+
+    if all(isinstance(s, dict) and "name" in s for s in axes):
+        names: list[str] = []
+        for s in axes:
+            if not isinstance(s, dict) or "name" not in s:
+                raise TypeError("`axes` must be a list of dicts containing 'name'")
+            names.append(str(s["name"]))
+        return tuple(names)
+
+    raise TypeError(
+        "`axes` must be a list of strings or a list of dicts containing 'name'"
+    )
 
 
 def _retuple(chunks: tuple[Any, ...] | int, shape: tuple[Any, ...]) -> tuple[Any, ...]:
-    return _core._retuple(chunks, shape)
+    if isinstance(chunks, int):
+        return tuple([chunks] * len(shape))
+
+    dims_to_add = len(shape) - len(chunks)
+    return (*shape[:dims_to_add], *chunks)
 
 
 def _validate_well_images(
     images: list[str | dict],
     fmt: Format = _DEFAULT_FORMAT,
 ) -> list[dict]:
-    return _core._validate_well_images(images, fmt)
+    del fmt
+    valid_keys = ["acquisition", "path"]
+    validated_images: list[dict] = []
+    for image in images:
+        if isinstance(image, str):
+            validated_images.append({"path": str(image)})
+        elif isinstance(image, dict):
+            if any(element not in valid_keys for element in image):
+                LOGGER.debug("%s contains unspecified keys", image)
+            if "path" not in image:
+                raise ValueError(f"{image} must contain a path key")
+            if not isinstance(image["path"], str):
+                raise ValueError(f"{image} path must be of string type")
+            if "acquisition" in image and not isinstance(image["acquisition"], int):
+                raise ValueError(f"{image} acquisition must be of int type")
+            validated_images.append(image)
+        else:
+            raise ValueError(f"Unrecognized type for {image}")
+    return validated_images
 
 
 def _validate_plate_acquisitions(
     acquisitions: list[dict],
     fmt: Format = _DEFAULT_FORMAT,
 ) -> list[dict]:
-    return _core._validate_plate_acquisitions(acquisitions, fmt)
+    del fmt
+    valid_keys = [
+        "id",
+        "name",
+        "maximumfieldcount",
+        "description",
+        "starttime",
+        "endtime",
+    ]
+    for acquisition in acquisitions:
+        if not isinstance(acquisition, dict):
+            raise ValueError(f"{acquisition} must be a dictionary")
+        if any(element not in valid_keys for element in acquisition):
+            LOGGER.debug("%s contains unspecified keys", acquisition)
+        if "id" not in acquisition:
+            raise ValueError(f"{acquisition} must contain an id key")
+        if not isinstance(acquisition["id"], int):
+            raise ValueError(f"{acquisition} id must be of int type")
+    return acquisitions
 
 
 def _validate_plate_rows_columns(
     rows_or_columns: list[str],
     fmt: Format = _DEFAULT_FORMAT,
 ) -> list[dict]:
-    return _core._validate_plate_rows_columns(rows_or_columns, fmt)
+    del fmt
+    if len(set(rows_or_columns)) != len(rows_or_columns):
+        raise ValueError(f"{rows_or_columns} must contain unique elements")
+    validated_list: list[dict] = []
+    for element in rows_or_columns:
+        if not element.isalnum():
+            raise ValueError(f"{element} must contain alphanumeric characters")
+        validated_list.append({"name": str(element)})
+    return validated_list
 
 
 def _validate_datasets(
@@ -81,7 +249,22 @@ def _validate_datasets(
     dims: int,
     fmt: Format = _DEFAULT_FORMAT,
 ) -> list[dict]:
-    return _core._validate_datasets(datasets, dims, fmt.version)
+    if datasets is None or len(datasets) == 0:
+        raise ValueError("Empty datasets list")
+
+    transformations = []
+    for dataset in datasets:
+        if isinstance(dataset, dict):
+            if not dataset.get("path"):
+                raise ValueError("no 'path' in dataset")
+            transformation = dataset.get("coordinateTransformations")
+            if transformation is not None:
+                transformations.append(transformation)
+        else:
+            raise ValueError(f"Unrecognized type for {dataset}")
+
+    fmt.validate_coordinate_transformations(dims, len(datasets), transformations)
+    return datasets
 
 
 def _validate_plate_wells(
@@ -90,18 +273,38 @@ def _validate_plate_wells(
     columns: list[str],
     fmt: Format = _DEFAULT_FORMAT,
 ) -> list[dict]:
-    return _core._validate_plate_wells(wells, rows, columns, fmt)
+    validated_wells: list[dict] = []
+    if wells is None or len(wells) == 0:
+        raise ValueError("Empty wells list")
+    for well in wells:
+        if isinstance(well, str):
+            well_dict = fmt.generate_well_dict(well, rows, columns)
+            fmt.validate_well_dict(well_dict, rows, columns)
+            validated_wells.append(well_dict)
+        elif isinstance(well, dict):
+            fmt.validate_well_dict(well, rows, columns)
+            validated_wells.append(well)
+        else:
+            raise ValueError(f"Unrecognized type for {well}")
+    return validated_wells
 
 
 def _blosc_compressor():
-    return _core._blosc_compressor()
+    return Blosc(cname="zstd", clevel=5, shuffle=Blosc.SHUFFLE)
 
 
 def _resolve_storage_options(
     storage_options: dict[str, Any] | list[dict[str, Any]] | None,
     path: int,
 ) -> dict[str, Any]:
-    return _core._resolve_storage_options(storage_options, path)
+    options: dict[str, Any] = {}
+    if storage_options:
+        options = (
+            storage_options.copy()
+            if not isinstance(storage_options, list)
+            else storage_options[path]
+        )
+    return options
 
 
 def check_group_fmt(

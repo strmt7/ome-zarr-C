@@ -99,11 +99,22 @@ def _run_cli_namespace(func, args, replacements: dict[str, str]):
         )
 
 
-def _run_native_cli(args: list[str], replacements: dict[str, str] | None = None):
-    outcome = cli_eq._run_native_cli(args, replacements or {})
+def _run_native_cli(
+    args: list[str],
+    replacements: dict[str, str] | None = None,
+    *,
+    env: dict[str, str] | None = None,
+):
+    outcome = cli_eq._run_native_cli(args, replacements or {}, env=env)
     if outcome.status == "ok":
         return ok(stdout=outcome.stdout)
     return err(RuntimeError(outcome.error_message), stdout=outcome.stdout)
+
+
+def _seeded_native_env(seed: int) -> dict[str, str]:
+    env = os.environ.copy()
+    env["OME_ZARR_C_CREATE_SEED"] = str(seed)
+    return env
 
 
 def _native_bench_timer(
@@ -400,6 +411,7 @@ def _verify_cli_create_wrapper() -> None:
         cpp_outcome = _run_native_cli(
             ["create", "--method=coins", str(cpp_root), "--format", "0.5"],
             replacements,
+            env=_seeded_native_env(0),
         )
         _assert_equal(
             "cli.create_wrapper",
@@ -437,6 +449,7 @@ def _bench_cli_create_wrapper(py_like: bool) -> float:
             outcome = _run_native_cli(
                 ["create", "--method=coins", str(root), "--format", "0.5"],
                 replacements,
+                env=_seeded_native_env(0),
             )
         return _touch_outcome(outcome) + _touch_value(snapshot_tree(root))
     finally:

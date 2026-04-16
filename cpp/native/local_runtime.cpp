@@ -35,6 +35,7 @@
 #include "../../third_party/tinyxml2/tinyxml2.h"
 #include "csv.hpp"
 #include "io.hpp"
+#include "reader.hpp"
 
 namespace ome_zarr_c::native_code {
 
@@ -994,6 +995,122 @@ std::vector<std::string> multiscales_axes_names(const json& metadata) {
     return axes;
 }
 
+std::vector<std::string> labels_from_metadata(const json& metadata) {
+    std::vector<std::string> labels;
+    if (!metadata.is_object() || !metadata.contains("labels") ||
+        !metadata["labels"].is_array()) {
+        return labels;
+    }
+    for (const auto& label : metadata["labels"]) {
+        if (label.is_string()) {
+            labels.push_back(label.get<std::string>());
+        }
+    }
+    return labels;
+}
+
+std::vector<std::string> info_spec_names(const json& metadata) {
+    std::vector<std::string> specs;
+    if (!metadata.is_object()) {
+        return specs;
+    }
+    if (metadata.contains("image-label") && metadata["image-label"].is_object()) {
+        specs.push_back("Label");
+    }
+    if (metadata.contains("labels") && metadata["labels"].is_array()) {
+        specs.push_back("Labels");
+    }
+    if (metadata.contains("plate") && metadata["plate"].is_object()) {
+        specs.push_back("Plate");
+    }
+    if (metadata.contains("multiscales") && json_truthy(metadata["multiscales"])) {
+        specs.push_back("Multiscales");
+    }
+    if (metadata.contains("omero") && metadata["omero"].is_object()) {
+        specs.push_back("OMERO");
+    }
+    return specs;
+}
+
+std::optional<fs::path> plate_first_image_root(
+    const fs::path& root,
+    const json& metadata) {
+    if (!metadata.is_object() || !metadata.contains("plate") ||
+        !metadata["plate"].is_object()) {
+        return std::nullopt;
+    }
+    const auto wells_iter = metadata["plate"].find("wells");
+    if (wells_iter == metadata["plate"].end() || !wells_iter->is_array() ||
+        wells_iter->empty()) {
+        return std::nullopt;
+    }
+    const auto& first_well = (*wells_iter)[0];
+    if (!first_well.is_object() || !first_well.contains("path") ||
+        !first_well["path"].is_string()) {
+        return std::nullopt;
+    }
+    const fs::path well_root = root / first_well["path"].get<std::string>();
+    const auto well_metadata_path = metadata_json_path(well_root);
+    if (!well_metadata_path.has_value()) {
+        return std::nullopt;
+    }
+    const json well_metadata =
+        unwrap_ome_namespace(load_json_file(well_metadata_path.value()));
+    if (!well_metadata.is_object() || !well_metadata.contains("well") ||
+        !well_metadata["well"].is_object()) {
+        return std::nullopt;
+    }
+    const auto images_iter = well_metadata["well"].find("images");
+    if (images_iter == well_metadata["well"].end() || !images_iter->is_array() ||
+        images_iter->empty()) {
+        return std::nullopt;
+    }
+    const auto& first_image = (*images_iter)[0];
+    if (!first_image.is_object() || !first_image.contains("path") ||
+        !first_image["path"].is_string()) {
+        return std::nullopt;
+    }
+    return well_root / first_image["path"].get<std::string>();
+}
+
+std::vector<LocalArraySummary> plate_dataset_summaries(
+    const fs::path& root,
+    const json& metadata,
+    const bool stats) {
+    std::vector<LocalArraySummary> summaries;
+    if (!metadata.is_object() || !metadata.contains("plate") ||
+        !metadata["plate"].is_object()) {
+        return summaries;
+    }
+    const auto rows_iter = metadata["plate"].find("rows");
+    const auto cols_iter = metadata["plate"].find("columns");
+    if (rows_iter == metadata["plate"].end() || !rows_iter->is_array() ||
+        cols_iter == metadata["plate"].end() || !cols_iter->is_array()) {
+        return summaries;
+    }
+    const auto image_root = plate_first_image_root(root, metadata);
+    if (!image_root.has_value()) {
+        return summaries;
+    }
+    const auto image_metadata_path = metadata_json_path(image_root.value());
+    if (!image_metadata_path.has_value()) {
+        return summaries;
+    }
+    const json image_metadata =
+        unwrap_ome_namespace(load_json_file(image_metadata_path.value()));
+    summaries = dataset_summaries(image_root.value(), image_metadata, stats);
+
+    const auto row_count = static_cast<std::int64_t>(rows_iter->size());
+    const auto col_count = static_cast<std::int64_t>(cols_iter->size());
+    for (auto& summary : summaries) {
+        if (summary.shape.size() >= 2) {
+            summary.shape[summary.shape.size() - 2] *= row_count;
+            summary.shape[summary.shape.size() - 1] *= col_count;
+        }
+    }
+    return summaries;
+}
+
 std::string metadata_version(const json& metadata) {
     if (metadata.is_object() && metadata.contains("version") && metadata["version"].is_string()) {
         return metadata["version"].get<std::string>();
@@ -1341,6 +1458,30 @@ void write_group_metadata(
         });
 }
 
+void copy_multiscale_group(
+    const fs::path& source_group,
+    const fs::path& destination_group,
+    const json& metadata,
+    const int output_zarr_format) {
+    write_group_metadata(destination_group, output_zarr_format, metadata);
+    const auto axis_names = multiscales_axes_names(metadata);
+    for (const auto& dataset_path : dataset_paths_from_metadata(metadata)) {
+        const auto source_dataset = source_group / dataset_path;
+        const auto destination_dataset = destination_group / dataset_path;
+        const auto source_dataset_metadata = load_json_file(source_dataset / "zarr.json");
+        write_dataset_metadata(
+            source_dataset,
+            destination_dataset,
+            output_zarr_format,
+            axis_names);
+        copy_dataset_chunks(
+            source_dataset,
+            destination_dataset,
+            output_zarr_format,
+            source_dataset_metadata);
+    }
+}
+
 std::string percent_encode(std::string_view text) {
     std::ostringstream output;
     output << std::uppercase << std::hex;
@@ -1552,18 +1693,66 @@ std::vector<std::string> local_info_lines(const std::string& input_path, const b
     }
 
     const json metadata = unwrap_ome_namespace(load_json_file(metadata_path.value()));
-    if (!(metadata.contains("multiscales") && json_truthy(metadata["multiscales"]))) {
+    const auto root_specs = info_spec_names(metadata);
+    if (root_specs.empty()) {
         return {};
     }
 
     std::vector<std::string> lines = utils_info_header_lines(
         io_repr(generic_path_string(root), true, false),
         metadata_version(metadata),
-        {"Multiscales"});
+        root_specs);
 
-    for (const auto& summary : dataset_summaries(root, metadata, stats)) {
+    auto summaries = plate_dataset_summaries(root, metadata, stats);
+    if (summaries.empty()) {
+        summaries = dataset_summaries(root, metadata, stats);
+    }
+
+    for (const auto& summary : summaries) {
         lines.push_back(
             utils_info_data_line(shape_repr(summary.shape), summary.minmax_repr));
+    }
+
+    const fs::path labels_root = root / "labels";
+    if (fs::exists(labels_root)) {
+        const json labels_metadata = unwrap_ome_namespace(load_json_or_empty(labels_root));
+        const auto labels_specs = info_spec_names(labels_metadata);
+        const auto label_names = labels_from_metadata(labels_metadata);
+        if (!labels_specs.empty()) {
+            const auto labels_repr = reader_node_repr(
+                io_repr(generic_path_string(labels_root), true, false),
+                false);
+            const auto label_lines = utils_info_header_lines(
+                labels_repr,
+                metadata_version(labels_metadata),
+                labels_specs);
+            lines.insert(lines.end(), label_lines.begin(), label_lines.end());
+        }
+
+        for (const auto& label_name : label_names) {
+            const fs::path label_root = labels_root / label_name;
+            if (!fs::exists(label_root)) {
+                continue;
+            }
+            const json label_metadata =
+                unwrap_ome_namespace(load_json_or_empty(label_root));
+            const auto label_specs = info_spec_names(label_metadata);
+            if (label_specs.empty()) {
+                continue;
+            }
+            const auto label_repr = reader_node_repr(
+                io_repr(generic_path_string(label_root), true, false),
+                false);
+            const auto label_lines = utils_info_header_lines(
+                label_repr,
+                metadata_version(label_metadata),
+                label_specs);
+            lines.insert(lines.end(), label_lines.begin(), label_lines.end());
+            for (const auto& summary : dataset_summaries(label_root, label_metadata, stats)) {
+                lines.push_back(
+                    utils_info_data_line(shape_repr(summary.shape), summary.minmax_repr));
+            }
+        }
     }
 
     return lines;
@@ -1689,28 +1878,41 @@ LocalDownloadResult local_download_copy(
     }
 
     fs::create_directories(fs::path(output_dir));
-    write_group_metadata(destination_root, output_zarr_format, metadata);
+    copy_multiscale_group(source, destination_root, metadata, output_zarr_format);
 
-    const auto axis_names = multiscales_axes_names(metadata);
-    for (const auto& dataset_path : dataset_paths_from_metadata(metadata)) {
-        const auto source_dataset = source / dataset_path;
-        const auto destination_dataset = destination_root / dataset_path;
-        const auto source_dataset_metadata = load_json_file(source_dataset / "zarr.json");
-        write_dataset_metadata(
-            source_dataset,
-            destination_dataset,
-            output_zarr_format,
-            axis_names);
-        copy_dataset_chunks(
-            source_dataset,
-            destination_dataset,
-            output_zarr_format,
-            source_dataset_metadata);
+    std::vector<std::string> listed_paths{source.filename().generic_string()};
+    const fs::path labels_root = source / "labels";
+    if (fs::exists(labels_root)) {
+        const json labels_metadata = unwrap_ome_namespace(load_json_or_empty(labels_root));
+        const auto label_names = labels_from_metadata(labels_metadata);
+        if (!label_names.empty()) {
+            write_group_metadata(
+                destination_root / "labels",
+                output_zarr_format,
+                labels_metadata);
+            listed_paths.push_back(source.filename().generic_string() + "/labels");
+
+            for (const auto& label_name : label_names) {
+                const fs::path source_label_group = labels_root / label_name;
+                if (!fs::exists(source_label_group)) {
+                    continue;
+                }
+                const json label_metadata =
+                    unwrap_ome_namespace(load_json_or_empty(source_label_group));
+                copy_multiscale_group(
+                    source_label_group,
+                    destination_root / "labels" / label_name,
+                    label_metadata,
+                    output_zarr_format);
+                listed_paths.push_back(
+                    source.filename().generic_string() + "/labels/" + label_name);
+            }
+        }
     }
 
     return LocalDownloadResult{
         generic_path_string(destination_root),
-        {source.filename().generic_string()},
+        std::move(listed_paths),
     };
 }
 

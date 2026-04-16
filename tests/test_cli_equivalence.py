@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import random
 import shutil
 import subprocess
 import sys
@@ -15,6 +17,7 @@ import numpy as np
 import pytest
 import zarr
 
+from tests import test_utils_equivalence as utils_eq
 from tests._outcomes import err, ok
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -171,12 +174,18 @@ def _run_main(main_func, args: list[str], replacements: dict[str, str]):
         return err(exc, stdout=_normalize_output(stream.getvalue(), replacements))
 
 
-def _run_native_cli(args: list[str], replacements: dict[str, str]):
+def _run_native_cli(
+    args: list[str],
+    replacements: dict[str, str],
+    *,
+    env: dict[str, str] | None = None,
+):
     completed = subprocess.run(
         [str(_native_cli_path()), *args],
         check=False,
         capture_output=True,
         text=True,
+        env=env,
     )
     stdout = _normalize_output(completed.stdout, replacements)
     payload = {
@@ -290,3 +299,87 @@ def test_native_cli_scale_invalid_method_matches_upstream(tmp_path) -> None:
     assert expected.status == actual.status == "err"
     assert actual.payload["returncode"] != 0
     assert actual.payload["stderr"].strip() == expected.error_message
+
+
+def test_native_cli_create_info_matches_upstream_for_seeded_labels_tree(
+    tmp_path,
+) -> None:
+    py_root = tmp_path / "py-create-info.zarr"
+    native_root = tmp_path / "native-create-info.zarr"
+    replacements = {
+        str(py_root): "<ROOT>",
+        str(native_root): "<ROOT>",
+    }
+    native_env = os.environ.copy()
+    native_env["OME_ZARR_C_CREATE_SEED"] = "0"
+
+    random.seed(0)
+    expected_create = _run_main(
+        _py_cli.main,
+        ["create", "--method=coins", str(py_root), "--format", "0.5"],
+        replacements,
+    )
+    random.seed(0)
+    actual_create = _run_native_cli(
+        ["create", "--method=coins", str(native_root), "--format", "0.5"],
+        replacements,
+        env=native_env,
+    )
+
+    assert expected_create.status == actual_create.status == "ok"
+    assert expected_create.stdout == actual_create.stdout
+    assert _snapshot_tree(py_root) == _snapshot_tree(native_root)
+
+    expected_info = _run_main(_py_cli.main, ["info", str(py_root)], replacements)
+    actual_info = _run_native_cli(["info", str(native_root)], replacements)
+
+    assert expected_info.status == actual_info.status == "ok"
+    assert actual_info.payload["stderr"] == ""
+    assert expected_info.stdout == actual_info.stdout
+
+
+def test_native_cli_download_matches_upstream_for_seeded_labels_tree(tmp_path) -> None:
+    py_source = tmp_path / "py" / "source.zarr"
+    native_source = tmp_path / "native" / "source.zarr"
+    py_output = tmp_path / "py-downloads"
+    native_output = tmp_path / "native-downloads"
+    replacements = {
+        str(py_source): "<SOURCE>",
+        str(native_source): "<SOURCE>",
+        str(py_output): "<OUT>",
+        str(native_output): "<OUT>",
+    }
+    native_env = os.environ.copy()
+    native_env["OME_ZARR_C_CREATE_SEED"] = "0"
+
+    random.seed(0)
+    expected_create = _run_main(
+        _py_cli.main,
+        ["create", "--method=astronaut", str(py_source), "--format", "0.5"],
+        replacements,
+    )
+    random.seed(0)
+    actual_create = _run_native_cli(
+        ["create", "--method=astronaut", str(native_source), "--format", "0.5"],
+        replacements,
+        env=native_env,
+    )
+    assert expected_create.status == actual_create.status == "ok"
+
+    expected_download = _run_main(
+        _py_cli.main,
+        ["download", str(py_source), f"--output={py_output}"],
+        replacements,
+    )
+    actual_download = _run_native_cli(
+        ["download", str(native_source), f"--output={native_output}"],
+        replacements,
+    )
+
+    assert expected_download.status == actual_download.status == "ok"
+    assert actual_download.payload["stderr"] == ""
+    assert utils_eq._normalize_download_stdout(
+        expected_download.stdout,
+        replacements,
+    ) == utils_eq._normalize_download_stdout(actual_download.stdout, replacements)
+    assert _snapshot_tree(py_output) == _snapshot_tree(native_output)
