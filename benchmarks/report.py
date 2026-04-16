@@ -11,7 +11,11 @@ import pyperf
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Summarize paired python/cpp pyperf benchmark results."
+        description=(
+            "Summarize paired Python/converted-path pyperf benchmark results. "
+            "Only .native benchmark names are reported as native C++; "
+            ".compat names are reported as compatibility/oracle data."
+        )
     )
     parser.add_argument("input", help="Path to the pyperf JSON results file.")
     parser.add_argument(
@@ -24,8 +28,10 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 def _split_name(name: str) -> tuple[str, str]:
     if name.endswith(".python"):
         return name[: -len(".python")], "python"
-    if name.endswith(".cpp"):
-        return name[: -len(".cpp")], "cpp"
+    if name.endswith(".compat"):
+        return name[: -len(".compat")], "compat"
+    if name.endswith(".native"):
+        return name[: -len(".native")], "native"
     raise ValueError(f"Unexpected benchmark name: {name}")
 
 
@@ -39,11 +45,18 @@ def _format_seconds(seconds: float) -> str:
     return f"{seconds:.3f} s"
 
 
-def _status(cpp_ratio: float) -> str:
-    if cpp_ratio >= 1.05:
-        return "C++ faster"
-    if cpp_ratio <= 0.95:
-        return "C++ slower"
+def _variant_label(variant: str) -> str:
+    if variant == "native":
+        return "native C++"
+    return "compat/oracle"
+
+
+def _status(relative_ratio: float, variant: str) -> str:
+    label = _variant_label(variant)
+    if relative_ratio >= 1.05:
+        return f"{label} above Python"
+    if relative_ratio <= 0.95:
+        return f"{label} below Python"
     return "roughly equal"
 
 
@@ -51,31 +64,39 @@ def _geometric_mean(values: list[float]) -> float:
     return math.exp(sum(math.log(value) for value in values) / len(values))
 
 
-def _format_cpp_result(cpp_ratio: float) -> str:
-    return f"{cpp_ratio:.3f}x"
+def _format_relative_result(relative_ratio: float) -> str:
+    return f"{relative_ratio:.3f}x"
 
 
 def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
-    cpp_ratios = [row["cpp_ratio"] for row in paired_rows]
-    faster = sum(1 for row in paired_rows if row["status"] == "C++ faster")
-    slower = sum(1 for row in paired_rows if row["status"] == "C++ slower")
+    relative_ratios = [row["relative_ratio"] for row in paired_rows]
+    above = sum(1 for row in paired_rows if str(row["status"]).endswith("above Python"))
+    below = sum(1 for row in paired_rows if str(row["status"]).endswith("below Python"))
     equal = sum(1 for row in paired_rows if row["status"] == "roughly equal")
+    variants = sorted({str(row["variant"]) for row in paired_rows})
+    if variants == ["native"]:
+        summary_label = "native C++"
+    elif variants == ["compat"]:
+        summary_label = "compat/oracle"
+    else:
+        summary_label = "converted path (native C++ plus compat/oracle)"
 
     grouped: dict[str, list[float]] = defaultdict(list)
     for row in paired_rows:
-        grouped[row["group"]].append(row["cpp_ratio"])
+        grouped[row["group"]].append(row["relative_ratio"])
 
     lines = [
         "# Benchmark Summary",
         "",
         f"- Paired cases: {len(paired_rows)}",
         (
-            "- Geometric-mean C++ relative speed vs Python: "
-            f"{_format_cpp_result(_geometric_mean(cpp_ratios))}"
+            f"- Geometric-mean {summary_label} relative speed vs Python: "
+            f"{_format_relative_result(_geometric_mean(relative_ratios))}"
         ),
         (
             "- Case classification: "
-            f"{faster} C++ faster, {equal} roughly equal, {slower} C++ slower"
+            f"{above} above Python, {equal} roughly equal, "
+            f"{below} below Python"
         ),
         "",
         "## Group Geometric Means",
@@ -84,7 +105,7 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
 
     for group in sorted(grouped):
         lines.append(
-            f"- {group}: {_format_cpp_result(_geometric_mean(grouped[group]))}"
+            f"- {group}: {_format_relative_result(_geometric_mean(grouped[group]))}"
         )
 
     lines.extend(
@@ -92,9 +113,9 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
             "",
             "## Cases",
             "",
-            "| Case | C++ median | Python median | "
-            "C++ relative speed vs Python | Status |",
-            "| --- | ---: | ---: | ---: | --- |",
+            "| Case | Variant | Python median | converted median | "
+            "converted relative speed vs Python | Status |",
+            "| --- | --- | ---: | ---: | ---: | --- |",
         ]
     )
 
@@ -102,9 +123,10 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
         lines.append(
             "| "
             f"{row['name']} | "
-            f"{_format_seconds(row['cpp_median'])} | "
+            f"{_variant_label(str(row['variant']))} | "
             f"{_format_seconds(row['python_median'])} | "
-            f"{_format_cpp_result(row['cpp_ratio'])} | "
+            f"{_format_seconds(row['converted_median'])} | "
+            f"{_format_relative_result(row['relative_ratio'])} | "
             f"{row['status']} |"
         )
 
@@ -123,21 +145,28 @@ def main(argv: list[str] | None = None) -> int:
     rows = []
     for base_name in sorted(paired):
         pair = paired[base_name]
-        if "python" not in pair or "cpp" not in pair:
+        if "python" not in pair:
+            raise SystemExit(f"Incomplete benchmark pair for {base_name}")
+        if "native" in pair:
+            converted_variant = "native"
+        elif "compat" in pair:
+            converted_variant = "compat"
+        else:
             raise SystemExit(f"Incomplete benchmark pair for {base_name}")
 
         python_median = pair["python"].median()
-        cpp_median = pair["cpp"].median()
-        cpp_ratio = python_median / cpp_median
+        converted_median = pair[converted_variant].median()
+        relative_ratio = python_median / converted_median
         group, _, short_name = base_name.partition(".")
         rows.append(
             {
                 "group": group,
                 "name": short_name,
+                "variant": converted_variant,
                 "python_median": python_median,
-                "cpp_median": cpp_median,
-                "cpp_ratio": cpp_ratio,
-                "status": _status(cpp_ratio),
+                "converted_median": converted_median,
+                "relative_ratio": relative_ratio,
+                "status": _status(relative_ratio, converted_variant),
             }
         )
 

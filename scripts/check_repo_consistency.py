@@ -10,8 +10,14 @@ TEXT_FILES = [
     ROOT / "README.md",
     ROOT / "AGENTS.md",
     ROOT / ".github" / "copilot-instructions.md",
+    ROOT / "benchmarks" / "__init__.py",
+    ROOT / "benchmarks" / "cases.py",
+    ROOT / "benchmarks" / "report.py",
+    ROOT / "benchmarks" / "run.py",
+    ROOT / "scripts" / "compare_iteration_benchmarks.py",
     *sorted((ROOT / "docs").rglob("*.md")),
     *sorted((ROOT / ".github" / "instructions").glob("*.md")),
+    *sorted((ROOT / "benchmarks" / "results").rglob("*.md")),
 ]
 
 RUFF_CPP_TARGET_PATTERN = re.compile(
@@ -38,6 +44,14 @@ STALE_DISTRO_NATIVE_DEPS_PATTERN = re.compile(
     r"\b(?:libblosc-dev|libzstd-dev)\b",
     re.IGNORECASE,
 )
+MISLEADING_BENCHMARK_LABEL_PATTERNS = (
+    re.compile(r"\b(?:C\+\+|cpp)\s+harness\b", re.IGNORECASE),
+    re.compile(r"\bPython-visible\s+harness\b", re.IGNORECASE),
+    re.compile(r"\bC\+\+\s+median\b"),
+    re.compile(r"\bGeometric-mean\s+C\+\+\s+relative speed vs Python\b"),
+    re.compile(r"\bCase classification:.*\bC\+\+\s+(?:faster|slower)\b"),
+)
+STALE_NATIVE_BACKED_PATTERN = re.compile(r"\bnative[- ]backed\b", re.IGNORECASE)
 
 
 def _read_define_int(text: str, macro_name: str) -> int:
@@ -321,6 +335,17 @@ def main() -> int:
                 "Stale distro-native dependency reference remains in "
                 f"{path.relative_to(ROOT)}"
             )
+        if STALE_NATIVE_BACKED_PATTERN.search(text) is not None:
+            issues.append(
+                "Stale compiled-extension-backed terminology remains in "
+                f"{path.relative_to(ROOT)}"
+            )
+        for pattern in MISLEADING_BENCHMARK_LABEL_PATTERNS:
+            if pattern.search(text) is not None:
+                issues.append(
+                    f"Misleading benchmark label remains in {path.relative_to(ROOT)}"
+                )
+                break
         for line in text.splitlines():
             if "ruff" not in line.lower():
                 continue

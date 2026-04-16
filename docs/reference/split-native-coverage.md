@@ -13,9 +13,9 @@ comparison against the frozen upstream Python snapshot.
 - Use the frozen upstream source in `source_code_v.0.15.0/ome_zarr/` as the
   immutable line-count basis.
 
-This metric is stricter than the old `native-backed` percentage, but still not
-the primary `pure-native` claim. Use the pure-native report for current C++
-semantic ownership.
+This metric is stricter than the old compiled-extension-backed percentage, but
+still not the primary `pure-native` claim. Use the pure-native report for
+current C++ semantic ownership.
 
 ## Report command
 

@@ -63,6 +63,9 @@
 - When working on pure-native performance, also use the standalone native build
   and native benchmark tooling so Python-boundary overhead does not get
   confused with core semantic cost.
+- Never call a Python compatibility/oracle package-path benchmark "C++" or
+  "native C++". Pure-native C++ performance claims require standalone native
+  C++ executable/library timing.
 - When a change affects `cpp/native/`, `cpp/tools/`, or `CMakeLists.txt`,
   rebuild the standalone native targets and rerun the native self-test before
   claiming the native path is healthy.

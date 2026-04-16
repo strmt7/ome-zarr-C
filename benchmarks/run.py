@@ -120,7 +120,10 @@ def main(argv: list[str] | None = None) -> int:
 
     for case in cases:
         runner.bench_time_func(f"{case.benchmark_base_name}.python", case.python_timer)
-        runner.bench_time_func(f"{case.benchmark_base_name}.cpp", case.cpp_timer)
+        runner.bench_time_func(
+            f"{case.benchmark_base_name}.{case.converted_variant}",
+            case.converted_timer,
+        )
 
     return 0
 

@@ -18,8 +18,8 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Run a bounded iteration benchmark comparison for one touched "
-            "surface using both the Python-visible parity harness and the "
-            "standalone native bench."
+            "surface using the Python oracle, optional compatibility timing, "
+            "and the standalone native C++ benchmark."
         )
     )
     parser.add_argument("--suite", default="public-api")
@@ -36,6 +36,14 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--min-time", type=float, default=0.01)
     parser.add_argument("--markdown-out", type=Path)
     parser.add_argument("--json-out", type=Path)
+    parser.add_argument(
+        "--include-compat",
+        action="store_true",
+        help=(
+            "Also show Python compatibility/oracle timings. These timings are "
+            "not standalone native C++ and are hidden by default."
+        ),
+    )
     parser.add_argument(
         "--paired-case",
         action="append",
@@ -64,9 +72,14 @@ def _load_pyperf_pairs(path: Path) -> dict[str, dict[str, float]]:
     pairs: dict[str, dict[str, float]] = {}
     for bench in suite.get_benchmarks():
         name = bench.get_name()
-        if not (name.endswith(".python") or name.endswith(".cpp")):
+        if name.endswith(".python"):
+            base = name[: -len(".python")]
+            variant = "python"
+        elif name.endswith(".compat"):
+            base = name[: -len(".compat")]
+            variant = "compat"
+        else:
             continue
-        base, variant = name.rsplit(".", 1)
         pairs.setdefault(base, {})[variant] = (
             statistics.median(bench.get_values()) * 1_000_000.0
         )
@@ -80,7 +93,7 @@ def _load_native_results(path: Path) -> dict[str, float]:
     }
 
 
-def _format_cpp_result(ratio: float | None) -> str:
+def _format_relative_result(ratio: float | None) -> str:
     if ratio is None:
         return "-"
     return f"{ratio:.3f}x"
@@ -94,31 +107,49 @@ def _build_markdown(
     pyperf_pairs: dict[str, dict[str, float]],
     native_results: dict[str, float],
     paired_cases: list[tuple[str, str]],
+    include_compat: bool,
 ) -> str:
     lines = [
         "# Iteration benchmark comparison: "
         f"`{suite}` / `{python_match}` vs native `{native_match}`",
         "",
-        "Python-visible harness timings come from the bounded `pyperf` suite.",
+        "Python timings come from the frozen upstream oracle via bounded `pyperf`.",
+        "Compatibility/oracle timings are Python package-path measurements, not "
+        "standalone native C++ timings.",
         "Standalone native timings come from `ome_zarr_native_bench_core` "
         "and measure pure-native semantic cost.",
         "",
-        "| case | C++ harness us/op | python us/op | "
-        "C++ harness relative speed vs Python | native us/op | "
-        "native C++ relative speed vs Python |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
+    if include_compat:
+        lines.extend(
+            [
+                "| case | python us/op | compat/oracle us/op | "
+                "compat/oracle relative speed vs Python | native us/op | "
+                "native C++ relative speed vs Python |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "| case | python us/op | native us/op | "
+                "native C++ relative speed vs Python |",
+                "| --- | ---: | ---: | ---: |",
+            ]
+        )
 
     for case_name in sorted(set(pyperf_pairs) | set(native_results)):
         py_us = pyperf_pairs.get(case_name, {}).get("python")
-        cpp_us = pyperf_pairs.get(case_name, {}).get("cpp")
+        compat_us = pyperf_pairs.get(case_name, {}).get("compat")
         native_us = native_results.get(case_name)
 
         def _fmt(value: float | None) -> str:
             return "-" if value is None else f"{value:.3f}"
 
-        py_cpp_ratio = (
-            None if py_us is None or cpp_us is None or cpp_us == 0.0 else py_us / cpp_us
+        py_compat_ratio = (
+            None
+            if py_us is None or compat_us is None or compat_us == 0.0
+            else py_us / compat_us
         )
         py_native_ratio = (
             None
@@ -126,21 +157,34 @@ def _build_markdown(
             else py_us / native_us
         )
 
-        lines.append(
-            "| "
-            + case_name
-            + " | "
-            + _fmt(cpp_us)
-            + " | "
-            + _fmt(py_us)
-            + " | "
-            + _format_cpp_result(py_cpp_ratio)
-            + " | "
-            + _fmt(native_us)
-            + " | "
-            + _format_cpp_result(py_native_ratio)
-            + " |"
-        )
+        if include_compat:
+            lines.append(
+                "| "
+                + case_name
+                + " | "
+                + _fmt(py_us)
+                + " | "
+                + _fmt(compat_us)
+                + " | "
+                + _format_relative_result(py_compat_ratio)
+                + " | "
+                + _fmt(native_us)
+                + " | "
+                + _format_relative_result(py_native_ratio)
+                + " |"
+            )
+        else:
+            lines.append(
+                "| "
+                + case_name
+                + " | "
+                + _fmt(py_us)
+                + " | "
+                + _fmt(native_us)
+                + " | "
+                + _format_relative_result(py_native_ratio)
+                + " |"
+            )
 
     if paired_cases:
         lines.extend(
@@ -171,7 +215,7 @@ def _build_markdown(
                 + " | "
                 + ("-" if py_us is None else f"{py_us:.3f}")
                 + " | "
-                + _format_cpp_result(native_ratio)
+                + _format_relative_result(native_ratio)
                 + " |"
             )
 
@@ -274,6 +318,7 @@ def main() -> int:
             pyperf_pairs=pyperf_pairs,
             native_results=native_results,
             paired_cases=paired_cases,
+            include_compat=args.include_compat,
         )
         print(markdown, end="")
 

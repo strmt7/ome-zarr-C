@@ -1996,11 +1996,12 @@ PUBLIC_API_CASES = (
             _verify_conversions_int_to_rgba,
             _bench_conversions_int_to_rgba_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             case_id="conversions.int_to_rgba",
             verify=_verify_conversions_int_to_rgba,
             native_match="conversions.int_to_rgba",
         ),
+        converted_variant="native",
     ),
     core_cases.BenchmarkCase(
         group="conversions",
@@ -2012,11 +2013,12 @@ PUBLIC_API_CASES = (
             _verify_conversions_rgba_to_int,
             _bench_conversions_rgba_to_int_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             case_id="conversions.rgba_to_int",
             verify=_verify_conversions_rgba_to_int,
             native_match="conversions.rgba_to_int",
         ),
+        converted_variant="native",
     ),
     core_cases.BenchmarkCase(
         group="csv",
@@ -2028,11 +2030,12 @@ PUBLIC_API_CASES = (
             _verify_csv_parse,
             _bench_csv_parse_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             case_id="csv.parse_csv_value",
             verify=_verify_csv_parse,
             native_match="csv.parse_csv_value",
         ),
+        converted_variant="native",
     ),
     core_cases.BenchmarkCase(
         group="csv",
@@ -2046,11 +2049,12 @@ PUBLIC_API_CASES = (
             _verify_csv_dict_to_zarr,
             _bench_csv_dict_to_zarr_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             case_id="csv.dict_to_zarr",
             verify=_verify_csv_dict_to_zarr,
             native_match="local.dict_to_zarr",
         ),
+        converted_variant="native",
     ),
     core_cases._make_case(
         "csv",
@@ -2070,11 +2074,12 @@ PUBLIC_API_CASES = (
             _verify_data_make_circle,
             _bench_data_make_circle_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             case_id="data.make_circle",
             verify=_verify_data_make_circle,
             native_match="data.make_circle_batch",
         ),
+        converted_variant="native",
     ),
     core_cases.BenchmarkCase(
         group="data",
@@ -2086,11 +2091,12 @@ PUBLIC_API_CASES = (
             _verify_data_rgb_to_5d,
             _bench_data_rgb_to_5d_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             case_id="data.rgb_to_5d",
             verify=_verify_data_rgb_to_5d,
             native_match="data.rgb_to_5d_batch",
         ),
+        converted_variant="native",
     ),
     core_cases._make_case(
         "format",
@@ -2348,11 +2354,12 @@ PUBLIC_API_CASES = (
             _verify_utils_path_helpers,
             _bench_utils_path_helpers_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             case_id="utils.path_helpers",
             verify=_verify_utils_path_helpers,
             native_match="utils.path_helpers",
         ),
+        converted_variant="native",
     ),
     core_cases.BenchmarkCase(
         group="utils",
@@ -2364,11 +2371,12 @@ PUBLIC_API_CASES = (
             _verify_utils_find_multiscales,
             _bench_utils_find_multiscales_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             case_id="utils.find_multiscales",
             verify=_verify_utils_find_multiscales,
             native_match="local.find_multiscales",
         ),
+        converted_variant="native",
     ),
     core_cases._make_case(
         "utils",

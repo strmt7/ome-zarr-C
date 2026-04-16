@@ -1,8 +1,8 @@
 # Benchmark Suite
 
-This repository uses a dedicated `pyperf`-based benchmark suite for performance
-work on parity-proven native-backed surfaces. The benchmark tree is split into
-three suites:
+This repository uses a dedicated `pyperf`-based benchmark suite for parity and
+performance work on proven surfaces. The benchmark tree is split into three
+suites:
 
 - `core`: converted kernels plus deterministic tempdir runtime flows
 - `public-api`: benchmark coverage for the documented upstream public API
@@ -14,6 +14,10 @@ The repository also carries a native-only CMake benchmark target for pure
 - `pyperf` suites for Python-visible parity and end-to-end user-facing timing
 - native CMake benchmarks for pure semantic cost without Python boundary
   overhead
+
+Only standalone native C++ measurements may be reported as native C++
+performance. Python package-path timings are labelled `compat/oracle` and are
+not pure native C++ totals.
 
 ## Why `pyperf`
 
@@ -40,7 +44,7 @@ Its official documentation positions it as a suite for benchmarking a single
 project over its lifetime, with benchmark data stored alongside the suite and
 growing over time. That is useful once this repository has a broader converted
 surface and a stable long-running performance baseline, but it is heavier than
-needed for the current first-pass question: "is the verified native-backed code
+needed for the current first-pass question: "is the verified converted path
 already faster than the frozen upstream implementation on the same machine?"
 
 Reference:
@@ -94,7 +98,8 @@ waits while still preserving a real `pyperf` measurement path.
 ## Benchmark Layout
 
 - `benchmarks/catalog.py`: suite registry for `core`, `public-api`, and `realdata`
-- `benchmarks/run.py`: executes paired upstream-vs-native `pyperf` timings
+- `benchmarks/run.py`: executes paired upstream-vs-compat/oracle or
+  upstream-vs-native `pyperf` timings
 - `benchmarks/cases.py`: benchmark registry, parity guards, and deterministic
   inputs for the `core` suite
 - `benchmarks/public_api_cases.py`: public-API benchmark cases
@@ -105,17 +110,19 @@ waits while still preserving a real `pyperf` measurement path.
   runtime parity helpers reused by the benchmark registry
 - `benchmarks/report.py`: turns a `pyperf` JSON file into a markdown summary
 - `scripts/compare_iteration_benchmarks.py`: bounded per-iteration comparison
-  helper for one touched surface using both the Python-visible suite and the
-  standalone native benchmark
+  helper for one touched surface using the Python oracle and the standalone
+  native benchmark
 - `scripts/check_public_api_benchmark_coverage.py`: enforces benchmark
   coverage for documented upstream public callables
 - `CMakeLists.txt` plus `cpp/tools/native_bench_format.cpp` and
   `cpp/tools/native_bench_core.cpp`: native-only build and benchmark entrypoints
   for direct `cpp/native` timing
 
-Each paired case benchmarks the Python upstream function and the converted
-native-backed function on the same exact benchmark input. Before timing begins,
-the case verifies parity on that benchmark input and aborts if parity fails.
+Each paired case benchmarks the Python upstream function and either a converted
+compatibility/oracle function or a standalone native C++ function on the same
+exact benchmark input. Before timing begins, the case verifies parity on that
+benchmark input and aborts if parity fails. Compatibility/oracle timings are
+not standalone native C++ timings.
 
 The benchmark runner disables package logging and Python warnings by default via
 `OME_ZARR_BENCH_DISABLE_LOGGING=1` and
@@ -480,21 +487,22 @@ live under `/tmp/` or another local scratch path.
 
 ## Current Snapshot
 
-Latest completed bounded all-suite iteration snapshot on `2026-04-16` on the
-current portable `-O3` build:
+Latest completed bounded all-suite `pyperf` snapshot on `2026-04-16` on the
+current portable `-O3` build. This is a mixed converted-path snapshot and must
+not be treated as a pure native C++ total:
 
 - command mode: fixed-loop iteration gate, `--processes 1 --values 1 --warmups 0
   --loops 1`
 - paired cases: `62`
-- overall C++ relative speed vs Python: `2.988x` by geometric mean
-- classification: `38` C++ faster, `12` roughly equal, `12` C++ slower
+- overall converted-path relative speed vs Python: `2.988x` by geometric mean
+- classification: `38` above Python, `12` roughly equal, `12` below Python
 - public API benchmark coverage:
   - `89` documented callables discovered from upstream modules
   - `16` excluded callables
   - `77` covered callable entrypoints
   - `0` uncovered callable entrypoints
 
-Group geometric-mean C++ relative speeds vs Python in that snapshot:
+Group geometric-mean converted-path relative speeds vs Python in that snapshot:
 
 - `cli`: `7.799x`
 - `conversions`: `156.416x`

@@ -18,7 +18,7 @@ from dataclasses import dataclass, fields, is_dataclass, replace
 from functools import lru_cache
 from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import dask
 import dask.array as da
@@ -74,7 +74,8 @@ class BenchmarkCase:
     description: str
     verify: Callable[[], None]
     python_timer: Callable[[int], float]
-    cpp_timer: Callable[[int], float]
+    converted_timer: Callable[[int], float]
+    converted_variant: Literal["compat", "native"] = "compat"
 
     @property
     def benchmark_base_name(self) -> str:
@@ -107,7 +108,9 @@ def benchmark_environment_metadata() -> dict[str, str]:
         )
     )
     return {
-        "benchmark_scope": "verified-native-backed-kernels-and-runtime-local-tempdir",
+        "benchmark_scope": (
+            "python-oracle-compatibility-and-native-runtime-local-tempdir"
+        ),
         "dask_scheduler": "single-threaded",
         "thread_env": thread_settings,
         "upstream_snapshot": "ome-zarr-py v0.15.0",
@@ -120,7 +123,7 @@ def _make_case(
     description: str,
     verify: Callable[[], None],
     python_func: Callable[[], object],
-    cpp_func: Callable[[], object],
+    converted_func: Callable[[], object],
 ) -> BenchmarkCase:
     case_id = f"{group}.{name}"
     return BenchmarkCase(
@@ -129,7 +132,7 @@ def _make_case(
         description=description,
         verify=verify,
         python_timer=_make_timer(case_id, verify, python_func),
-        cpp_timer=_make_timer(case_id, verify, cpp_func),
+        converted_timer=_make_timer(case_id, verify, converted_func),
     )
 
 
@@ -1362,11 +1365,12 @@ ALL_CASES = (
             _verify_axes_constructor,
             _bench_axes_constructor_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             "micro.axes.constructor_batch",
             _verify_axes_constructor,
             "axes.constructor_batch",
         ),
+        converted_variant="native",
     ),
     _make_case(
         "micro",
@@ -1418,11 +1422,12 @@ ALL_CASES = (
             _verify_make_circle,
             _bench_make_circle_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             "micro.data.make_circle_batch",
             _verify_make_circle,
             "data.make_circle_batch",
         ),
+        converted_variant="native",
     ),
     BenchmarkCase(
         group="micro",
@@ -1434,11 +1439,12 @@ ALL_CASES = (
             _verify_rgb_to_5d,
             _bench_rgb_to_5d_python,
         ),
-        cpp_timer=_native_bench_timer(
+        converted_timer=_native_bench_timer(
             "micro.data.rgb_to_5d_batch",
             _verify_rgb_to_5d,
             "data.rgb_to_5d_batch",
         ),
+        converted_variant="native",
     ),
     _make_case(
         "meso",

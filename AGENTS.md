@@ -97,7 +97,8 @@ benchmark comparison, but it is not the target runtime product.
     `cpp/tools/` may expose standalone native entrypoints, and no active
     binding layer remains.
 32. Do not count any converted surface as pure-native unless its semantics live
-    in `cpp/native/`. "Native-backed" and "pure-native" are different claims.
+    in `cpp/native/`. Compiled-extension-backed and `pure-native` are
+    different claims.
 33. If a change touches `cpp/`, run
     `.venv/bin/python scripts/check_pure_native_cpp.py --enforce-pure-native-subtree --report-existing-debt`
     and treat any Python-integration tokens under `cpp/` as a hard
@@ -138,16 +139,16 @@ benchmark comparison, but it is not the target runtime product.
     must not be mistaken for the intended final delivery shape. pybind
     bindings are not part of the current architecture.
 42. When working on performance-sensitive native code, separate boundary
-    overhead from core semantics. Measure Python-visible paths with the repo
-    benchmark suite, and measure pure-native kernels with native-only tooling
-    before drawing optimization conclusions.
+    overhead from core semantics. Measure Python compatibility/oracle paths
+    only as parity aids, and measure pure-native kernels with native-only
+    tooling before drawing optimization conclusions.
 43. Do not expose plan-only or helper-only commands in the shipped standalone
     native CLI. Native CLI surfaces must correspond to real runtime commands
     or durable product APIs, not temporary inspection shortcuts.
 44. When replacing transitional runtime behavior, extend the standalone native
-    library or CLI first. Do not widen the Python-visible harness unless the
-    change is strictly for parity proof, fixture generation, or benchmark
-    comparison around the native runtime.
+    library or CLI first. Do not widen the Python compatibility/oracle package
+    path unless the change is strictly for parity proof, fixture generation, or
+    benchmark comparison around the native runtime.
 45. Once a standalone-native runtime command or library entrypoint exists and
     parity is proven for that surface, treat any corresponding Python-harness
     runtime path as shrink-only debt. Do not add new semantic work there;
@@ -165,11 +166,14 @@ benchmark comparison, but it is not the target runtime product.
     in `docs/reference/native-dependency-manifest.json` as the source of truth.
     Do not rely on stale distro package versions for CMake, Ninja, Zstd, or
     c-blosc when the manifest specifies newer releases.
-49. Report benchmark outcomes as absolute C++ relative speed vs Python:
-    `python_time / cpp_time`. A ratio above `1.0` means C++ is faster; below
-    `1.0` means C++ is slower. Do not invert slower cases into larger
-    "slower" multipliers; report them directly, for example `0.748x`, with a
-    status such as "C++ slower".
+49. Report pure-native benchmark outcomes as absolute native C++ relative
+    speed vs Python: `python_time / native_cpp_time`. A ratio above `1.0`
+    means native C++ is faster; below `1.0` means native C++ is slower. Do not
+    invert slower cases into larger "slower" multipliers; report them directly,
+    for example `0.748x`.
+50. Never call a Python compatibility/oracle package-path timing "C++" or
+    "native C++". If a benchmark goes through Python package code, label it
+    `compat/oracle` and keep it out of pure-native C++ performance totals.
 
 ## Fast load order
 

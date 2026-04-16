@@ -1,1 +1,1 @@
-"""Benchmark tooling for parity-proven native-backed surfaces."""
+"""Benchmark tooling for parity, compatibility/oracle, and native C++ surfaces."""
