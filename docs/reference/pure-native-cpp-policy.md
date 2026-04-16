@@ -28,9 +28,10 @@ code, not only future additions.
 ## Coverage language
 
 - `pure-native` means the semantics live in `cpp/native/`.
-- `native-backed` means compiled extension code participates, but Python-facing
-  objects or mixed binding/logic code still carry part of the semantics.
-- Do not present `native-backed` coverage as `pure-native` coverage.
+- `compiled-extension-backed` means compiled extension code participates, but
+  Python-facing objects or mixed binding/logic code still carry part of the
+  semantics.
+- Do not present compiled-extension-backed coverage as `pure-native` coverage.
 
 ## Enforcement
 

@@ -62,11 +62,13 @@ porting work.
 - Do run a smart consistency sweep before pushing so docs, file names, function
   names, benchmark claims, and structural references still match the actual
   repo state.
-- Report benchmark results as absolute C++ relative speed vs Python:
-  `python_time / cpp_time`. A ratio above `1.0` means C++ is faster; below
-  `1.0` means C++ is slower. Do not invert slower cases into larger "slower"
-  multipliers; report the direct ratio, for example `0.748x`, plus a clear
-  status.
+- Report pure-native benchmark results as absolute native C++ relative speed
+  vs Python: `python_time / native_cpp_time`. A ratio above `1.0` means native
+  C++ is faster; below `1.0` means native C++ is slower. Do not invert slower
+  cases into larger "slower" multipliers; report the direct ratio, for example
+  `0.748x`.
+- Label Python package-path benchmark measurements as `compat/oracle`, not C++
+  and not native C++. Keep them out of pure-native C++ performance totals.
 
 ## Don't
 
@@ -99,3 +101,5 @@ porting work.
   other contract drift before pushing.
 - Do not describe a slower C++ result as a performance gain or invert it into
   a larger "slower" multiplier. Keep the direct relative-speed ratio.
+- Do not call a Python compatibility/oracle timing a C++ timing just because it
+  lives next to C++ parity work.

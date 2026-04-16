@@ -24,8 +24,8 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
   standalone native CLI. Public native entrypoints must be real runtime
   commands or durable product APIs.
 - Once a standalone-native runtime surface exists and parity is proven, treat
-  the corresponding Python-visible harness path as shrink-only debt instead of
-  keeping duplicate product paths alive.
+  the corresponding Python compatibility/oracle package path as shrink-only
+  debt instead of keeping duplicate product paths alive.
 - For runtime surfaces already replaced by standalone native code, remove the
   matching wrapper exports, pybind registrations, and stale test/benchmark
   references in the same slice unless a remaining oracle-only dependency is
@@ -42,10 +42,13 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 - Load context selectively: start with the smallest sufficient set of docs,
   code, tests, and skills, then widen only when evidence says it is necessary.
 - Differential tests are required for ported surfaces.
-- Benchmarks are required before claiming that C++ is faster. Report benchmark
-  outcomes as absolute C++ relative speed vs Python (`python_time / cpp_time`).
-  Do not invert slower cases into larger "slower" multipliers; report the
-  direct ratio, for example `0.748x`, plus a clear status.
+- Benchmarks are required before claiming that native C++ is faster. Report
+  pure-native outcomes as absolute native C++ relative speed vs Python
+  (`python_time / native_cpp_time`). Do not invert slower cases into larger
+  "slower" multipliers; report the direct ratio, for example `0.748x`.
+- Never label Python compatibility/oracle package timings as C++ or native C++.
+  If the timed path goes through Python package code, call it `compat/oracle`
+  and exclude it from pure-native C++ totals.
 - Use repo-local skills under `.agents/skills/` when they fit the task.
 - Keep frozen snapshots under `source_code_v*/` excluded from security scanning,
   and update the exclusion whenever a new snapshot is added.

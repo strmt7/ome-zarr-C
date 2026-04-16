@@ -5,7 +5,7 @@
 
 The project preserves the exact upstream `v0.15.0` release snapshot under
 `source_code_v.0.15.0/` and implements converted functionality outside that
-snapshot in native-backed modules. Under the stricter current architecture,
+snapshot in native C++ modules. Under the stricter current architecture,
 `cpp/native/` holds C++ semantics, `cpp/tools/` exposes standalone native
 entrypoints, and no active binding layer remains. The working rule for
 converted code is behavioral parity first, performance claims second.
@@ -45,14 +45,15 @@ directory.
 - `tests/`: differential and regression tests
 - `docs/`: project references, design notes, and benchmark material
 
-## Verified Native-Backed Surfaces
+## Verified Parity Surfaces
 
 These are parity-proven surfaces. This is not the same as a shipped standalone
 C++ API guarantee for every upstream Python entrypoint; the Python package is
-still a development oracle and compatibility harness.
+still a development oracle and compatibility layer, not the target runtime
+product.
 
-The following upstream behaviors are native-backed and currently proven by
-differential tests on this runtime:
+The following upstream behaviors are currently proven by differential tests on
+this runtime:
 
 - `ome_zarr_c.format`
   - format implementation ordering
@@ -406,9 +407,10 @@ Converted code is added in small, reviewable slices:
 ## Benchmarking
 
 The repository ships a paired `pyperf` benchmark suite under `benchmarks/`.
-It compares the frozen upstream Python implementation and the native-backed
-implementation on the same benchmark inputs and aborts if the timed input loses
-parity.
+It compares the frozen upstream Python implementation with either a
+compatibility/oracle path or a standalone native C++ path on the same benchmark
+inputs and aborts if the timed input loses parity. A Python package-path
+measurement is never reported as pure native C++ performance.
 
 For standalone-C++ performance work, also use the native-only CMake benchmark
 tooling. The `pyperf` suite measures Python-visible public behavior, while the
@@ -439,14 +441,15 @@ available only when `OME_ZARR_BENCH_INCLUDE_LARGE=1`.
 See `docs/reference/benchmark-suite.md` for the methodology and
 `docs/reference/public-benchmark-fixtures.md` for fixture provenance.
 
-Latest completed bounded all-suite iteration snapshot on `2026-04-16` on the
-current portable `-O3` build:
+Latest completed bounded all-suite `pyperf` snapshot on `2026-04-16` on the
+current portable `-O3` build. This is a mixed converted-path snapshot and must
+not be treated as a pure native C++ total:
 
 - command mode: fixed-loop iteration gate, `--processes 1 --values 1
   --warmups 0 --loops 1`
 - paired cases: `62`
-- overall C++ relative speed vs Python: `2.988x` by geometric mean
-- classification: `38` C++ faster, `12` roughly equal, `12` C++ slower
+- overall converted-path relative speed vs Python: `2.988x` by geometric mean
+- classification: `38` above Python, `12` roughly equal, `12` below Python
 - public API coverage checker: `89` documented callables, `16` excluded
   callables, `77` covered callable entrypoints, `0` uncovered callables
 

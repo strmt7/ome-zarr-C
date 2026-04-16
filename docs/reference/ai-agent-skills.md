@@ -20,8 +20,9 @@ Repo-local reusable skills live under `.agents/skills/`.
 - `cpp-parity-porting`: port a single upstream surface to standalone C++
 - `cpp-performance-optimization`: optimize parity-proven native hot
   paths for real C++ performance gains without changing behavior
-- `benchmark-first`: benchmark before claiming C++ is faster; report slower C++
-  cases as direct sub-`1.0` relative-speed ratios plus "C++ slower" status
+- `benchmark-first`: benchmark before claiming native C++ is faster; report
+  slower native C++ cases as direct sub-`1.0` relative-speed ratios and label
+  Python package-path measurements as `compat/oracle`, not native C++
 - `immutable-parity-proof`: verify the frozen snapshot manifest, use
   content-addressed parity evidence, and keep embedded-Python debt out of
   native-conversion counts
