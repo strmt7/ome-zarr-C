@@ -65,6 +65,11 @@ std::string detect_metadata_version(const json& metadata) {
     if (metadata.is_object() && metadata.contains("version")) {
         return json_scalar_to_string(metadata["version"]);
     }
+    if (metadata.is_object() && metadata.contains("plate") &&
+        metadata["plate"].is_object() &&
+        metadata["plate"].contains("version")) {
+        return json_scalar_to_string(metadata["plate"]["version"]);
+    }
     if (metadata.is_object() && metadata.contains("multiscales") &&
         metadata["multiscales"].is_array() && !metadata["multiscales"].empty() &&
         metadata["multiscales"][0].is_object() &&

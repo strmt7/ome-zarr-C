@@ -41,7 +41,6 @@ ext_modules = [
     Pybind11Extension(
         "ome_zarr_c._core",
         [
-            "cpp/bindings/basic_bindings.cpp",
             "cpp/bindings/dask_utils_bindings.cpp",
             "cpp/bindings/format_bindings.cpp",
             "cpp/bindings/module.cpp",

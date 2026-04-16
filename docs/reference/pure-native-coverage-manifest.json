@@ -879,7 +879,6 @@
       "upstream_file": "writer.py",
       "qualname": "_get_valid_axes",
       "boundary_files": [
-        "cpp/bindings/basic_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -890,7 +889,6 @@
       "upstream_file": "writer.py",
       "qualname": "_extract_dims_from_axes",
       "boundary_files": [
-        "cpp/bindings/basic_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -901,7 +899,6 @@
       "upstream_file": "writer.py",
       "qualname": "_validate_well_images",
       "boundary_files": [
-        "cpp/bindings/basic_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -912,7 +909,6 @@
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_acquisitions",
       "boundary_files": [
-        "cpp/bindings/basic_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -923,7 +919,6 @@
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_rows_columns",
       "boundary_files": [
-        "cpp/bindings/basic_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -934,7 +929,6 @@
       "upstream_file": "writer.py",
       "qualname": "_validate_datasets",
       "boundary_files": [
-        "cpp/bindings/basic_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [
@@ -957,7 +951,6 @@
       "upstream_file": "writer.py",
       "qualname": "_retuple",
       "boundary_files": [
-        "cpp/bindings/basic_bindings.cpp",
         "ome_zarr_c/writer.py"
       ],
       "native_files": [

@@ -213,6 +213,12 @@ def _bench_stdio_context():
     return stack
 
 
+def _seeded_native_env(seed: int) -> dict[str, str]:
+    env = os.environ.copy()
+    env["OME_ZARR_C_CREATE_SEED"] = str(seed)
+    return env
+
+
 def _compute_dask(array: da.Array) -> np.ndarray:
     with dask.config.set(scheduler="single-threaded"):
         return np.asarray(array.compute())
@@ -995,6 +1001,7 @@ def _verify_cli_download_v05() -> None:
         cpp_create = cli_eq._run_native_cli(
             ["create", "--method=astronaut", str(cpp_source), "--format", "0.5"],
             replacements,
+            env=_seeded_native_env(0),
         )
         assert py_create.status == cpp_create.status == "ok"
         assert py_create.stdout == cpp_create.stdout
@@ -1286,6 +1293,7 @@ def _verify_cli_create_info_v05() -> None:
         cpp_create = cli_eq._run_native_cli(
             ["create", "--method=coins", str(cpp_root), "--format", "0.5"],
             replacements,
+            env=_seeded_native_env(0),
         )
         assert py_create.status == cpp_create.status == "ok"
         assert py_create.stdout == cpp_create.stdout
@@ -1328,6 +1336,7 @@ def _bench_cli_create_info(py_like: bool, case_name: str) -> float:
             create = cli_eq._run_native_cli(
                 ["create", "--method=coins", str(root), "--format", "0.5"],
                 replacements,
+                env=_seeded_native_env(0),
             )
             info = cli_eq._run_native_cli(
                 ["info", str(root)],

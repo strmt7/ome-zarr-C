@@ -808,6 +808,39 @@ void test_io_and_utils() {
             text.find("\"label-value\": 8") != std::string::npos,
             "local create colors preserved");
     }
+    {
+        const auto info_lines = local_info_lines(create_root.generic_string(), false);
+        require(
+            std::find(
+                info_lines.begin(),
+                info_lines.end(),
+                create_root.generic_string() + "/labels [zgroup] (hidden)") !=
+                info_lines.end(),
+            "local info reports hidden labels group");
+    }
+    {
+        const auto created_download_root = fixture_root / "downloads-created";
+        const auto created_download = local_download_copy(
+            create_root.generic_string(),
+            created_download_root.generic_string());
+        require_eq(
+            created_download.listed_paths,
+            std::vector<std::string>{
+                "native-create-v05.zarr",
+                "native-create-v05.zarr/labels",
+                "native-create-v05.zarr/labels/coins"},
+            "local download listed label paths");
+        require(
+            std::filesystem::exists(
+                created_download_root / "native-create-v05.zarr" / "labels" / "coins" /
+                "zarr.json"),
+            "local download copied label metadata");
+        require(
+            std::filesystem::exists(
+                created_download_root / "native-create-v05.zarr" / "labels" / "coins" /
+                "s0" / "c" / "0" / "0"),
+            "local download copied label chunks");
+    }
 
     const auto scale_input = fixture_root / "scale-input.zarr";
     std::vector<std::uint16_t> scale_values(64);

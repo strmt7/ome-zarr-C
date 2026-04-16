@@ -617,9 +617,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_get_valid_axes",
-      "binding_files": [
-        "cpp/bindings/basic_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -627,9 +625,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_extract_dims_from_axes",
-      "binding_files": [
-        "cpp/bindings/basic_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -637,9 +633,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_retuple",
-      "binding_files": [
-        "cpp/bindings/basic_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -647,9 +641,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_well_images",
-      "binding_files": [
-        "cpp/bindings/basic_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -657,9 +649,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_acquisitions",
-      "binding_files": [
-        "cpp/bindings/basic_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -667,9 +657,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_plate_rows_columns",
-      "binding_files": [
-        "cpp/bindings/basic_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
@@ -677,9 +665,7 @@
     {
       "upstream_file": "writer.py",
       "qualname": "_validate_datasets",
-      "binding_files": [
-        "cpp/bindings/basic_bindings.cpp"
-      ],
+      "binding_files": [],
       "native_files": [
         "cpp/native/writer.cpp"
       ]
