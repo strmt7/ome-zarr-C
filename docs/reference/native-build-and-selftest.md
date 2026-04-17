@@ -73,6 +73,28 @@ Optional local host tuning:
 These tuning flags are for local benchmarking or deployment on a known host.
 Do not use them for portability claims.
 
+## GPU Capability Probe
+
+GPU acceleration is optional and must be proven on the host before any GPU
+benchmark or speedup claim is made. Use the read-only probe to capture visible
+device nodes, virtualization hints, and ROCm/HIP/OpenCL/Vulkan tool facts:
+
+```bash
+.venv/bin/python scripts/gpu_capability_probe.py --pretty
+```
+
+For availability-only runs that do not execute external GPU tools:
+
+```bash
+.venv/bin/python scripts/gpu_capability_probe.py --skip-command-output --pretty
+```
+
+Treat `/dev/kfd`, `/dev/dri/renderD*`, `/dev/dxg`, ROCm/HIP command output,
+OpenCL platforms, and Vulkan hardware devices as facts to verify. A software
+renderer such as Vulkan `llvmpipe` is not GPU acceleration. CPU-only builds and
+tests remain the default until a real supported device is visible and parity
+tests compare GPU output against the native CPU path and frozen oracle output.
+
 ## Run Native Verification
 
 Run the standalone native self-test directly:
