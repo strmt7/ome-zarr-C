@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "../../third_party/nlohmann/json.hpp"
@@ -54,6 +55,42 @@ bool block_is_zeroed(const std::array<char, 512>& block) {
         block.begin(),
         block.end(),
         [](const char value) { return value == '\0'; });
+}
+
+void ensure_directory_cached(
+    const fs::path& path,
+    std::unordered_set<std::string>& created_directories) {
+    const auto key = path.generic_string();
+    if (!created_directories.insert(key).second) {
+        return;
+    }
+    fs::create_directories(path);
+}
+
+void read_exact_bytes(
+    std::istream& input,
+    std::uint64_t byte_count,
+    std::vector<char>& buffer,
+    const fs::path& archive_path,
+    std::ostream* output = nullptr) {
+    while (byte_count > 0U) {
+        const auto chunk_size = static_cast<std::size_t>(
+            std::min<std::uint64_t>(byte_count, buffer.size()));
+        input.read(buffer.data(), static_cast<std::streamsize>(chunk_size));
+        if (input.gcount() != static_cast<std::streamsize>(chunk_size)) {
+            throw std::runtime_error(
+                "Truncated tar payload in " + archive_path.string());
+        }
+        if (output != nullptr) {
+            output->write(buffer.data(), static_cast<std::streamsize>(chunk_size));
+            if (!(*output)) {
+                throw std::runtime_error(
+                    "Unable to write extracted file payload from " +
+                    archive_path.string());
+            }
+        }
+        byte_count -= static_cast<std::uint64_t>(chunk_size);
+    }
 }
 
 json load_json_file(const fs::path& path) {
@@ -198,6 +235,10 @@ void extract_tar_archive(
         throw std::runtime_error("Unable to open create archive: " + archive_path.string());
     }
 
+    std::vector<char> copy_buffer(1024U * 1024U);
+    std::unordered_set<std::string> created_directories;
+    created_directories.reserve(256U);
+
     while (true) {
         std::array<char, 512> header{};
         stream.read(header.data(), static_cast<std::streamsize>(header.size()));
@@ -222,29 +263,19 @@ void extract_tar_archive(
         const fs::path destination = destination_root / path_name;
 
         if (typeflag == 'x' || typeflag == 'g') {
-            stream.ignore(static_cast<std::streamsize>(file_size + padding));
+            read_exact_bytes(stream, file_size + padding, copy_buffer, archive_path);
         } else if (typeflag == '5') {
-            fs::create_directories(destination);
+            ensure_directory_cached(destination, created_directories);
         } else if (typeflag == '0' || typeflag == '\0') {
-            fs::create_directories(destination.parent_path());
-            std::vector<char> payload(static_cast<std::size_t>(file_size));
-            if (file_size > 0U) {
-                stream.read(payload.data(), static_cast<std::streamsize>(file_size));
-                if (stream.gcount() != static_cast<std::streamsize>(file_size)) {
-                    throw std::runtime_error(
-                        "Truncated tar payload in " + archive_path.string());
-                }
-            }
+            ensure_directory_cached(destination.parent_path(), created_directories);
             std::ofstream output(destination, std::ios::binary | std::ios::trunc);
             if (!output) {
                 throw std::runtime_error(
                     "Unable to write extracted file: " + destination.string());
             }
-            if (!payload.empty()) {
-                output.write(payload.data(), static_cast<std::streamsize>(payload.size()));
-            }
+            read_exact_bytes(stream, file_size, copy_buffer, archive_path, &output);
             if (padding > 0U) {
-                stream.ignore(static_cast<std::streamsize>(padding));
+                read_exact_bytes(stream, padding, copy_buffer, archive_path);
             }
         } else {
             throw std::runtime_error(
