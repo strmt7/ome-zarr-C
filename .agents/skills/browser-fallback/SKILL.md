@@ -27,7 +27,7 @@ Use this skill when static fetches fail because a page is JS-heavy, stateful, la
 
 - Prefer deterministic Playwright/CDP-style actions over vague browsing.
 - Reuse the same browser tab/session when iterating on one site.
-- Keep notes precise enough that another agent can replay the path.
+- Keep notes precise enough that another maintainer can replay the path.
 
 ## Read next
 

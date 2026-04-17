@@ -4,6 +4,9 @@ Critical: do not spawn, delegate to, or coordinate with multiple AI agents,
 subagents, or separate agent sessions. Work in one session only unless the user
 explicitly revokes this rule in a later instruction.
 
+Public-facing repository material must not expose internal reasoning, private
+discussions, transient process notes.
+
 - Keep CI simple and directly tied to the current repo contract.
 - Protect the frozen snapshot from direct edits.
 - Keep the existing push, pull request, and manual triggers, but make every
@@ -32,9 +35,8 @@ explicitly revokes this rule in a later instruction.
   default branch.
 - For GitHub Actions inspection, prefer explicit repo scoping such as
   `gh ... -R strmt7/ome-zarr-C` so local CLI context cannot drift to upstream.
-- When an AI agent pushes to the repository, it must wait for all workflows on
-  that exact commit to complete and address failures before calling the work
-  done.
+- After any automation-assisted push, wait for all workflows on that exact
+  commit to complete and address failures before calling the work done.
 - Treat the exact check-run set for the pushed commit as the source of truth.
   The combined commit status endpoint can lag after checks are already green.
 - Before changing workflow action versions or workflow-installed tool versions,

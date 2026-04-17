@@ -1,4 +1,4 @@
-# AI Agent Web Research Stack
+# Public Web Research Stack
 
 This reference captures the safe, tool-agnostic public-web research pattern these repos expect as of `2026-04-12`.
 

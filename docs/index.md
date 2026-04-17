@@ -20,10 +20,12 @@
   and validation rules for public real-data benchmark fixtures
 - `docs/reference/immutable-parity-proof.md`: content-addressed parity and
   native-C++ integrity rules
-- `docs/reference/ai-agent-context-routing.md`: smallest-correct-context router
-- `docs/reference/ai-agent-dos-and-donts.md`: agent operating rules from live porting work
+- `docs/reference/ai-agent-context-routing.md`: context-routing rules for
+  automated maintenance tooling
+- `docs/reference/ai-agent-dos-and-donts.md`: maintainer operating rules for
+  parity and native-C++ work
 - `docs/reference/porting-contract.md`: non-negotiable porting rules
 - `docs/reference/ai-agent-skills.md`: repo-local workflow catalog
 - `docs/reference/ai-agent-web-research-stack.md`: safe public-web research pattern
-- `docs/reference/ai-agent-integrations.md`: AI adapter file map
+- `docs/reference/ai-agent-integrations.md`: automation adapter file map
 - `docs/reference/external-native-landscape.md`: current native OME-Zarr landscape

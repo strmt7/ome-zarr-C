@@ -1,5 +1,13 @@
 # AGENTS guide
 
+## Professional presentation rule
+
+Do not expose internal reasoning, private discussions, transient process notes,
+or implementation history in user-facing docs, release material, examples, or
+commit/PR text. Public-facing material must read as professional project
+documentation: factual, concise, supportable, and focused on verified product
+behavior.
+
 ## Critical single-session rule
 
 Do not spawn, delegate to, or coordinate with multiple AI agents, subagents, or
@@ -97,9 +105,9 @@ standalone C++ implementation under `cpp/native/`, `cpp/api/`, and
 27. If a parity surface prints or serializes absolute paths, run the upstream
     and converted implementations against the same fixture path whenever the
     surface is read-only so path text does not create false mismatches.
-28. Keep `README.md` strictly user-facing. Agent instructions, workflow rules,
-    and AI operating contracts belong in `AGENTS.md`, `.github/instructions/`,
-    and repo-local skills only.
+28. Keep `README.md` strictly user-facing. Internal automation instructions,
+    workflow rules, and operating contracts belong in `AGENTS.md`,
+    `.github/instructions/`, and repo-local skills only.
 29. Before making or repeating a frozen-snapshot immutability claim, verify the
     committed SHA256 manifest with
     `.venv/bin/python scripts/frozen_source_manifest.py --verify`.

@@ -1,8 +1,11 @@
-# Gemini CLI instructions
+# Repository Instructions
 
 Critical: do not spawn, delegate to, or coordinate with multiple AI agents,
 subagents, or separate agent sessions. Work in one session only unless the user
 explicitly revokes this rule in a later instruction.
+
+Keep public-facing repository material professional. Do not expose internal
+reasoning, private discussions, transient process notes.
 
 Use `AGENTS.md` as the universal project contract and
 `docs/reference/ai-agent-context-routing.md` to keep context narrow.

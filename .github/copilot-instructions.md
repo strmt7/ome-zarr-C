@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions
+# Repository Instructions
 
 Use [AGENTS.md](../AGENTS.md) as the universal project contract.
 
@@ -63,8 +63,10 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
   and update the exclusion whenever a new snapshot is added.
 - Treat `tests/` as first-class repo code; fix findings there instead of
   suppressing them because they are test-only.
-- Keep `README.md` user-facing. Put AI-agent operating rules in `AGENTS.md`,
-  `.github/instructions/`, and repo-local skills.
+- Keep `README.md` user-facing. Put internal automation operating rules in
+  `AGENTS.md`, `.github/instructions/`, and repo-local skills.
+- Keep public-facing repository material professional. Do not expose internal
+  reasoning, private discussions, or transient process notes.
 
 ## Load order
 

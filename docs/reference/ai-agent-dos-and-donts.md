@@ -1,10 +1,13 @@
-# AI Agent Do's and Don'ts
+# Maintainer Operating Rules
 
 Critical: do not spawn, delegate to, or coordinate with multiple AI agents,
 subagents, or separate agent sessions. Work in one session only unless the user
 explicitly revokes this rule in a later instruction. If any AI-agent work is
 already in progress, let it finish fully, then harvest and merge its outputs
 without losing changes before continuing in one session.
+
+Keep public-facing repository material professional. Do not expose internal
+reasoning, private discussions, transient process notes.
 
 This file records the operating rules that were reinforced by the current
 porting work.
@@ -120,3 +123,6 @@ porting work.
 - Do not spawn, delegate to, or coordinate with multiple AI agents, subagents,
   or separate agent sessions unless the critical single-session rule is
   explicitly revoked by the user in a later instruction.
+- Do not expose internal reasoning, private discussions, transient process
+  notes in
+  user-facing docs, release notes, examples, or PR/commit text.

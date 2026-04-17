@@ -19,8 +19,8 @@ Use this skill after any non-trivial change.
 5. `ruff format --check .`
 6. any module-specific build or benchmark check required by the touched files
    and, after native-code changes, rebuild the editable install first
-7. after an AI-agent push, wait for the GitHub workflows on that pushed commit
-   and fix failures before considering the change finished
+7. after an automation-assisted push, wait for the GitHub workflows on that
+   pushed commit and fix failures before considering the change finished
 8. if workflows, CodeQL scope, or pinned tool versions changed, load
    `workflow-supply-chain-maintenance` and verify the exact scanner config or
    version source that justified the edit
@@ -30,6 +30,6 @@ Use this skill after any non-trivial change.
 ## Reporting rule
 
 State exactly which suites ran. Do not imply whole-repo parity when only one
-ported surface was checked. After an AI-agent push, state whether the remote
-workflow set is green for that exact commit. If remote CI fails, inspect the
-exact failing run logs for that repo before changing code.
+ported surface was checked. After an automation-assisted push, state whether
+the remote workflow set is green for that exact commit. If remote CI fails,
+inspect the exact failing run logs for that repo before changing code.
