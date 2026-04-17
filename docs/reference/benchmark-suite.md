@@ -38,11 +38,32 @@ Each benchmark case has:
 - a verification hook that runs before timing.
 
 The native timer calls `ome_zarr_native_bench_core`; the Python timer imports
-only `source_code_v.0.15.0/ome_zarr`. Results must be reported in time terms:
-Python time, native C++ time, time saved per operation, and native C++ time
-reduction. If a ratio is included, label it as native C++ speedup over Python
-using `python_time / native_cpp_time`; never use a shorthand label that omits
-the ratio direction.
+only `source_code_v.0.15.0/ome_zarr`.
+
+Every paired benchmark report must show the direct time measurements before any
+ratio:
+
+1. Python time.
+2. Native C++ time.
+3. Time saved per operation.
+4. Native C++ time reduction.
+5. Native C++ speedup over Python (`python_time / native_cpp_time`).
+
+Use the same operation unit for Python time and native C++ time, such as
+`us/op` or `ms/op`. Compute derived fields from those two times:
+
+- `time_saved = python_time - native_cpp_time`
+- `native_cpp_time_reduction = time_saved / python_time`
+- `native_cpp_speedup_over_python = python_time / native_cpp_time`
+
+Reduction and speedup are different quantities. A `75%` time reduction is a
+`4.0x` native C++ speedup over Python, not a `75%` speedup. A negative time
+saved value means the native C++ path took longer for that case; keep the sign
+visible in the time saved and reduction columns, and report the speedup as a
+ratio below `1.0x`.
+
+Do not use shorthand labels that omit the ratio direction. The accepted ratio
+label is `native C++ speedup over Python (python_time / native_cpp_time)`.
 
 ## Commands
 

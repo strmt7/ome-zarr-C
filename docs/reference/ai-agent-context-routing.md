@@ -1,5 +1,9 @@
 # AI Agent Context Routing
 
+Critical: do not spawn, delegate to, or coordinate with multiple AI agents,
+subagents, or separate agent sessions. Work in one session only unless the user
+explicitly revokes this rule in a later instruction.
+
 Use the smallest correct context for the task. Do not load the whole repo by
 default.
 

@@ -1,5 +1,9 @@
 # AI Agent Skills
 
+Critical: do not spawn, delegate to, or coordinate with multiple AI agents,
+subagents, or separate agent sessions. Work in one session only unless the user
+explicitly revokes this rule in a later instruction.
+
 Repo-local reusable skills live under `.agents/skills/`.
 
 ## Available skills

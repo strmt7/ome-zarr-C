@@ -12,7 +12,8 @@ namespace {
 namespace fs = std::filesystem;
 
 fs::path repo_root() {
-    if (const char* env = std::getenv("OME_ZARR_C_ASSET_ROOT")) {
+    if (const char* env = std::getenv("OME_ZARR_C_ASSET_ROOT");
+        env != nullptr && *env != '\0') {
         return fs::path(env);
     }
 #ifdef OME_ZARR_C_SOURCE_ROOT

@@ -1,5 +1,9 @@
 # Workflow Instructions
 
+Critical: do not spawn, delegate to, or coordinate with multiple AI agents,
+subagents, or separate agent sessions. Work in one session only unless the user
+explicitly revokes this rule in a later instruction.
+
 - Keep CI simple and directly tied to the current repo contract.
 - Protect the frozen snapshot from direct edits.
 - Keep the existing push, pull request, and manual triggers, but make every

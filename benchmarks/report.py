@@ -100,6 +100,15 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
             f"{_format_relative_result(_geometric_mean(relative_ratios))}"
         ),
         (
+            "- Pairing rule: Python and native C++ results are paired by "
+            "benchmark base name after stripping `.python` and `.native`; "
+            "incomplete pairs stop the report."
+        ),
+        (
+            "- Derived fields: `time_saved = python_time - native_cpp_time`; "
+            "native C++ time reduction is `time_saved / python_time`."
+        ),
+        (
             "- Case classification: "
             f"{faster} {summary_label} faster, {equal} roughly equal, "
             f"{slower} {summary_label} slower"
@@ -111,7 +120,9 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
 
     for group in sorted(grouped):
         lines.append(
-            f"- {group}: {_format_relative_result(_geometric_mean(grouped[group]))}"
+            f"- {group} native C++ speedup over Python "
+            f"(`python_time / native_cpp_time`): "
+            f"{_format_relative_result(_geometric_mean(grouped[group]))}"
         )
 
     lines.extend(
@@ -119,7 +130,7 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
             "",
             "## Cases",
             "",
-            "| Case | Variant | Python time | native C++ time | time saved per op | "
+            "| Case | Variant | Python time | native C++ time | time saved | "
             "native C++ time reduction | native C++ speedup over Python "
             "(`python_time / native_cpp_time`) | Status |",
             "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
@@ -128,15 +139,15 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
 
     for row in paired_rows:
         python_median = row["python_median"]
-        converted_median = row["converted_median"]
-        time_saved = python_median - converted_median
-        time_reduction = 1.0 - (converted_median / python_median)
+        native_cpp_median = row["native_cpp_median"]
+        time_saved = python_median - native_cpp_median
+        time_reduction = time_saved / python_median
         lines.append(
             "| "
             f"{row['name']} | "
             f"{_variant_label(str(row['variant']))} | "
             f"{_format_seconds(python_median)} | "
-            f"{_format_seconds(converted_median)} | "
+            f"{_format_seconds(native_cpp_median)} | "
             f"{_format_seconds(time_saved)} | "
             f"{_format_percent(time_reduction * 100.0)} | "
             f"{_format_relative_result(row['relative_ratio'])} | "
@@ -166,8 +177,12 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"Incomplete benchmark pair for {base_name}")
 
         python_median = pair["python"].median()
-        converted_median = pair[converted_variant].median()
-        relative_ratio = python_median / converted_median
+        native_cpp_median = pair[converted_variant].median()
+        if python_median <= 0.0:
+            raise SystemExit(f"Non-positive Python timing for {base_name}")
+        if native_cpp_median <= 0.0:
+            raise SystemExit(f"Non-positive native C++ timing for {base_name}")
+        relative_ratio = python_median / native_cpp_median
         group, _, short_name = base_name.partition(".")
         rows.append(
             {
@@ -175,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
                 "name": short_name,
                 "variant": converted_variant,
                 "python_median": python_median,
-                "converted_median": converted_median,
+                "native_cpp_median": native_cpp_median,
                 "relative_ratio": relative_ratio,
                 "status": _status(relative_ratio, converted_variant),
             }

@@ -8,6 +8,25 @@ licenses. The fixture downloader caches archives and extracted datasets under
 These downloads are benchmark inputs, not repository source files, so the cache
 directory stays gitignored.
 
+## Validation Use
+
+Use fixture verification before timing or real-data claims:
+
+```bash
+.venv/bin/python -m benchmarks.run --suite realdata --verify-only
+```
+
+The verification hook downloads the listed public fixtures when needed, writes
+a local `fixture.json` manifest, and runs the frozen Python oracle and native
+path against the same extracted dataset path. Current real-data checks cover the
+documented `parse_url` / `info` surfaces only.
+
+Real-data evidence must name the dataset ID, source URL, license, command, and
+whether the optional large fixture was enabled. A successful fixture check does
+not prove unrelated reader, writer, mutation, network, or GPU behavior. GPU
+claims also require separate device evidence from `scripts/gpu_capability_probe.py`
+and measured GPU-path timings.
+
 ## Default Fixtures
 
 - `examples_image`

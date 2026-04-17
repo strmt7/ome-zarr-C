@@ -258,8 +258,10 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match fo
 
 That script emits one table with frozen-upstream Python `pyperf` numbers,
 matching standalone-native benchmark numbers for the same touched surface,
-time saved per operation, native C++ time reduction, and native C++ speedup
-over Python using `python_time / native_cpp_time`.
+time saved, native C++ time reduction, and native C++ speedup over Python using
+`python_time / native_cpp_time`. Keep that convention for all new timing
+summaries: show the two measured times first, then the saved time, then
+reduction, then the direct speedup ratio.
 
 For direct time comparison on the real standalone runtime paths touched in the
 current iterations:
@@ -301,8 +303,8 @@ buffer plus shape metadata and returns an owned 5D buffer matching the frozen
 upstream `ome_zarr.data.rgb_to_5d` layout. The caller frees returned memory
 with the matching API free function.
 
-For heavier end-to-end iteration comparisons such as `create`, lower the
-pyperf worker count explicitly so the bounded run stays practical:
+For heavier data-kernel iteration comparisons, lower the pyperf worker count
+explicitly so the bounded run stays practical:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
@@ -358,6 +360,20 @@ For standalone-C++ performance work, also use the native-only CMake benchmark
 tooling. The `pyperf` suite is for paired upstream-vs-native comparison, while
 the native benchmark executable measures pure-native semantic cost directly.
 
+Benchmark summaries should be interpreted in time terms first. Use the same
+unit for Python time and native C++ time, then compute
+`time_saved = python_time - native_cpp_time`, native C++ time reduction as
+`time_saved / python_time`, and native C++ speedup over Python as
+`python_time / native_cpp_time`. A ratio greater than `1.0x` means the native
+C++ path used less time for that case; a ratio below `1.0x` means it used more
+time. Negative saved time and negative reduction are valid regression signals
+and should stay visible.
+
+Native CLI `create` examples are functional parity examples, not create
+performance evidence. Do not claim native C++ `create` performance until a
+registered native benchmark entrypoint is paired with frozen-upstream Python
+timing.
+
 Common benchmark commands:
 
 ```bash
@@ -388,6 +404,8 @@ Refresh the tracked public-API benchmark result snapshot before making a new
 performance claim:
 
 ```bash
+BENCH_ARTIFACT_DIR="${BENCH_ARTIFACT_DIR:-benchmark-artifacts/public-api}"
+mkdir -p "$BENCH_ARTIFACT_DIR"
 .venv/bin/python -m benchmarks.run \
   --suite public-api \
   --fast \
@@ -396,10 +414,10 @@ performance claim:
   --values 1 \
   --warmups 1 \
   --min-time 0.005 \
-  --output /tmp/ome-zarr-c-native-public-api.json
+  --output "$BENCH_ARTIFACT_DIR/public-api.pyperf.json"
 .venv/bin/python -m benchmarks.report \
-  /tmp/ome-zarr-c-native-public-api.json \
-  --markdown-out /tmp/ome-zarr-c-native-public-api.md
+  "$BENCH_ARTIFACT_DIR/public-api.pyperf.json" \
+  --markdown-out "$BENCH_ARTIFACT_DIR/public-api.md"
 ```
 
 For read-only surfaces that print absolute paths, parity tests should run the

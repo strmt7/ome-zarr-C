@@ -89,15 +89,29 @@ For availability-only runs that do not execute external GPU tools:
 .venv/bin/python scripts/gpu_capability_probe.py --skip-command-output --pretty
 ```
 
-Treat `/dev/kfd`, `/dev/dri/renderD*`, `/dev/dxg`, ROCm/HIP command output,
-OpenCL platforms, and Vulkan hardware devices as facts to verify. A software
-renderer such as Vulkan `llvmpipe` is not GPU acceleration. CPU-only builds and
-tests remain the default until a real supported device is visible and parity
-tests compare GPU output against the native CPU path and frozen oracle output.
+Use `--timeout` and `--max-output-bytes` when a host has slow or noisy GPU
+tools. The probe output is evidence input, not proof of acceleration by itself.
+
+Claim rules:
+
+- A device node, installed command, or driver package only proves that the host
+  exposes that fact.
+- Vulkan `llvmpipe` or another software renderer is CPU execution, not GPU
+  acceleration.
+- A VM passthrough hint is not enough unless the runtime also reports a real
+  supported device.
+- Do not describe a run as GPU-backed unless the selected implementation path
+  used that device and produced parity-equivalent output.
+- Do not publish a GPU speedup unless the report names the GPU path, CPU path,
+  host facts from the probe, input fixture, and measured timings.
+
+CPU-only builds and tests remain the default until a real supported device is
+visible and parity tests compare GPU output against the native CPU path and
+frozen oracle output.
 
 ## Run Native Verification
 
-Run the standalone native self-test directly:
+Run the standalone native self-test directly after every native build:
 
 ```bash
 ./build-cpp/ome_zarr_native_selftest
@@ -111,6 +125,28 @@ Or through CTest:
 ```bash
 ctest --test-dir build-cpp --output-on-failure
 ```
+
+These commands verify the compiled native binaries and C ABI smoke coverage.
+They do not prove every public upstream surface, real-data case, or optional GPU
+path. For parity-sensitive changes, also run the narrow Python oracle tests that
+cover the touched behavior and verify the frozen source manifest:
+
+```bash
+.venv/bin/python scripts/frozen_source_manifest.py --verify
+.venv/bin/python -m pytest tests/test_cli_equivalence.py tests/test_utils_equivalence.py
+```
+
+For actual public OME-Zarr data validation, run the real-data verification hook
+before timing:
+
+```bash
+.venv/bin/python -m benchmarks.run --suite realdata --verify-only
+```
+
+That check downloads the documented public fixtures, runs the Python oracle and
+native path against the same fixture paths, and compares the supported
+`parse_url` / `info` surfaces. It is fixture-specific evidence, not blanket
+reader, writer, or GPU coverage.
 
 ## Run Native Benchmarks
 
@@ -172,8 +208,7 @@ benchmark suite separately when you need end-to-end parity-harness timing or
 upstream-versus-port comparison on the same machine.
 
 Benchmark reports must show time terms first: Python time, native C++ time,
-time saved per operation, and native C++ time reduction. If a ratio is
-included, label it as native C++ speedup over Python
+time saved, native C++ time reduction, and native C++ speedup over Python
 (`python_time / native_cpp_time`).
 
 ## Native C ABI Interop

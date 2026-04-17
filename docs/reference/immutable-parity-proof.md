@@ -11,6 +11,12 @@ rechecked later without trusting memory or hand-written summaries.
 - The snapshot protection workflow should reject both direct Git edits to the
   frozen snapshot and manifest mismatches against the committed content hash.
 
+Verify the local checkout before using the frozen snapshot as evidence:
+
+```bash
+.venv/bin/python scripts/frozen_source_manifest.py --verify
+```
+
 ## Immutable parity evidence
 
 Use the smallest proof that matches the surface:
@@ -50,11 +56,50 @@ To keep that boundary enforceable:
 
 ## Recommended workflow
 
-1. Verify the frozen manifest.
-2. Rebuild the editable install after native changes.
-3. Run the narrow differential parity lane.
-4. Record or report the exact suite, fixture, and output form used as proof.
-5. Only then run benchmarks or update conversion-coverage numbers.
+1. Verify the frozen manifest:
+
+   ```bash
+   .venv/bin/python scripts/frozen_source_manifest.py --verify
+   ```
+
+2. Rebuild the development harness and native targets that the proof will use:
+
+   ```bash
+   .venv/bin/python -m pip install -e '.[dev]' --no-build-isolation
+   /usr/local/bin/cmake --build build-cpp -j2
+   ```
+
+3. Check that the converted surface still satisfies the native integrity
+   boundary:
+
+   ```bash
+   .venv/bin/python scripts/check_native_cpp.py --all
+   .venv/bin/python scripts/check_pure_native_cpp.py \
+     --enforce-pure-native-subtree \
+     --report-existing-debt \
+     --baseline-json docs/reference/native-cpp-debt-baseline.json \
+     --fail-on-baseline-regression
+   ```
+
+4. Run the narrowest differential parity lane for the touched surface. Prefer a
+   focused test file or benchmark `--verify-only` command over an unrelated
+   broad run:
+
+   ```bash
+   .venv/bin/python -m pytest -q tests/test_format_equivalence.py
+   .venv/bin/python -m benchmarks.run --suite public-api --verify-only
+   ```
+
+5. Record the proof packet before making a claim: command lines, upstream
+   snapshot manifest verification result, native build identifier or local build
+   directory, suite or test names, fixture path or fixture identifier, and the
+   output form compared.
+
+6. Only then run benchmarks or update conversion-coverage numbers. Benchmark
+   reports should keep the timing convention from
+   `docs/reference/benchmark-suite.md`: Python time, native C++ time, time saved,
+   reduction, and native C++ speedup over Python
+   (`python_time / native_cpp_time`).
 
 ## Reference sources
 

@@ -1,5 +1,16 @@
 # AGENTS guide
 
+## Critical single-session rule
+
+Do not spawn, delegate to, or coordinate with multiple AI agents, subagents, or
+separate agent sessions. All AI work in this repository must stay in one
+session unless the user explicitly revokes this rule in a later instruction.
+Never bypass, weaken, or disregard this rule to save time or parallelize work.
+
+If any AI-agent work is already in progress when this rule is read, let that
+work finish fully, then harvest and merge its outputs without losing changes
+before continuing in a single session.
+
 This repository incrementally ports the frozen `ome/ome-zarr-py` `v0.15.0`
 snapshot to C++ without modifying the snapshot itself.
 
@@ -24,7 +35,10 @@ standalone C++ implementation under `cpp/native/`, `cpp/api/`, and
 6. Use the latest stable tool and dependency versions when the repo does not
    pin something stricter, but only keep an upgrade if exact parity is still
    proven on the upgraded stack.
-7. Do not use background agents or subagents unless the user explicitly asks.
+7. Do not spawn, delegate to, or coordinate with multiple AI agents, subagents,
+   or separate agent sessions. Work in one session only unless the user
+   explicitly revokes the critical single-session rule above in a later
+   instruction.
 8. Before making any claim about branches, default branch, remotes, tags, or
    GitHub repo state, verify both local Git state and remote GitHub state.
 9. After any push performed by an AI agent, wait for all repository workflows on

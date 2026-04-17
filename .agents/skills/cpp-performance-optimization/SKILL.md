@@ -22,7 +22,9 @@ container choices, or benchmark claims.
 ## Workflow
 
 1. Start from measured benchmark output, not intuition.
-2. Rank cases by both absolute runtime and `python / cpp` slowdown.
+2. Rank cases by absolute Python/native C++ runtime and native C++ speedup
+   over Python (`python_time / native_cpp_time`), treating ratios below `1.0x`
+   as regressions.
 3. Fix the biggest structural cost first:
    - choose the cheapest correct container or native layout for the access
      pattern
@@ -58,6 +60,9 @@ container choices, or benchmark claims.
    serialization semantics. Performance does not justify divergence.
 14. Rebuild, rerun the narrow parity lane, then rerun the same benchmark case on
    the same machine class before claiming a speedup.
+15. Report benchmark summaries in this order: Python time, native C++ time,
+   time saved, native C++ time reduction, then native C++ speedup over Python
+   (`python_time / native_cpp_time`).
 
 ## Guardrails
 
@@ -71,6 +76,9 @@ container choices, or benchmark claims.
 - Do not apply PGO, host-specific flags, or parallel execution settings as a
   blanket repo claim unless the exact build profile and benchmark scope are
   stated.
+- Do not claim native C++ `create` performance unless a parity-proven,
+  registered native benchmark entrypoint for that surface exists and is paired
+  with frozen-upstream Python timing.
 - Do not replace a branch with branchless logic if that changes exception
   timing, overflow behavior, or short-circuit semantics.
 - Do not trade away pure-native structure by moving semantics back into Python

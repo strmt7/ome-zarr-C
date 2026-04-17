@@ -2,7 +2,10 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <fstream>
@@ -23,6 +26,7 @@
 #include "../native/axes.hpp"
 #include "../native/cli.hpp"
 #include "../native/conversions.hpp"
+#include "../native/create_assets.hpp"
 #include "../native/create_runtime.hpp"
 #include "../native/csv.hpp"
 #include "../native/dask_utils.hpp"
@@ -69,6 +73,33 @@ public:
 
 private:
     std::filesystem::path path_;
+};
+
+class EnvironmentVariableGuard {
+public:
+    explicit EnvironmentVariableGuard(std::string name)
+        : name_(std::move(name)) {
+        const char* raw = std::getenv(name_.c_str());
+        if (raw != nullptr) {
+            original_value_ = std::string(raw);
+        }
+    }
+
+    ~EnvironmentVariableGuard() {
+        if (original_value_.has_value()) {
+            setenv(name_.c_str(), original_value_->c_str(), 1);
+        } else {
+            unsetenv(name_.c_str());
+        }
+    }
+
+    void set(const std::string& value) const {
+        setenv(name_.c_str(), value.c_str(), 1);
+    }
+
+private:
+    std::string name_;
+    std::optional<std::string> original_value_;
 };
 
 std::vector<char> zstd_compress_bytes(const std::vector<char>& payload) {
@@ -139,6 +170,15 @@ void require_eq(const Left& left, const Right& right, std::string_view message) 
 
 void require(bool condition, std::string_view message) {
     if (!condition) {
+        throw std::runtime_error(std::string(message));
+    }
+}
+
+void require_contains(
+    std::string_view text,
+    std::string_view needle,
+    std::string_view message) {
+    if (text.find(needle) == std::string_view::npos) {
         throw std::runtime_error(std::string(message));
     }
 }
@@ -304,6 +344,237 @@ void require_created_sample_label_downloaded(
         version,
         label_name,
         default_label_name);
+}
+
+struct SelftestTarEntry {
+    std::string path;
+    char typeflag;
+    std::vector<char> payload;
+};
+
+std::vector<char> byte_payload(std::string_view text) {
+    return std::vector<char>(text.begin(), text.end());
+}
+
+void write_tar_text_field(
+    std::array<char, 512>& header,
+    const std::size_t offset,
+    const std::size_t width,
+    std::string_view value) {
+    if (value.size() > width) {
+        throw std::runtime_error("selftest tar field is too long");
+    }
+    std::copy(value.begin(), value.end(), header.begin() + static_cast<std::ptrdiff_t>(offset));
+}
+
+void write_tar_octal_field(
+    std::array<char, 512>& header,
+    const std::size_t offset,
+    const std::size_t width,
+    const std::uint64_t value) {
+    std::array<char, 32> field{};
+    const int digit_count = static_cast<int>(width - 1U);
+    const int written = std::snprintf(
+        field.data(),
+        field.size(),
+        "%0*llo",
+        digit_count,
+        static_cast<unsigned long long>(value));
+    if (written != digit_count) {
+        throw std::runtime_error("selftest tar octal field overflow");
+    }
+    std::copy(
+        field.begin(),
+        field.begin() + static_cast<std::ptrdiff_t>(width),
+        header.begin() + static_cast<std::ptrdiff_t>(offset));
+}
+
+std::uint64_t selftest_tar_checksum(const std::array<char, 512>& header) {
+    std::uint64_t checksum = 0U;
+    for (std::size_t index = 0; index < header.size(); ++index) {
+        checksum += static_cast<unsigned char>(
+            index >= 148U && index < 156U ? ' ' : header[index]);
+    }
+    return checksum;
+}
+
+void finalize_selftest_tar_checksum(std::array<char, 512>& header) {
+    std::fill(header.begin() + 148, header.begin() + 156, ' ');
+    const auto checksum = selftest_tar_checksum(header);
+    std::array<char, 8> field{};
+    const int written = std::snprintf(
+        field.data(),
+        field.size(),
+        "%06llo",
+        static_cast<unsigned long long>(checksum));
+    if (written != 6) {
+        throw std::runtime_error("selftest tar checksum field overflow");
+    }
+    std::copy(field.begin(), field.begin() + 6, header.begin() + 148);
+    header[154] = '\0';
+    header[155] = ' ';
+}
+
+std::array<char, 512> selftest_tar_header(
+    std::string_view path,
+    const char typeflag,
+    const std::uint64_t payload_size) {
+    std::array<char, 512> header{};
+    write_tar_text_field(header, 0, 100, path);
+    write_tar_octal_field(header, 100, 8, typeflag == '5' ? 0755U : 0644U);
+    write_tar_octal_field(header, 108, 8, 0U);
+    write_tar_octal_field(header, 116, 8, 0U);
+    write_tar_octal_field(header, 124, 12, payload_size);
+    write_tar_octal_field(header, 136, 12, 0U);
+    header[156] = typeflag;
+    write_tar_text_field(header, 257, 6, "ustar");
+    write_tar_text_field(header, 263, 2, "00");
+    finalize_selftest_tar_checksum(header);
+    return header;
+}
+
+std::filesystem::path custom_asset_archive_path(
+    const std::filesystem::path& asset_root,
+    const std::string& method_name,
+    const std::string& version) {
+    std::string version_tag;
+    version_tag.reserve(version.size());
+    for (const char ch : version) {
+        if (ch != '.') {
+            version_tag.push_back(ch);
+        }
+    }
+    return asset_root / "cpp" / "assets" / "create" /
+        (method_name + "_v" + version_tag + "_seed0.tar");
+}
+
+void write_selftest_tar_archive(
+    const std::filesystem::path& archive_path,
+    const std::vector<SelftestTarEntry>& entries,
+    const bool write_end_marker = true) {
+    std::filesystem::create_directories(archive_path.parent_path());
+    std::ofstream output(archive_path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error("Unable to write selftest tar archive");
+    }
+    const std::array<char, 512> zero_block{};
+    for (const auto& entry : entries) {
+        const auto declared_size = entry.typeflag == '5'
+            ? std::uint64_t{0}
+            : static_cast<std::uint64_t>(entry.payload.size());
+        const auto header = selftest_tar_header(
+            entry.path,
+            entry.typeflag,
+            declared_size);
+        output.write(header.data(), static_cast<std::streamsize>(header.size()));
+        if (!entry.payload.empty()) {
+            output.write(
+                entry.payload.data(),
+                static_cast<std::streamsize>(entry.payload.size()));
+        }
+        const auto padding = (512U - (declared_size % 512U)) % 512U;
+        if (padding > 0U) {
+            output.write(zero_block.data(), static_cast<std::streamsize>(padding));
+        }
+    }
+    if (write_end_marker) {
+        output.write(zero_block.data(), static_cast<std::streamsize>(zero_block.size()));
+        output.write(zero_block.data(), static_cast<std::streamsize>(zero_block.size()));
+    }
+}
+
+void write_raw_selftest_archive(
+    const std::filesystem::path& archive_path,
+    std::string_view payload) {
+    std::filesystem::create_directories(archive_path.parent_path());
+    std::ofstream output(archive_path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error("Unable to write malformed selftest tar archive");
+    }
+    output.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+}
+
+void write_truncated_payload_tar_archive(const std::filesystem::path& archive_path) {
+    std::filesystem::create_directories(archive_path.parent_path());
+    std::ofstream output(archive_path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error("Unable to write truncated selftest tar archive");
+    }
+    const auto header = selftest_tar_header("labels/zarr.json", '0', 5U);
+    output.write(header.data(), static_cast<std::streamsize>(header.size()));
+}
+
+void write_bad_checksum_tar_archive(const std::filesystem::path& archive_path) {
+    std::filesystem::create_directories(archive_path.parent_path());
+    std::ofstream output(archive_path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error("Unable to write bad-checksum selftest tar archive");
+    }
+    auto header = selftest_tar_header("labels/zarr.json", '0', 0U);
+    header[0] = 'm';
+    const std::array<char, 512> zero_block{};
+    output.write(header.data(), static_cast<std::streamsize>(header.size()));
+    output.write(zero_block.data(), static_cast<std::streamsize>(zero_block.size()));
+    output.write(zero_block.data(), static_cast<std::streamsize>(zero_block.size()));
+}
+
+void write_invalid_size_tar_archive(const std::filesystem::path& archive_path) {
+    std::filesystem::create_directories(archive_path.parent_path());
+    std::ofstream output(archive_path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error("Unable to write invalid-size selftest tar archive");
+    }
+    auto header = selftest_tar_header("labels/zarr.json", '0', 0U);
+    std::fill(header.begin() + 124, header.begin() + 136, '\0');
+    write_tar_text_field(header, 124, 11, "0000000000x");
+    finalize_selftest_tar_checksum(header);
+    const std::array<char, 512> zero_block{};
+    output.write(header.data(), static_cast<std::streamsize>(header.size()));
+    output.write(zero_block.data(), static_cast<std::streamsize>(zero_block.size()));
+    output.write(zero_block.data(), static_cast<std::streamsize>(zero_block.size()));
+}
+
+void require_custom_asset_archive_rejected(
+    const std::filesystem::path& fixture_root,
+    const std::string& case_name,
+    const std::function<void(const std::filesystem::path&)>& write_archive,
+    std::string_view expected_message,
+    const std::optional<std::filesystem::path>& forbidden_path = std::nullopt) {
+    if (forbidden_path.has_value()) {
+        std::error_code error;
+        std::filesystem::remove(forbidden_path.value(), error);
+    }
+    const auto asset_root = fixture_root / ("custom-asset-root-" + case_name);
+    const auto archive_path = custom_asset_archive_path(asset_root, "coins", "0.5");
+    write_archive(archive_path);
+
+    EnvironmentVariableGuard asset_root_guard("OME_ZARR_C_ASSET_ROOT");
+    asset_root_guard.set(asset_root.generic_string());
+    const auto output_root = fixture_root / ("native-create-" + case_name + ".zarr");
+    require_throws<std::runtime_error>(
+        [&] {
+            local_create_sample(
+                output_root.generic_string(),
+                "coins",
+                "custom_cells",
+                "0.5",
+                CreateColorMode::keep_asset_seed);
+        },
+        [&](const std::runtime_error& exc) {
+            require_contains(
+                exc.what(),
+                expected_message,
+                "custom asset invalid tar error message");
+        },
+        "custom asset invalid tar should fail");
+    if (forbidden_path.has_value()) {
+        require(
+            !std::filesystem::exists(forbidden_path.value()),
+            "unsafe custom tar path was not extracted");
+    }
+    require(
+        !std::filesystem::exists(output_root),
+        "failed custom asset extraction left partial output");
 }
 
 template <typename T>
@@ -1098,6 +1369,132 @@ void test_io_and_utils() {
             "coins",
             custom_download);
     }
+
+    {
+        const auto source_asset = create_asset_spec("coins", "0.5");
+        const auto custom_asset_root = fixture_root / "custom-asset-root";
+        const auto custom_archive =
+            custom_asset_archive_path(custom_asset_root, "coins", "0.5");
+        std::filesystem::create_directories(custom_archive.parent_path());
+        std::filesystem::copy_file(
+            source_asset.archive_path,
+            custom_archive,
+            std::filesystem::copy_options::overwrite_existing);
+
+        EnvironmentVariableGuard asset_root_guard("OME_ZARR_C_ASSET_ROOT");
+        asset_root_guard.set(custom_asset_root.generic_string());
+        const auto custom_asset_create_root =
+            fixture_root / "native-create-custom-asset-root.zarr";
+        local_create_sample(
+            custom_asset_create_root.generic_string(),
+            "coins",
+            "custom_cells",
+            "0.5",
+            CreateColorMode::keep_asset_seed);
+        require_created_sample_label_rewritten(
+            custom_asset_create_root,
+            "0.5",
+            "custom_cells",
+            "coins");
+    }
+
+    {
+        EnvironmentVariableGuard asset_root_guard("OME_ZARR_C_ASSET_ROOT");
+        asset_root_guard.set("");
+        const auto empty_asset_root_create =
+            fixture_root / "native-create-empty-custom-asset-root.zarr";
+        local_create_sample(
+            empty_asset_root_create.generic_string(),
+            "coins",
+            "empty_root_cells",
+            "0.5",
+            CreateColorMode::keep_asset_seed);
+        require_created_sample_label_rewritten(
+            empty_asset_root_create,
+            "0.5",
+            "empty_root_cells",
+            "coins");
+    }
+
+    {
+        const auto traversal_escape = fixture_root / "path-traversal-escape.txt";
+        require_custom_asset_archive_rejected(
+            fixture_root,
+            "path-traversal",
+            [](const std::filesystem::path& archive_path) {
+                write_selftest_tar_archive(
+                    archive_path,
+                    {SelftestTarEntry{
+                        "../path-traversal-escape.txt",
+                        '0',
+                        byte_payload("bad")}});
+            },
+            "Unsafe tar entry path",
+            traversal_escape);
+    }
+    {
+        const auto absolute_escape = fixture_root / "absolute-escape.txt";
+        require_custom_asset_archive_rejected(
+            fixture_root,
+            "absolute-path",
+            [&](const std::filesystem::path& archive_path) {
+                write_selftest_tar_archive(
+                    archive_path,
+                    {SelftestTarEntry{
+                        absolute_escape.generic_string(),
+                        '0',
+                        byte_payload("bad")}});
+            },
+            "Unsafe tar entry path",
+            absolute_escape);
+    }
+    require_custom_asset_archive_rejected(
+        fixture_root,
+        "root-name-path",
+        [](const std::filesystem::path& archive_path) {
+            write_selftest_tar_archive(
+                archive_path,
+                {SelftestTarEntry{"C:escape.txt", '0', byte_payload("bad")}});
+        },
+        "Unsafe tar entry path");
+    require_custom_asset_archive_rejected(
+        fixture_root,
+        "truncated-payload",
+        [](const std::filesystem::path& archive_path) {
+            write_truncated_payload_tar_archive(archive_path);
+        },
+        "Truncated tar payload");
+    require_custom_asset_archive_rejected(
+        fixture_root,
+        "missing-end-marker",
+        [](const std::filesystem::path& archive_path) {
+            write_selftest_tar_archive(
+                archive_path,
+                {SelftestTarEntry{"labels/zarr.json", '0', byte_payload("{}")}},
+                false);
+        },
+        "Missing tar end marker");
+    require_custom_asset_archive_rejected(
+        fixture_root,
+        "bad-checksum",
+        [](const std::filesystem::path& archive_path) {
+            write_bad_checksum_tar_archive(archive_path);
+        },
+        "Invalid tar header checksum");
+    require_custom_asset_archive_rejected(
+        fixture_root,
+        "invalid-size",
+        [](const std::filesystem::path& archive_path) {
+            write_invalid_size_tar_archive(archive_path);
+        },
+        "Invalid tar size field");
+    require_custom_asset_archive_rejected(
+        fixture_root,
+        "malformed-size",
+        [](const std::filesystem::path& archive_path) {
+            write_raw_selftest_archive(archive_path, "bad");
+        },
+        "Malformed tar archive size");
 
     const auto scale_input = fixture_root / "scale-input.zarr";
     std::vector<std::uint16_t> scale_values(64);

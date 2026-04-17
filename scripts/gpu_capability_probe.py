@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import platform
+import re
 import shutil
 import stat
 import subprocess
@@ -57,6 +59,43 @@ DEFAULT_COMMAND_SPECS = (
     CommandSpec("Vulkan", "vulkaninfo", ("--summary",)),
 )
 
+DRM_DEVICE_SYSFS_FIELDS = (
+    "vendor",
+    "device",
+    "subsystem_vendor",
+    "subsystem_device",
+    "revision",
+    "class",
+)
+DRM_ENTRY_SYSFS_FIELDS = ("dev", "status")
+OPENCL_SUMMARY_FIELDS = (
+    "Number of platforms",
+    "Platform Name",
+    "Device Name",
+    "Device Type",
+)
+VULKAN_DEVICE_FIELDS = {
+    "apiVersion": "api_version",
+    "driverVersion": "driver_version",
+    "vendorID": "vendor_id",
+    "deviceID": "device_id",
+    "deviceType": "device_type",
+    "deviceName": "device_name",
+}
+VULKAN_SOFTWARE_RENDERER_TERMS = (
+    "lavapipe",
+    "llvmpipe",
+    "softpipe",
+    "software rasterizer",
+    "swiftshader",
+)
+ALIGNED_FIELD_RE = re.compile(
+    r"^\s*(?P<label>[A-Za-z0-9#][A-Za-z0-9# /()._-]*?)\s{2,}(?P<value>\S.*)$"
+)
+VULKAN_GPU_RE = re.compile(r"^\s*GPU(?P<index>\d+):\s*$")
+VULKAN_ASSIGNMENT_RE = re.compile(
+    r"^\s*(?P<key>[A-Za-z][A-Za-z0-9_]*)\s*=\s*(?P<value>.+?)\s*$"
+)
 VIRTUALIZATION_TERMS = (
     "containerd",
     "docker",
@@ -142,6 +181,44 @@ def _read_first_line(path: Path, *, max_bytes: int = 512) -> dict[str, Any]:
     return fact
 
 
+def _first_int(value: str) -> int | None:
+    match = re.search(r"\d+", value)
+    if match is None:
+        return None
+    return int(match.group(0))
+
+
+def _unique_preserving_order(values: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        stripped = value.strip()
+        if stripped and stripped not in seen:
+            seen.add(stripped)
+            unique.append(stripped)
+    return unique
+
+
+def _extract_aligned_fields(
+    text: str,
+    labels: Sequence[str],
+) -> dict[str, list[str]]:
+    values: dict[str, list[str]] = {label: [] for label in labels}
+    wanted = set(labels)
+    for line in text.splitlines():
+        match = ALIGNED_FIELD_RE.match(line.rstrip())
+        if match is None:
+            continue
+        label = " ".join(match.group("label").split())
+        if label in wanted:
+            values[label].append(match.group("value").strip())
+    return {
+        label: _unique_preserving_order(field_values)
+        for label, field_values in values.items()
+        if field_values
+    }
+
+
 def _observed_terms(text: str) -> list[str]:
     lowered = text.lower()
     return [term for term in VIRTUALIZATION_TERMS if term in lowered]
@@ -207,14 +284,15 @@ def path_fact(path: Path) -> dict[str, Any]:
 def _drm_sysfs_fact(entry_name: str, sys_root: Path) -> dict[str, Any]:
     drm_root = sys_root / "class" / "drm" / entry_name
     fact = path_fact(drm_root)
+    for field in DRM_ENTRY_SYSFS_FIELDS:
+        fact[field] = _read_first_line(drm_root / field)
     device_root = drm_root / "device"
-    fact["device"] = {
-        "path": str(device_root),
-        "vendor": _read_first_line(device_root / "vendor"),
-        "device": _read_first_line(device_root / "device"),
-        "uevent": _read_text(device_root / "uevent", max_bytes=4096),
-        "driver": path_fact(device_root / "driver"),
-    }
+    device: dict[str, Any] = {"path": str(device_root)}
+    for field in DRM_DEVICE_SYSFS_FIELDS:
+        device[field] = _read_first_line(device_root / field)
+    device["uevent"] = _read_text(device_root / "uevent", max_bytes=4096)
+    device["driver"] = path_fact(device_root / "driver")
+    fact["device"] = device
     return fact
 
 
@@ -316,11 +394,108 @@ def probe_virtualization(config: ProbeConfig) -> dict[str, Any]:
     }
 
 
+def _summarize_opencl_output(stdout: str, source_truncated: bool) -> dict[str, Any]:
+    fields = _extract_aligned_fields(stdout, OPENCL_SUMMARY_FIELDS)
+    summary: dict[str, Any] = {"source": "stdout", "source_truncated": source_truncated}
+
+    platform_counts = fields.get("Number of platforms", [])
+    if platform_counts:
+        platform_count = _first_int(platform_counts[0])
+        if platform_count is not None:
+            summary["platform_count"] = platform_count
+        else:
+            summary["platform_count_raw"] = platform_counts[0]
+    if platform_names := fields.get("Platform Name"):
+        summary["platform_names"] = platform_names
+    if device_names := fields.get("Device Name"):
+        summary["device_names"] = device_names
+    if device_types := fields.get("Device Type"):
+        summary["device_types"] = device_types
+
+    return summary if len(summary) > 2 else {}
+
+
+def _vulkan_software_indicators(device: Mapping[str, Any]) -> list[str]:
+    haystack = " ".join(
+        str(device.get(field, "")) for field in ("device_name", "device_type")
+    ).lower()
+    indicators = [term for term in VULKAN_SOFTWARE_RENDERER_TERMS if term in haystack]
+    if "physical_device_type_cpu" in haystack:
+        indicators.append("cpu_device_type")
+    return _unique_preserving_order(indicators)
+
+
+def _summarize_vulkan_output(stdout: str, source_truncated: bool) -> dict[str, Any]:
+    summary: dict[str, Any] = {"source": "stdout", "source_truncated": source_truncated}
+    devices: list[dict[str, Any]] = []
+    current_device: dict[str, Any] | None = None
+
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Vulkan Instance Version:"):
+            summary["instance_version"] = stripped.partition(":")[2].strip()
+            continue
+
+        gpu_match = VULKAN_GPU_RE.match(line)
+        if gpu_match is not None:
+            current_device = {"index": int(gpu_match.group("index"))}
+            devices.append(current_device)
+            continue
+
+        if current_device is None:
+            continue
+        assignment_match = VULKAN_ASSIGNMENT_RE.match(line)
+        if assignment_match is None:
+            continue
+        key = assignment_match.group("key")
+        if key in VULKAN_DEVICE_FIELDS:
+            current_device[VULKAN_DEVICE_FIELDS[key]] = assignment_match.group(
+                "value"
+            ).strip()
+
+    for device in devices:
+        if indicators := _vulkan_software_indicators(device):
+            device["software_renderer_indicators"] = indicators
+    if devices:
+        summary["physical_devices"] = devices
+
+    return summary if len(summary) > 2 else {}
+
+
+def _summarize_command_output(
+    spec: CommandSpec,
+    output: Mapping[str, Any],
+) -> dict[str, Any]:
+    if not output.get("executed"):
+        return {}
+    stdout = output.get("stdout")
+    if not isinstance(stdout, str) or not stdout:
+        return {}
+
+    source_truncated = bool(output.get("stdout_truncated"))
+    if spec.name == "clinfo":
+        return _summarize_opencl_output(stdout, source_truncated)
+    if spec.name == "vulkaninfo":
+        return _summarize_vulkan_output(stdout, source_truncated)
+    return {}
+
+
 def _run_safe_command(
     command: Sequence[str],
     config: ProbeConfig,
     runner: CommandRunner,
 ) -> dict[str, Any]:
+    if (
+        not math.isfinite(config.command_timeout_seconds)
+        or config.command_timeout_seconds <= 0
+    ):
+        return {
+            "executed": False,
+            "command": list(command),
+            "reason": "invalid_timeout",
+            "timeout_seconds": config.command_timeout_seconds,
+        }
+
     try:
         completed = runner(
             list(command),
@@ -404,6 +579,8 @@ def probe_commands(
             result["output"] = _run_safe_command(
                 [command_path, *spec.safe_args], config, runner
             )
+            if summary := _summarize_command_output(spec, result["output"]):
+                result["output"]["summary"] = summary
         results.append(result)
     return results
 
@@ -467,8 +644,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="pretty-print JSON output",
     )
     args = parser.parse_args(argv)
-    if args.timeout <= 0:
-        parser.error("--timeout must be greater than zero")
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        parser.error("--timeout must be a finite number greater than zero")
     if args.max_output_bytes <= 0:
         parser.error("--max-output-bytes must be greater than zero")
     return args
