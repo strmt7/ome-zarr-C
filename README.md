@@ -372,7 +372,7 @@ The suite now has three layers:
 
 - `core`: standalone-native-qualified kernels and deterministic helpers
 - `public-api`: native-qualified documented public API timing subset
-- `realdata`: paired `parse_url`/`info`/reader timings on public OME-Zarr data
+- `realdata`: paired `parse_url`/`info` timings on public OME-Zarr data
 
 The real-data suite downloads public benchmark fixtures into
 `.benchmarks-fixtures/` by default, or into `OME_ZARR_BENCH_FIXTURE_ROOT` when

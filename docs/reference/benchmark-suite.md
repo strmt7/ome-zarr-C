@@ -115,9 +115,9 @@ Tracked result artifacts under `benchmarks/results/` must reflect the current
 benchmark architecture. Old result files from deleted benchmark paths must be
 removed instead of left as historical-looking current data.
 
-No tracked benchmark result snapshot is currently committed after retiring the
-old Python package-path benchmark layer. Generate a fresh snapshot before
-making any performance claim.
+The current tracked public-API result summary lives in
+`docs/reference/public-api-benchmark-results.md`. Refresh that summary before
+making a new public-API performance claim.
 
 ## Fixture Provenance
 

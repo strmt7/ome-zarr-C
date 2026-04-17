@@ -192,6 +192,120 @@ void require_throws(Callable&& callable, std::string_view message) {
         message);
 }
 
+nlohmann::ordered_json read_selftest_json(const std::filesystem::path& path) {
+    std::ifstream stream(path);
+    if (!stream) {
+        throw std::runtime_error("Unable to open selftest JSON: " + path.string());
+    }
+    return nlohmann::ordered_json::parse(stream);
+}
+
+std::filesystem::path sample_labels_group_metadata_path(
+    const std::filesystem::path& root,
+    const std::string& version) {
+    if (version == "0.4") {
+        return root / "labels" / ".zattrs";
+    }
+    return root / "labels" / "zarr.json";
+}
+
+std::filesystem::path sample_label_group_metadata_path(
+    const std::filesystem::path& root,
+    const std::string& version,
+    const std::string& label_name) {
+    if (version == "0.4") {
+        return root / "labels" / label_name / ".zattrs";
+    }
+    return root / "labels" / label_name / "zarr.json";
+}
+
+std::filesystem::path sample_label_chunk_path(
+    const std::filesystem::path& root,
+    const std::string& version,
+    const std::string& label_name) {
+    if (version == "0.4") {
+        return root / "labels" / label_name / "s0" / "0" / "0";
+    }
+    return root / "labels" / label_name / "s0" / "c" / "0" / "0";
+}
+
+void require_created_sample_label_rewritten(
+    const std::filesystem::path& root,
+    const std::string& version,
+    const std::string& label_name,
+    const std::string& default_label_name,
+    const std::optional<std::string>& stale_label_name = std::nullopt) {
+    require(
+        std::filesystem::exists(root / "labels" / label_name),
+        "local create wrote rewritten label path");
+    require(
+        std::filesystem::exists(sample_label_group_metadata_path(root, version, label_name)),
+        "local create wrote rewritten label metadata");
+    require(
+        std::filesystem::exists(sample_label_chunk_path(root, version, label_name)),
+        "local create wrote rewritten label chunk");
+    if (label_name != default_label_name) {
+        require(
+            !std::filesystem::exists(root / "labels" / default_label_name),
+            "local create did not write default label path");
+    }
+    if (stale_label_name.has_value()) {
+        require(
+            !std::filesystem::exists(root / "labels" / stale_label_name.value()),
+            "repeated local create did not reuse stale label path");
+    }
+
+    const auto labels_metadata =
+        read_selftest_json(sample_labels_group_metadata_path(root, version));
+    const nlohmann::ordered_json* labels = nullptr;
+    if (version == "0.4") {
+        labels = &labels_metadata.at("labels");
+    } else {
+        labels = &labels_metadata.at("attributes").at("ome").at("labels");
+    }
+    require(labels->is_array(), "local create labels metadata array");
+    require_eq(labels->size(), std::size_t{1}, "local create labels metadata count");
+    require_eq(
+        labels->at(0).get<std::string>(),
+        label_name,
+        "local create labels metadata patched");
+
+    const auto label_metadata =
+        read_selftest_json(sample_label_group_metadata_path(root, version, label_name));
+    const nlohmann::ordered_json* multiscales = nullptr;
+    if (version == "0.4") {
+        multiscales = &label_metadata.at("multiscales");
+    } else {
+        multiscales = &label_metadata.at("attributes").at("ome").at("multiscales");
+    }
+    require(multiscales->is_array(), "local create label multiscales metadata array");
+    require_eq(
+        multiscales->at(0).at("name").get<std::string>(),
+        "/labels/" + label_name,
+        "local create label multiscales name patched");
+}
+
+void require_created_sample_label_downloaded(
+    const std::filesystem::path& output_root,
+    const std::string& source_directory_name,
+    const std::string& version,
+    const std::string& label_name,
+    const std::string& default_label_name,
+    const LocalDownloadResult& download_result) {
+    require_eq(
+        download_result.listed_paths,
+        std::vector<std::string>{
+            source_directory_name,
+            source_directory_name + "/labels",
+            source_directory_name + "/labels/" + label_name},
+        "local download listed rewritten label paths");
+    require_created_sample_label_rewritten(
+        output_root / source_directory_name,
+        version,
+        label_name,
+        default_label_name);
+}
+
 template <typename T>
 const T& require_variant(const CsvValue& value, std::string_view message) {
     if (!std::holds_alternative<T>(value)) {
@@ -880,6 +994,109 @@ void test_io_and_utils() {
                 created_download_root / "native-create-v05.zarr" / "labels" / "coins" /
                 "s0" / "c" / "0" / "0"),
             "local download copied label chunks");
+    }
+
+    const auto create_custom_v05_first = fixture_root / "native-create-v05-cells.zarr";
+    local_create_sample(
+        create_custom_v05_first.generic_string(),
+        "coins",
+        "cells",
+        "0.5",
+        CreateColorMode::keep_asset_seed);
+    require_created_sample_label_rewritten(
+        create_custom_v05_first,
+        "0.5",
+        "cells",
+        "coins");
+    const auto create_custom_v05_second = fixture_root / "native-create-v05-nuclei.zarr";
+    local_create_sample(
+        create_custom_v05_second.generic_string(),
+        "coins",
+        "nuclei",
+        "0.5",
+        CreateColorMode::keep_asset_seed);
+    require_created_sample_label_rewritten(
+        create_custom_v05_second,
+        "0.5",
+        "nuclei",
+        "coins",
+        std::string("cells"));
+    {
+        const auto custom_download_root = fixture_root / "downloads-created-custom-v05";
+        const auto custom_download = local_download_copy(
+            create_custom_v05_second.generic_string(),
+            custom_download_root.generic_string());
+        require_created_sample_label_downloaded(
+            custom_download_root,
+            create_custom_v05_second.filename().generic_string(),
+            "0.5",
+            "nuclei",
+            "coins",
+            custom_download);
+    }
+
+    const auto create_custom_v05_repeated = fixture_root / "native-create-v05-repeated.zarr";
+    local_create_sample(
+        create_custom_v05_repeated.generic_string(),
+        "coins",
+        "cells",
+        "0.5",
+        CreateColorMode::keep_asset_seed);
+    require_created_sample_label_rewritten(
+        create_custom_v05_repeated,
+        "0.5",
+        "cells",
+        "coins");
+    local_create_sample(
+        create_custom_v05_repeated.generic_string(),
+        "coins",
+        "nuclei",
+        "0.5",
+        CreateColorMode::keep_asset_seed);
+    require_created_sample_label_rewritten(
+        create_custom_v05_repeated,
+        "0.5",
+        "nuclei",
+        "coins",
+        std::string("cells"));
+
+    const auto create_custom_v04_first = fixture_root / "native-create-v04-cells.zarr";
+    local_create_sample(
+        create_custom_v04_first.generic_string(),
+        "coins",
+        "cells",
+        "0.4",
+        CreateColorMode::keep_asset_seed);
+    require_created_sample_label_rewritten(
+        create_custom_v04_first,
+        "0.4",
+        "cells",
+        "coins");
+    const auto create_custom_v04_second = fixture_root / "native-create-v04-nuclei.zarr";
+    local_create_sample(
+        create_custom_v04_second.generic_string(),
+        "coins",
+        "nuclei",
+        "0.4",
+        CreateColorMode::keep_asset_seed);
+    require_created_sample_label_rewritten(
+        create_custom_v04_second,
+        "0.4",
+        "nuclei",
+        "coins",
+        std::string("cells"));
+    {
+        const auto custom_download_root = fixture_root / "downloads-created-custom-v04";
+        const auto custom_download = local_download_copy(
+            create_custom_v04_second.generic_string(),
+            custom_download_root.generic_string());
+        require_created_sample_label_downloaded(
+            custom_download_root,
+            create_custom_v04_second.filename().generic_string(),
+            "0.4",
+            "nuclei",
+            "coins",
+            custom_download);
     }
 
     const auto scale_input = fixture_root / "scale-input.zarr";

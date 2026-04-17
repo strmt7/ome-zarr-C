@@ -7,11 +7,15 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -25,6 +29,12 @@ namespace {
 
 namespace fs = std::filesystem;
 using json = nlohmann::ordered_json;
+constexpr std::uint64_t max_cached_tar_archive_bytes = 8U * 1024U * 1024U;
+
+struct ArchiveMetadata {
+    std::uint64_t byte_size;
+    fs::file_time_type modified_time;
+};
 
 std::string trim_nul_terminated(std::string_view text) {
     const auto end = text.find('\0');
@@ -55,6 +65,25 @@ bool block_is_zeroed(const std::array<char, 512>& block) {
         block.begin(),
         block.end(),
         [](const char value) { return value == '\0'; });
+}
+
+struct TarEntry {
+    enum class Kind { directory, file };
+
+    Kind kind;
+    std::string path;
+    std::vector<char> payload;
+};
+
+struct CachedTarArchive {
+    std::uint64_t byte_size;
+    fs::file_time_type modified_time;
+    std::shared_ptr<const std::vector<TarEntry>> entries;
+};
+
+bool custom_asset_root_enabled() {
+    const char* raw = std::getenv("OME_ZARR_C_ASSET_ROOT");
+    return raw != nullptr && *raw != '\0';
 }
 
 void ensure_directory_cached(
@@ -91,6 +120,166 @@ void read_exact_bytes(
         }
         byte_count -= static_cast<std::uint64_t>(chunk_size);
     }
+}
+
+std::vector<char> read_payload_bytes(
+    std::istream& input,
+    const std::uint64_t byte_count,
+    const fs::path& archive_path) {
+    if (byte_count > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max())) {
+        throw std::runtime_error("Tar payload is too large in " + archive_path.string());
+    }
+    if (byte_count > static_cast<std::uint64_t>(std::numeric_limits<std::streamsize>::max())) {
+        throw std::runtime_error("Tar payload is too large in " + archive_path.string());
+    }
+    std::vector<char> payload(static_cast<std::size_t>(byte_count));
+    if (!payload.empty()) {
+        input.read(payload.data(), static_cast<std::streamsize>(payload.size()));
+        if (input.gcount() != static_cast<std::streamsize>(payload.size())) {
+            throw std::runtime_error(
+                "Truncated tar payload in " + archive_path.string());
+        }
+    }
+    return payload;
+}
+
+std::uint64_t tar_payload_span(
+    const std::uint64_t file_size,
+    const fs::path& archive_path) {
+    const auto padding = (512U - (file_size % 512U)) % 512U;
+    if (file_size > std::numeric_limits<std::uint64_t>::max() - padding) {
+        throw std::runtime_error("Tar payload is too large in " + archive_path.string());
+    }
+    return file_size + padding;
+}
+
+std::vector<TarEntry> parse_tar_entries(
+    const fs::path& archive_path,
+    const std::uint64_t archive_size) {
+    std::ifstream stream(archive_path, std::ios::binary);
+    if (!stream) {
+        throw std::runtime_error("Unable to open create archive: " + archive_path.string());
+    }
+
+    std::vector<TarEntry> entries;
+    entries.reserve(1024U);
+    std::vector<char> discard_buffer(4096U);
+    std::uint64_t remaining_bytes = archive_size;
+
+    while (true) {
+        std::array<char, 512> header{};
+        stream.read(header.data(), static_cast<std::streamsize>(header.size()));
+        if (stream.gcount() == 0) {
+            break;
+        }
+        if (stream.gcount() != static_cast<std::streamsize>(header.size())) {
+            throw std::runtime_error("Truncated tar header in " + archive_path.string());
+        }
+        if (remaining_bytes < header.size()) {
+            throw std::runtime_error("Truncated tar header in " + archive_path.string());
+        }
+        remaining_bytes -= static_cast<std::uint64_t>(header.size());
+        if (block_is_zeroed(header)) {
+            break;
+        }
+
+        const auto original_name =
+            trim_nul_terminated(std::string_view(header.data(), 100));
+        const char typeflag = header[156];
+        const auto file_size =
+            parse_tar_octal(std::string_view(header.data() + 124, 12));
+        const auto payload_span = tar_payload_span(file_size, archive_path);
+
+        if (typeflag == 'x' || typeflag == 'g') {
+            if (payload_span > remaining_bytes) {
+                throw std::runtime_error("Truncated tar payload in " + archive_path.string());
+            }
+            read_exact_bytes(stream, payload_span, discard_buffer, archive_path);
+            remaining_bytes -= payload_span;
+            continue;
+        }
+        if (typeflag == '5') {
+            entries.push_back(TarEntry{TarEntry::Kind::directory, original_name, {}});
+            continue;
+        }
+        if (typeflag == '0' || typeflag == '\0') {
+            if (payload_span > remaining_bytes) {
+                throw std::runtime_error("Truncated tar payload in " + archive_path.string());
+            }
+            auto payload = read_payload_bytes(stream, file_size, archive_path);
+            const auto padding = payload_span - file_size;
+            if (padding > 0U) {
+                read_exact_bytes(stream, padding, discard_buffer, archive_path);
+            }
+            remaining_bytes -= payload_span;
+            entries.push_back(
+                TarEntry{TarEntry::Kind::file, original_name, std::move(payload)});
+            continue;
+        }
+        throw std::runtime_error(
+            "Unsupported tar entry type in create archive: " +
+            std::string(1, typeflag));
+    }
+
+    return entries;
+}
+
+ArchiveMetadata archive_metadata(const fs::path& archive_path) {
+    std::ifstream stream(archive_path, std::ios::binary | std::ios::ate);
+    if (!stream) {
+        throw std::runtime_error("Unable to open create archive: " + archive_path.string());
+    }
+    const auto size = stream.tellg();
+    if (size < std::streampos{0}) {
+        throw std::runtime_error("Unable to size create archive: " + archive_path.string());
+    }
+    std::error_code ec;
+    const auto modified_time = fs::last_write_time(archive_path, ec);
+    if (ec) {
+        throw std::runtime_error("Unable to stat create archive: " + archive_path.string());
+    }
+    return ArchiveMetadata{static_cast<std::uint64_t>(size), modified_time};
+}
+
+std::mutex& tar_cache_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::unordered_map<std::string, CachedTarArchive>& tar_cache() {
+    static std::unordered_map<std::string, CachedTarArchive> cache;
+    return cache;
+}
+
+std::shared_ptr<const std::vector<TarEntry>> cached_tar_entries(
+    const fs::path& archive_path,
+    const ArchiveMetadata metadata) {
+    const auto cache_key = fs::absolute(archive_path).generic_string();
+    {
+        std::lock_guard<std::mutex> lock(tar_cache_mutex());
+        const auto cached = tar_cache().find(cache_key);
+        if (
+            cached != tar_cache().end() &&
+            cached->second.entries != nullptr &&
+            cached->second.byte_size == metadata.byte_size &&
+            cached->second.modified_time == metadata.modified_time) {
+            return cached->second.entries;
+        }
+    }
+
+    auto parsed = std::make_shared<const std::vector<TarEntry>>(
+        parse_tar_entries(archive_path, metadata.byte_size));
+
+    std::lock_guard<std::mutex> lock(tar_cache_mutex());
+    auto& cached = tar_cache()[cache_key];
+    if (
+        cached.entries != nullptr &&
+        cached.byte_size == metadata.byte_size &&
+        cached.modified_time == metadata.modified_time) {
+        return cached.entries;
+    }
+    cached = CachedTarArchive{metadata.byte_size, metadata.modified_time, parsed};
+    return parsed;
 }
 
 json load_json_file(const fs::path& path) {
@@ -230,57 +419,101 @@ void extract_tar_archive(
     const fs::path& destination_root,
     const std::string& default_label_name,
     const std::string& label_name) {
-    std::ifstream stream(archive_path, std::ios::binary);
-    if (!stream) {
-        throw std::runtime_error("Unable to open create archive: " + archive_path.string());
+    const auto metadata =
+        custom_asset_root_enabled()
+            ? ArchiveMetadata{0U, fs::file_time_type{}}
+            : archive_metadata(archive_path);
+    const bool stream_without_cache =
+        custom_asset_root_enabled() ||
+        metadata.byte_size > max_cached_tar_archive_bytes;
+    if (stream_without_cache) {
+        std::ifstream stream(archive_path, std::ios::binary);
+        if (!stream) {
+            throw std::runtime_error(
+                "Unable to open create archive: " + archive_path.string());
+        }
+
+        std::vector<char> copy_buffer(1024U * 1024U);
+        std::unordered_set<std::string> created_directories;
+        created_directories.reserve(256U);
+
+        while (true) {
+            std::array<char, 512> header{};
+            stream.read(header.data(), static_cast<std::streamsize>(header.size()));
+            if (stream.gcount() == 0) {
+                break;
+            }
+            if (stream.gcount() != static_cast<std::streamsize>(header.size())) {
+                throw std::runtime_error(
+                    "Truncated tar header in " + archive_path.string());
+            }
+            if (block_is_zeroed(header)) {
+                break;
+            }
+
+            const std::string original_name =
+                trim_nul_terminated(std::string_view(header.data(), 100));
+            const std::string path_name =
+                rewritten_tar_path(original_name, default_label_name, label_name);
+            const char typeflag = header[156];
+            const auto file_size =
+                parse_tar_octal(std::string_view(header.data() + 124, 12));
+            const auto padding = (512U - (file_size % 512U)) % 512U;
+            const fs::path destination = destination_root / path_name;
+
+            if (typeflag == 'x' || typeflag == 'g') {
+                read_exact_bytes(stream, file_size + padding, copy_buffer, archive_path);
+            } else if (typeflag == '5') {
+                ensure_directory_cached(destination, created_directories);
+            } else if (typeflag == '0' || typeflag == '\0') {
+                ensure_directory_cached(destination.parent_path(), created_directories);
+                std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+                if (!output) {
+                    throw std::runtime_error(
+                        "Unable to write extracted file: " + destination.string());
+                }
+                read_exact_bytes(stream, file_size, copy_buffer, archive_path, &output);
+                if (padding > 0U) {
+                    read_exact_bytes(stream, padding, copy_buffer, archive_path);
+                }
+            } else {
+                throw std::runtime_error(
+                    "Unsupported tar entry type in create archive: " +
+                    std::string(1, typeflag));
+            }
+        }
+        return;
     }
 
-    std::vector<char> copy_buffer(1024U * 1024U);
+    const auto entries = cached_tar_entries(archive_path, metadata);
+
     std::unordered_set<std::string> created_directories;
     created_directories.reserve(256U);
 
-    while (true) {
-        std::array<char, 512> header{};
-        stream.read(header.data(), static_cast<std::streamsize>(header.size()));
-        if (stream.gcount() == 0) {
-            break;
-        }
-        if (stream.gcount() != static_cast<std::streamsize>(header.size())) {
-            throw std::runtime_error("Truncated tar header in " + archive_path.string());
-        }
-        if (block_is_zeroed(header)) {
-            break;
-        }
-
-        const std::string original_name =
-            trim_nul_terminated(std::string_view(header.data(), 100));
+    for (const auto& entry : *entries) {
         const std::string path_name =
-            rewritten_tar_path(original_name, default_label_name, label_name);
-        const char typeflag = header[156];
-        const auto file_size =
-            parse_tar_octal(std::string_view(header.data() + 124, 12));
-        const auto padding = (512U - (file_size % 512U)) % 512U;
+            rewritten_tar_path(entry.path, default_label_name, label_name);
         const fs::path destination = destination_root / path_name;
 
-        if (typeflag == 'x' || typeflag == 'g') {
-            read_exact_bytes(stream, file_size + padding, copy_buffer, archive_path);
-        } else if (typeflag == '5') {
+        if (entry.kind == TarEntry::Kind::directory) {
             ensure_directory_cached(destination, created_directories);
-        } else if (typeflag == '0' || typeflag == '\0') {
-            ensure_directory_cached(destination.parent_path(), created_directories);
-            std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+            continue;
+        }
+
+        ensure_directory_cached(destination.parent_path(), created_directories);
+        std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+        if (!output) {
+            throw std::runtime_error(
+                "Unable to write extracted file: " + destination.string());
+        }
+        if (!entry.payload.empty()) {
+            output.write(
+                entry.payload.data(),
+                static_cast<std::streamsize>(entry.payload.size()));
             if (!output) {
                 throw std::runtime_error(
-                    "Unable to write extracted file: " + destination.string());
+                    "Unable to write extracted file payload: " + destination.string());
             }
-            read_exact_bytes(stream, file_size, copy_buffer, archive_path, &output);
-            if (padding > 0U) {
-                read_exact_bytes(stream, padding, copy_buffer, archive_path);
-            }
-        } else {
-            throw std::runtime_error(
-                "Unsupported tar entry type in create archive: " +
-                std::string(1, typeflag));
         }
     }
 }
