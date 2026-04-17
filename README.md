@@ -1,5 +1,11 @@
 # ome-zarr-C
 
+> **Early alpha test:** this repository is an experimental porting workspace.
+> Many or most features may be incomplete, broken, inaccurate, unstable, or
+> behave differently from what users expect. It is provided as-is for testing
+> only, with no responsibility accepted for failures, data loss, incorrect
+> results, or other consequences of using it.
+
 `ome-zarr-C` is a release-anchored C++ porting workspace for
 [`ome/ome-zarr-py`](https://github.com/ome/ome-zarr-py).
 
