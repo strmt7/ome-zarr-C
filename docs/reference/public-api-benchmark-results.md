@@ -30,27 +30,27 @@ timeout 300s .venv/bin/python -m benchmarks.run \
 ```bash
 timeout 120s ./build-cpp/ome_zarr_native_bench_core \
   --quick \
-  --json-output /tmp/ome_zarr_c_public_api_native_current.json
+  --json-output /tmp/ome_zarr_c_public_api_native_after_opt.json
 ```
 
 ## Summary
 
 - Paired public-API cases: 11
-- Geometric-mean native C++ speedup over Python (`python_time / native_cpp_time`): 131.975x
+- Geometric-mean native C++ speedup over Python (`python_time / native_cpp_time`): 132.610x
 - Every paired case in this run is faster in native C++ than in the frozen upstream Python oracle.
 
 ## Cases
 
 | Case | Python time us/op | native C++ time us/op | time saved us/op | native C++ time reduction | native C++ speedup over Python (`python_time / native_cpp_time`) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `axes.constructor_batch` | 69.803 | 0.136 | 69.667 | 99.8% | 513.927x |
-| `conversions.int_to_rgba` | 4.110 | 0.025 | 4.085 | 99.4% | 164.416x |
+| `axes.constructor_batch` | 69.803 | 0.129 | 69.674 | 99.8% | 541.991x |
+| `conversions.int_to_rgba` | 4.110 | 0.020 | 4.090 | 99.5% | 205.520x |
 | `conversions.rgba_to_int` | 1.002 | 0.020 | 0.982 | 98.0% | 50.085x |
-| `csv.parse_csv_value` | 1.448 | 0.030 | 1.418 | 97.9% | 48.258x |
-| `data.make_circle_batch` | 13.731 | 0.091 | 13.640 | 99.3% | 151.342x |
-| `data.rgb_to_5d_batch` | 9.041 | 0.023 | 9.018 | 99.7% | 395.319x |
-| `format.dispatch` | 3.116 | 0.054 | 3.062 | 98.3% | 57.533x |
-| `format.matches` | 37.500 | 0.032 | 37.468 | 99.9% | 1185.957x |
-| `format.v01_init_store` | 13.543 | 0.033 | 13.510 | 99.8% | 406.784x |
-| `format.well_and_coord` | 7.467 | 0.238 | 7.230 | 96.8% | 31.439x |
-| `utils.path_helpers` | 4.805 | 0.242 | 4.562 | 95.0% | 19.841x |
+| `csv.parse_csv_value` | 1.448 | 0.025 | 1.423 | 98.3% | 57.910x |
+| `data.make_circle_batch` | 13.731 | 0.087 | 13.644 | 99.4% | 158.234x |
+| `data.rgb_to_5d_batch` | 9.041 | 0.031 | 9.011 | 99.7% | 295.972x |
+| `format.dispatch` | 3.116 | 0.058 | 3.058 | 98.1% | 53.474x |
+| `format.matches` | 37.500 | 0.034 | 37.466 | 99.9% | 1116.436x |
+| `format.v01_init_store` | 13.543 | 0.034 | 13.509 | 99.8% | 400.398x |
+| `format.well_and_coord` | 7.467 | 0.234 | 7.233 | 96.9% | 31.928x |
+| `utils.path_helpers` | 4.805 | 0.249 | 4.556 | 94.8% | 19.313x |
