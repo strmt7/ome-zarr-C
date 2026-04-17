@@ -70,9 +70,9 @@ container choices, or benchmark claims.
   semantics that change observable results.
 - Do not apply a zero-copy view optimization across an FFI boundary unless the
   ownership and lifetime model is explicitly proven safe.
-- Do not parallelize code whose ordering, floating-point accumulation, or
-  exception timing is part of the public behavior unless parity is re-proven on
-  that exact path.
+- Do not add concurrent execution to code whose ordering, floating-point
+  accumulation, or exception timing is part of the public behavior unless
+  parity is re-proven on that exact path.
 - Do not apply PGO, host-specific flags, or parallel execution settings as a
   blanket repo claim unless the exact build profile and benchmark scope are
   stated.

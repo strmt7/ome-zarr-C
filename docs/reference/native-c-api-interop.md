@@ -16,8 +16,8 @@ other array and storage packages:
 - documented writer entrypoints accept NumPy arrays, Dask arrays, Zarr groups,
   string paths, and storage options:
   `https://ome-zarr.readthedocs.io/en/stable/api/writer.html`
-- documented scale entrypoints operate on NumPy or Dask arrays and delegate
-  algorithms to image-processing backends such as scikit-image and SciPy:
+- documented scale entrypoints operate on NumPy or Dask arrays and use
+  image-processing backends such as scikit-image and SciPy:
   `https://ome-zarr.readthedocs.io/en/stable/api/scale.html`
 - the frozen source uses `zarr`, `dask.array`, `fsspec`, `numpy`, and
   image-processing libraries as package boundaries, while the native port must

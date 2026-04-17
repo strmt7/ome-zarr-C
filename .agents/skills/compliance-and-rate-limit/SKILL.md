@@ -14,7 +14,7 @@ Use this skill for repeated requests, bounded crawls, or any workflow that could
 2. Check the site's published rules or technical signals when they materially affect the task.
 3. Cache fetched pages and reuse sessions instead of re-requesting the same content.
 4. Use bounded concurrency, small page sets, and exponential backoff.
-5. If the site signals blocking or restricted access, stop escalating and switch to a permitted source or human handoff.
+5. If the site signals blocking or restricted access, stop escalating and switch to a permitted source or human review.
 
 ## Rules
 

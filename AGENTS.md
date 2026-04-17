@@ -5,7 +5,8 @@
 Do not spawn, delegate to, or coordinate with multiple AI agents, subagents, or
 separate agent sessions. All AI work in this repository must stay in one
 session unless the user explicitly revokes this rule in a later instruction.
-Never bypass, weaken, or disregard this rule to save time or parallelize work.
+Never bypass, weaken, or disregard this rule to save time or run work
+concurrently.
 
 If any AI-agent work is already in progress when this rule is read, let that
 work finish fully, then harvest and merge its outputs without losing changes
@@ -167,9 +168,10 @@ standalone C++ implementation under `cpp/native/`, `cpp/api/`, and
     parity is proven for that surface, delete corresponding Python-harness
     runtime scaffolding unless it is strictly frozen-upstream oracle code.
 46. For runtime surfaces already replaced by the standalone native product,
-    deletion beats delegation. Remove stale benchmark references and obsolete
-    runtime tests in the same slice unless a remaining oracle-only dependency
-    can be stated precisely and verified.
+    delete obsolete layers instead of forwarding calls through them. Remove
+    stale benchmark references and obsolete runtime tests in the same slice
+    unless a remaining oracle-only dependency can be stated precisely and
+    verified.
 47. If parity proof and performance measurement for a surface can be carried by
     standalone native tools plus the frozen Python oracle, do not keep a pybind
     or Python package version of that surface alive just to satisfy old tests

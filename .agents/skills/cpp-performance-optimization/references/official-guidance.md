@@ -21,8 +21,8 @@ Repo-validated heuristics that also align with the reviewed external guide:
 - consider compile-time constants only for truly static data
 - use zero-copy views only when object lifetime is proven safe
 - simplify hot-loop control flow only when parity and error timing stay exact
-- parallelize only when ordering, numeric behavior, and exception timing remain
-  parity-clean under test
+- add concurrent execution only when ordering, numeric behavior, and exception
+  timing remain parity-clean under test
 
 Primary references:
 
