@@ -38,8 +38,32 @@ Each benchmark case has:
 - a verification hook that runs before timing.
 
 The native timer calls `ome_zarr_native_bench_core`; the Python timer imports
-only `source_code_v.0.15.0/ome_zarr`. Results are reported as native C++
-relative speed vs Python using `python_time / native_cpp_time`.
+only `source_code_v.0.15.0/ome_zarr`.
+
+Every paired benchmark report must show the direct time measurements before any
+ratio:
+
+1. Python time.
+2. Native C++ time.
+3. Time saved per operation.
+4. Native C++ time reduction.
+5. Native C++ speedup over Python (`python_time / native_cpp_time`).
+
+Use the same operation unit for Python time and native C++ time, such as
+`us/op` or `ms/op`. Compute derived fields from those two times:
+
+- `time_saved = python_time - native_cpp_time`
+- `native_cpp_time_reduction = time_saved / python_time`
+- `native_cpp_speedup_over_python = python_time / native_cpp_time`
+
+Reduction and speedup are different quantities. A `75%` time reduction is a
+`4.0x` native C++ speedup over Python, not a `75%` speedup. A negative time
+saved value means the native C++ path took longer for that case; keep the sign
+visible in the time saved and reduction columns, and report the speedup as a
+ratio below `1.0x`.
+
+Do not use shorthand labels that omit the ratio direction. The accepted ratio
+label is `native C++ speedup over Python (python_time / native_cpp_time)`.
 
 ## Commands
 
@@ -112,9 +136,9 @@ Tracked result artifacts under `benchmarks/results/` must reflect the current
 benchmark architecture. Old result files from deleted benchmark paths must be
 removed instead of left as historical-looking current data.
 
-No tracked benchmark result snapshot is currently committed after retiring the
-old Python package-path benchmark layer. Generate a fresh snapshot before
-making any performance claim.
+The current tracked public-API result summary lives in
+`docs/reference/public-api-benchmark-results.md`. Refresh that summary before
+making a new public-API performance claim.
 
 ## Fixture Provenance
 

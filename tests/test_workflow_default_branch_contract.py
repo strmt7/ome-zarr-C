@@ -109,3 +109,9 @@ def test_workflow_instructions_document_the_default_branch_job_gate() -> None:
     instructions = _read_repo_file(".github/instructions/workflows.instructions.md")
     assert "default branch" in instructions.lower()
     assert DEFAULT_BRANCH_GUARD in instructions
+
+
+def test_tests_workflow_runs_full_pytest_discovery() -> None:
+    workflow_text = _read_repo_file(".github/workflows/tests.yml")
+    assert "python -m pytest -q" in workflow_text
+    assert "tests/test_axes_equivalence.py" not in workflow_text

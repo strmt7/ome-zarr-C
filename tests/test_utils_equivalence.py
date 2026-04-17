@@ -21,7 +21,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import zarr
 
 from benchmarks.runtime_support import (
     run_download,
@@ -374,12 +373,14 @@ def _build_csv_labels_tree(
     root_attrs: dict,
     subgroup_attrs: dict[str, dict] | None = None,
 ) -> None:
-    root_group = zarr.open_group(str(root), mode="w")
-    root_group.attrs.update(json.loads(json.dumps(root_attrs)))
+    root.mkdir(parents=True, exist_ok=True)
+    (root / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
+    (root / ".zattrs").write_text(json.dumps(json.loads(json.dumps(root_attrs))))
     for rel_path, attrs in (subgroup_attrs or {}).items():
-        subgroup = zarr.open_group(str(root / rel_path), mode="w")
-        if attrs:
-            subgroup.attrs.update(json.loads(json.dumps(attrs)))
+        subgroup = root / rel_path
+        subgroup.mkdir(parents=True, exist_ok=True)
+        (subgroup / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
+        (subgroup / ".zattrs").write_text(json.dumps(json.loads(json.dumps(attrs))))
 
 
 def _run_py_csv_to_zarr(

@@ -92,6 +92,17 @@ std::size_t shape_product(const std::vector<std::int64_t>& shape) {
     return total;
 }
 
+std::size_t shape_product_range(
+    const std::vector<std::int64_t>& shape,
+    const std::size_t first,
+    const std::size_t last) {
+    std::size_t total = 1;
+    for (std::size_t index = first; index < last; ++index) {
+        total *= static_cast<std::size_t>(shape[index]);
+    }
+    return total;
+}
+
 std::vector<std::size_t> c_strides(const std::vector<std::int64_t>& shape) {
     std::vector<std::size_t> strides(shape.size(), 1);
     std::size_t stride = 1;
@@ -641,25 +652,33 @@ std::vector<double> gaussian_filter_axis(
 
     const auto kernel = gaussian_kernel(sigma);
     const int radius = static_cast<int>((kernel.size() - 1) / 2);
-    const std::size_t outer = shape_product(
-        std::vector<std::int64_t>(shape.begin(), shape.begin() + static_cast<std::ptrdiff_t>(axis)));
-    const std::size_t inner = shape_product(
-        std::vector<std::int64_t>(shape.begin() + static_cast<std::ptrdiff_t>(axis + 1), shape.end()));
+    const std::size_t outer = shape_product_range(shape, 0, axis);
+    const std::size_t inner = shape_product_range(shape, axis + 1, shape.size());
     const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
     std::vector<double> output(input.size(), 0.0);
+    const std::size_t kernel_size = kernel.size();
+    std::vector<std::size_t> sample_offsets(axis_len * kernel_size, 0);
+    for (std::size_t out_index = 0; out_index < axis_len; ++out_index) {
+        const std::size_t offset_base = out_index * kernel_size;
+        for (std::size_t kernel_index = 0; kernel_index < kernel_size; ++kernel_index) {
+            const auto offset = static_cast<int>(kernel_index) - radius;
+            const auto sample_index = static_cast<std::size_t>(
+                mirror_index(
+                    static_cast<long long>(out_index) + offset,
+                    static_cast<long long>(axis_len)));
+            sample_offsets[offset_base + kernel_index] = sample_index * inner;
+        }
+    }
 
     for (std::size_t outer_index = 0; outer_index < outer; ++outer_index) {
         for (std::size_t inner_index = 0; inner_index < inner; ++inner_index) {
             const std::size_t input_base = outer_index * axis_len * inner + inner_index;
             for (std::size_t out_index = 0; out_index < axis_len; ++out_index) {
+                const std::size_t offset_base = out_index * kernel_size;
                 double accum = 0.0;
-                for (int offset = -radius; offset <= radius; ++offset) {
-                    const auto sample_index = static_cast<std::size_t>(
-                        mirror_index(
-                            static_cast<long long>(out_index) + offset,
-                            static_cast<long long>(axis_len)));
-                    accum += kernel[static_cast<std::size_t>(offset + radius)] *
-                        input[input_base + sample_index * inner];
+                for (std::size_t kernel_index = 0; kernel_index < kernel_size; ++kernel_index) {
+                    accum += kernel[kernel_index] *
+                        input[input_base + sample_offsets[offset_base + kernel_index]];
                 }
                 output[input_base + out_index * inner] = accum;
             }
@@ -698,24 +717,26 @@ std::vector<double> resample_axis_nearest(
     out_shape[axis] = static_cast<std::int64_t>(out_len);
     std::vector<double> output(shape_product(out_shape), 0.0);
 
-    const std::size_t outer = shape_product(
-        std::vector<std::int64_t>(shape.begin(), shape.begin() + static_cast<std::ptrdiff_t>(axis)));
-    const std::size_t inner = shape_product(
-        std::vector<std::int64_t>(shape.begin() + static_cast<std::ptrdiff_t>(axis + 1), shape.end()));
+    const std::size_t outer = shape_product_range(shape, 0, axis);
+    const std::size_t inner = shape_product_range(shape, axis + 1, shape.size());
     const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
+    std::vector<std::size_t> nearest_offsets(out_len, 0);
+    for (std::size_t out_index = 0; out_index < out_len; ++out_index) {
+        const auto coord = grid_mode_true_coord(out_index, axis_len, out_len);
+        const auto nearest = static_cast<std::size_t>(
+            mirror_index(
+                static_cast<long long>(std::floor(coord + 0.5)),
+                static_cast<long long>(axis_len)));
+        nearest_offsets[out_index] = nearest * inner;
+    }
 
     for (std::size_t outer_index = 0; outer_index < outer; ++outer_index) {
         for (std::size_t inner_index = 0; inner_index < inner; ++inner_index) {
             const std::size_t input_base = outer_index * axis_len * inner + inner_index;
             const std::size_t output_base = outer_index * out_len * inner + inner_index;
             for (std::size_t out_index = 0; out_index < out_len; ++out_index) {
-                const auto coord = grid_mode_true_coord(out_index, axis_len, out_len);
-                const auto nearest = static_cast<std::size_t>(
-                    mirror_index(
-                        static_cast<long long>(std::floor(coord + 0.5)),
-                        static_cast<long long>(axis_len)));
                 output[output_base + out_index * inner] =
-                    input[input_base + nearest * inner];
+                    input[input_base + nearest_offsets[out_index]];
             }
         }
     }
@@ -734,36 +755,52 @@ std::vector<double> resample_axis_linear(
     out_shape[axis] = static_cast<std::int64_t>(out_len);
     std::vector<double> output(shape_product(out_shape), 0.0);
 
-    const std::size_t outer = shape_product(
-        std::vector<std::int64_t>(shape.begin(), shape.begin() + static_cast<std::ptrdiff_t>(axis)));
-    const std::size_t inner = shape_product(
-        std::vector<std::int64_t>(shape.begin() + static_cast<std::ptrdiff_t>(axis + 1), shape.end()));
+    const std::size_t outer = shape_product_range(shape, 0, axis);
+    const std::size_t inner = shape_product_range(shape, axis + 1, shape.size());
     const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
 
-    auto sample = [&](const std::size_t input_base, long long index) -> double {
+    auto sample_offset = [&](long long index, unsigned char& valid) -> std::size_t {
         if (mirror_mode) {
             index = mirror_index(index, static_cast<long long>(axis_len));
-            return input[input_base + static_cast<std::size_t>(index) * inner];
+            valid = 1U;
+            return static_cast<std::size_t>(index) * inner;
         }
         if (index < 0 || index >= static_cast<long long>(axis_len)) {
-            return 0.0;
+            valid = 0U;
+            return 0U;
         }
-        return input[input_base + static_cast<std::size_t>(index) * inner];
+        valid = 1U;
+        return static_cast<std::size_t>(index) * inner;
     };
+
+    std::vector<std::size_t> lower_offsets(out_len, 0);
+    std::vector<std::size_t> upper_offsets(out_len, 0);
+    std::vector<unsigned char> lower_valid(out_len, 0);
+    std::vector<unsigned char> upper_valid(out_len, 0);
+    std::vector<double> alpha_values(out_len, 0.0);
+    for (std::size_t out_index = 0; out_index < out_len; ++out_index) {
+        const auto coord = grid_mode_true
+            ? grid_mode_true_coord(out_index, axis_len, out_len)
+            : grid_mode_false_coord(out_index, axis_len, out_len);
+        const auto lower = static_cast<long long>(std::floor(coord));
+        const auto upper = lower + 1;
+        alpha_values[out_index] = coord - static_cast<double>(lower);
+        lower_offsets[out_index] = sample_offset(lower, lower_valid[out_index]);
+        upper_offsets[out_index] = sample_offset(upper, upper_valid[out_index]);
+    }
 
     for (std::size_t outer_index = 0; outer_index < outer; ++outer_index) {
         for (std::size_t inner_index = 0; inner_index < inner; ++inner_index) {
             const std::size_t input_base = outer_index * axis_len * inner + inner_index;
             const std::size_t output_base = outer_index * out_len * inner + inner_index;
             for (std::size_t out_index = 0; out_index < out_len; ++out_index) {
-                const auto coord = grid_mode_true
-                    ? grid_mode_true_coord(out_index, axis_len, out_len)
-                    : grid_mode_false_coord(out_index, axis_len, out_len);
-                const auto lower = static_cast<long long>(std::floor(coord));
-                const auto upper = lower + 1;
-                const double alpha = coord - static_cast<double>(lower);
-                const double low_value = sample(input_base, lower);
-                const double high_value = sample(input_base, upper);
+                const double alpha = alpha_values[out_index];
+                const double low_value = lower_valid[out_index] != 0U
+                    ? input[input_base + lower_offsets[out_index]]
+                    : 0.0;
+                const double high_value = upper_valid[out_index] != 0U
+                    ? input[input_base + upper_offsets[out_index]]
+                    : 0.0;
                 output[output_base + out_index * inner] =
                     ((1.0 - alpha) * low_value) + (alpha * high_value);
             }
@@ -782,21 +819,25 @@ std::vector<double> downsample_axis_mean(
     out_shape[axis] = shape[axis] / static_cast<std::int64_t>(factor);
     std::vector<double> output(shape_product(out_shape), 0.0);
 
-    const std::size_t outer = shape_product(
-        std::vector<std::int64_t>(shape.begin(), shape.begin() + static_cast<std::ptrdiff_t>(axis)));
-    const std::size_t inner = shape_product(
-        std::vector<std::int64_t>(shape.begin() + static_cast<std::ptrdiff_t>(axis + 1), shape.end()));
+    const std::size_t outer = shape_product_range(shape, 0, axis);
+    const std::size_t inner = shape_product_range(shape, axis + 1, shape.size());
     const std::size_t axis_len = static_cast<std::size_t>(shape[axis]);
     const std::size_t out_len = static_cast<std::size_t>(out_shape[axis]);
+    std::vector<std::size_t> factor_offsets(factor, 0);
+    for (std::size_t factor_index = 0; factor_index < factor; ++factor_index) {
+        factor_offsets[factor_index] = factor_index * inner;
+    }
 
     for (std::size_t outer_index = 0; outer_index < outer; ++outer_index) {
         for (std::size_t inner_index = 0; inner_index < inner; ++inner_index) {
             const std::size_t input_base = outer_index * axis_len * inner + inner_index;
             const std::size_t output_base = outer_index * out_len * inner + inner_index;
             for (std::size_t out_index = 0; out_index < out_len; ++out_index) {
+                const std::size_t window_base =
+                    input_base + (out_index * factor * inner);
                 double sum = 0.0;
                 for (std::size_t factor_index = 0; factor_index < factor; ++factor_index) {
-                    sum += input[input_base + (out_index * factor + factor_index) * inner];
+                    sum += input[window_base + factor_offsets[factor_index]];
                 }
                 output[output_base + out_index * inner] =
                     sum / static_cast<double>(factor);
@@ -1010,6 +1051,7 @@ void write_v3_dataset(
         chunk_grid[axis] =
             (shape[axis] + chunk_shape[axis] - 1) / chunk_shape[axis];
     }
+    const auto chunk_grid_strides = c_strides(chunk_grid);
     const auto chunk_grid_elements = shape_product(chunk_grid);
     const auto item_size = data_type_size(data_type);
 
@@ -1017,7 +1059,7 @@ void write_v3_dataset(
         std::size_t remaining = chunk_linear;
         std::vector<std::int64_t> chunk_indices(shape.size(), 0);
         for (std::size_t axis = 0; axis < chunk_grid.size(); ++axis) {
-            const auto stride = c_strides(chunk_grid)[axis];
+            const auto stride = chunk_grid_strides[axis];
             chunk_indices[axis] = static_cast<std::int64_t>(remaining / stride);
             remaining %= stride;
         }

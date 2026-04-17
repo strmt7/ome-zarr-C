@@ -50,9 +50,12 @@ Use [AGENTS.md](../AGENTS.md) as the universal project contract.
   `ctypes` or an equivalent external FFI consumer, while keeping the C++ side
   object-free and native.
 - Benchmarks are required before claiming that native C++ is faster. Report
-  pure-native outcomes as absolute native C++ relative speed vs Python
-  (`python_time / native_cpp_time`). Do not invert slower cases into larger
-  "slower" multipliers; report the direct ratio, for example `0.748x`.
+  pure-native outcomes in time terms first: Python time, native C++ time, time
+  saved per operation, and native C++ time reduction. If a ratio is included,
+  label it as native C++ speedup over Python
+  (`python_time / native_cpp_time`). Do not use shorthand labels that omit the
+  ratio direction, and do not invert slower cases into larger "slower"
+  multipliers; report the direct speedup ratio, for example `0.748x`.
 - Never label Python package-path timings as C++ or native C++. Pure-native
   performance claims require standalone native C++ executable/library timing.
 - Use repo-local skills under `.agents/skills/` when they fit the task.

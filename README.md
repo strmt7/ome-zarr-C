@@ -47,6 +47,9 @@ directory.
 - `benchmarks/`: Python-upstream and native-C++ timing suites
 - `docs/`: project references, design notes, and benchmark material
 
+Start with `docs/reference/cpp-user-guide.md` when you need practical native
+C++ command, concept, and API usage guidance.
+
 ## Verified Parity Surfaces
 
 Verified surfaces are proven through root-level tests under `tests/` and the
@@ -253,11 +256,15 @@ script:
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
 ```
 
-That script emits one table with frozen-upstream Python `pyperf` numbers and
-matching standalone-native benchmark numbers for the same touched surface.
+That script emits one table with frozen-upstream Python `pyperf` numbers,
+matching standalone-native benchmark numbers for the same touched surface,
+time saved, native C++ time reduction, and native C++ speedup over Python using
+`python_time / native_cpp_time`. Keep that convention for all new timing
+summaries: show the two measured times first, then the saved time, then
+reduction, then the direct speedup ratio.
 
-For direct Python-vs-native comparison on the real standalone runtime paths
-touched in the current iterations:
+For direct time comparison on the real standalone runtime paths touched in the
+current iterations:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
@@ -266,7 +273,7 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --native-match format
 ```
 
-Current standalone native CLI commands:
+Native CLI quick examples:
 
 ```bash
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
@@ -279,7 +286,7 @@ Current standalone native CLI commands:
 ./build-cpp/ome_zarr_native_cli csv_to_labels /tmp/demo/props.csv cell_id score#d /tmp/demo/image.zarr cell_id
 ```
 
-All upstream CLI commands now have standalone-native replacements.
+The documented CLI command set now has standalone-native replacements.
 
 Current optional native C ABI entrypoints:
 
@@ -296,8 +303,8 @@ buffer plus shape metadata and returns an owned 5D buffer matching the frozen
 upstream `ome_zarr.data.rgb_to_5d` layout. The caller frees returned memory
 with the matching API free function.
 
-For heavier end-to-end iteration comparisons such as `create`, lower the
-pyperf worker count explicitly so the bounded run stays practical:
+For heavier data-kernel iteration comparisons, lower the pyperf worker count
+explicitly so the bounded run stays practical:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
@@ -353,6 +360,20 @@ For standalone-C++ performance work, also use the native-only CMake benchmark
 tooling. The `pyperf` suite is for paired upstream-vs-native comparison, while
 the native benchmark executable measures pure-native semantic cost directly.
 
+Benchmark summaries should be interpreted in time terms first. Use the same
+unit for Python time and native C++ time, then compute
+`time_saved = python_time - native_cpp_time`, native C++ time reduction as
+`time_saved / python_time`, and native C++ speedup over Python as
+`python_time / native_cpp_time`. A ratio greater than `1.0x` means the native
+C++ path used less time for that case; a ratio below `1.0x` means it used more
+time. Negative saved time and negative reduction are valid regression signals
+and should stay visible.
+
+Native CLI `create` examples are functional parity examples, not create
+performance evidence. Do not claim native C++ `create` performance until a
+registered native benchmark entrypoint is paired with frozen-upstream Python
+timing.
+
 Common benchmark commands:
 
 ```bash
@@ -367,21 +388,24 @@ The suite now has three layers:
 
 - `core`: standalone-native-qualified kernels and deterministic helpers
 - `public-api`: native-qualified documented public API timing subset
-- `realdata`: paired `parse_url`/`info`/reader timings on public OME-Zarr data
+- `realdata`: paired `parse_url`/`info` timings on public OME-Zarr data
 
 The real-data suite downloads public benchmark fixtures into
 `.benchmarks-fixtures/` by default, or into `OME_ZARR_BENCH_FIXTURE_ROOT` when
 that environment variable is set. An additional `455.3 MiB` BIA fixture is
 available only when `OME_ZARR_BENCH_INCLUDE_LARGE=1`.
 
-See `docs/reference/benchmark-suite.md` for the methodology and
-`docs/reference/public-benchmark-fixtures.md` for fixture provenance.
+See `docs/reference/benchmark-suite.md` for the methodology,
+`docs/reference/public-api-benchmark-results.md` for the latest bounded local
+public-API timing results, and `docs/reference/public-benchmark-fixtures.md`
+for fixture provenance.
 
-No tracked benchmark result snapshot is currently committed after retiring the
-old Python package-path benchmark layer. Generate fresh results before making a
-new performance claim:
+Refresh the tracked public-API benchmark result snapshot before making a new
+performance claim:
 
 ```bash
+BENCH_ARTIFACT_DIR="${BENCH_ARTIFACT_DIR:-benchmark-artifacts/public-api}"
+mkdir -p "$BENCH_ARTIFACT_DIR"
 .venv/bin/python -m benchmarks.run \
   --suite public-api \
   --fast \
@@ -390,10 +414,10 @@ new performance claim:
   --values 1 \
   --warmups 1 \
   --min-time 0.005 \
-  --output /tmp/ome-zarr-c-native-public-api.json
+  --output "$BENCH_ARTIFACT_DIR/public-api.pyperf.json"
 .venv/bin/python -m benchmarks.report \
-  /tmp/ome-zarr-c-native-public-api.json \
-  --markdown-out /tmp/ome-zarr-c-native-public-api.md
+  "$BENCH_ARTIFACT_DIR/public-api.pyperf.json" \
+  --markdown-out "$BENCH_ARTIFACT_DIR/public-api.md"
 ```
 
 For read-only surfaces that print absolute paths, parity tests should run the

@@ -1,5 +1,9 @@
 # Testing Instructions
 
+Critical: do not spawn, delegate to, or coordinate with multiple AI agents,
+subagents, or separate agent sessions. Work in one session only unless the user
+explicitly revokes this rule in a later instruction.
+
 - Run parity suites separately instead of batching unrelated converted surfaces
   into one giant test command.
 - Prefer exhaustive differential tests when the state space is bounded.

@@ -120,6 +120,7 @@ def test_make_circle_matches_upstream() -> None:
         (8, 8, 1, np.float64),
         (9, 5, 7, np.int16),
         (12, 16, 2, np.uint8),
+        (64, 64, 3, np.uint16),
     ]:
         expected = _run_make_circle(_py_data.make_circle, h, w, value, dtype)
         actual = _run_native_make_circle(

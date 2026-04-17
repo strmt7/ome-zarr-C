@@ -362,7 +362,7 @@ struct ProbeHierarchy {
         return missing;
     }
 
-    ProbeArray load(const ProbeStoreNode& node, const std::string& subpath = "") const {
+    const ProbeArray& load(const ProbeStoreNode& node, const std::string& subpath = "") const {
         const auto full_path = subpath.empty() ? node.path : join_path(node.path, subpath);
         const auto iter = arrays.find(full_path);
         if (iter == arrays.end()) {
@@ -759,6 +759,16 @@ Scenario build_scenario(const std::string& scenario_name) {
     throw std::runtime_error("Unknown reader scenario: " + scenario_name);
 }
 
+const Scenario& cached_image_scenario() {
+    static const Scenario scenario = build_image_scenario();
+    return scenario;
+}
+
+const Scenario& cached_hcs_scenario() {
+    static const Scenario scenario = build_hcs_scenario();
+    return scenario;
+}
+
 struct CollisionKey {
     enum class Kind { string, integer, boolean };
 
@@ -825,7 +835,7 @@ private:
 };
 
 struct ProbeContext {
-    ProbeHierarchy hierarchy;
+    const ProbeHierarchy* hierarchy = nullptr;
     std::vector<std::string> seen;
 };
 
@@ -1294,7 +1304,7 @@ WellRuntimeInfo build_well_runtime(
     }
     const auto plan = reader_well_plan(image_paths);
 
-    const auto image_zarr = context.hierarchy.create_child(well_zarr, image_paths.at(0));
+    const auto image_zarr = context.hierarchy->create_child(well_zarr, image_paths.at(0));
     auto image_node = make_node(context, image_zarr, node.visible);
     const auto datasets =
         image_zarr.root_attrs["multiscales"][0]["datasets"];
@@ -1328,7 +1338,7 @@ WellRuntimeInfo build_well_runtime(
                 ProbeArray tile{};
                 if (level_plan.has_tile[field_index]) {
                     try {
-                        tile = context.hierarchy.load(well_zarr, level_plan.tile_paths[field_index]);
+                        tile = context.hierarchy->load(well_zarr, level_plan.tile_paths[field_index]);
                     } catch (...) {
                         tile = zeros_array(tile_shape, image_node.data.front().dtype);
                     }
@@ -1392,7 +1402,7 @@ PlateRuntimeInfo build_plate_runtime(
     }
     const auto plan = reader_plate_plan(row_names, col_names, well_paths);
 
-    const auto first_well = context.hierarchy.create_child(plate_zarr, plan.well_paths.at(0));
+    const auto first_well = context.hierarchy->create_child(plate_zarr, plan.well_paths.at(0));
     auto well_node = make_node(context, first_well, node.visible);
     const auto* well_spec = well_node.first(ProbeSpecKind::well);
     if (well_spec == nullptr) {
@@ -1401,7 +1411,7 @@ PlateRuntimeInfo build_plate_runtime(
     const auto well_info = build_well_runtime(context, first_well, well_node);
     const auto first_field_path =
         first_well.root_attrs["well"]["images"][0]["path"].get<std::string>();
-    const auto image_zarr = context.hierarchy.create_child(first_well, first_field_path);
+    const auto image_zarr = context.hierarchy->create_child(first_well, first_field_path);
     const auto datasets = image_zarr.root_attrs["multiscales"][0]["datasets"];
     std::vector<std::string> dataset_paths;
     for (const auto& dataset : datasets) {
@@ -1431,7 +1441,7 @@ PlateRuntimeInfo build_plate_runtime(
                     tile = zeros_array(tile_shape, well_info.numpy_type);
                 } else {
                     try {
-                        tile = context.hierarchy.load(
+                        tile = context.hierarchy->load(
                             plate_zarr,
                             level_plan.tile_paths[index]);
                     } catch (...) {
@@ -1494,7 +1504,7 @@ void ProbeNode::initialise_specs(const bool plate_labels) {
                     labels.push_back(label.get<std::string>());
                 }
                 for (const auto& label_name : reader_labels_names(labels)) {
-                    const auto child = context.hierarchy.create_child(zarr, label_name);
+                    const auto child = context.hierarchy->create_child(zarr, label_name);
                     if (child.exists) {
                         add(child, false, std::nullopt, plate_labels);
                     }
@@ -1503,7 +1513,7 @@ void ProbeNode::initialise_specs(const bool plate_labels) {
         } else if (kind == ProbeSpecKind::label) {
             const auto payload = label_metadata_payload(zarr, visible);
             if (!payload["parent_image"].is_null()) {
-                const auto parent = context.hierarchy.create_child(
+                const auto parent = context.hierarchy->create_child(
                     zarr,
                     payload["parent_image"].get<std::string>());
                 if (parent.exists) {
@@ -1552,12 +1562,12 @@ void ProbeNode::initialise_specs(const bool plate_labels) {
             spec.signature["datasets"] = ordered_json::array();
             for (const auto& path : summary.paths) {
                 spec.signature["datasets"].push_back(path);
-                data.push_back(context.hierarchy.load(zarr, path));
+                data.push_back(context.hierarchy->load(zarr, path));
             }
             if (summary.any_coordinate_transformations) {
                 metadata["coordinateTransformations"] = std::move(transformations);
             }
-            const auto labels = context.hierarchy.create_child(zarr, "labels");
+            const auto labels = context.hierarchy->create_child(zarr, "labels");
             if (labels.exists) {
                 add(labels, false, false, plate_labels);
             }
@@ -1584,7 +1594,7 @@ void ProbeNode::initialise_specs(const bool plate_labels) {
 
 ordered_json reader_signature_from_root(const Scenario& scenario, const ProbeStoreNode& root) {
     ProbeContext context{};
-    context.hierarchy = scenario.hierarchy;
+    context.hierarchy = &scenario.hierarchy;
     context.seen.push_back(root.path);
 
     auto node = make_node(context, root, true);
@@ -1603,7 +1613,7 @@ ordered_json reader_signature_from_root(const Scenario& scenario, const ProbeSto
         return result;
     }
     if (!root.zarray.empty()) {
-        node.data.push_back(context.hierarchy.load(root));
+        node.data.push_back(context.hierarchy->load(root));
         result.push_back(node.signature());
         return result;
     }
@@ -1638,9 +1648,9 @@ ordered_json reader_matches_payload(const Scenario& scenario, const std::string&
 }
 
 ordered_json reader_node_ops_payload() {
-    const auto scenario = build_image_scenario();
+    const auto& scenario = cached_image_scenario();
     ProbeContext context{};
-    context.hierarchy = scenario.hierarchy;
+    context.hierarchy = &scenario.hierarchy;
     context.seen.push_back("/dataset");
     auto node = make_node(context, scenario.hierarchy.nodes.at("/dataset"), true);
 
@@ -1671,9 +1681,9 @@ ordered_json reader_node_ops_payload() {
 }
 
 ordered_json reader_image_surface_payload() {
-    const auto scenario = build_image_scenario();
+    const auto& scenario = cached_image_scenario();
     ProbeContext context{};
-    context.hierarchy = scenario.hierarchy;
+    context.hierarchy = &scenario.hierarchy;
     const auto& root = scenario.hierarchy.nodes.at("/dataset");
     auto node = make_node(context, root, true);
 
@@ -1690,16 +1700,16 @@ ordered_json reader_image_surface_payload() {
     visit(node);
 
     ordered_json payload = ordered_json::object();
-    payload["array"] = array_signature(context.hierarchy.load(root, "0"));
+    payload["array"] = array_signature(context.hierarchy->load(root, "0"));
     payload["descend"] = std::move(descend);
     payload["lookup"] = root.root_attrs["multiscales"];
     return payload;
 }
 
 ordered_json reader_plate_surface_payload() {
-    const auto scenario = build_hcs_scenario();
+    const auto& scenario = cached_hcs_scenario();
     ProbeContext context{};
-    context.hierarchy = scenario.hierarchy;
+    context.hierarchy = &scenario.hierarchy;
     context.seen.push_back("/plate");
     auto plate_node = make_node(context, scenario.hierarchy.nodes.at("/plate"), true);
     auto image_node = make_node(context, scenario.hierarchy.nodes.at("/plate/A/1/0"), true);
@@ -1711,7 +1721,7 @@ ordered_json reader_plate_surface_payload() {
         runtime.well_paths,
         runtime.first_field_path,
         runtime.dataset_paths);
-    const auto stitched = context.hierarchy.load(
+    const auto& stitched = context.hierarchy->load(
         scenario.hierarchy.nodes.at("/plate"),
         level_plan[0].tile_paths[0]);
 
@@ -1750,7 +1760,7 @@ const ProbeStoreNode& root_for_signature(const Scenario& scenario, const std::st
 
 ordered_json reader_probe_matches(const std::string& scenario) {
     return reader_matches_payload(
-        scenario == "image" ? build_image_scenario() : build_hcs_scenario(),
+        scenario == "image" ? cached_image_scenario() : cached_hcs_scenario(),
         scenario);
 }
 
@@ -1762,6 +1772,14 @@ ordered_json reader_probe_node_ops(const std::string& scenario) {
 }
 
 ordered_json reader_probe_signature(const std::string& scenario) {
+    if (scenario == "image") {
+        const auto& built = cached_image_scenario();
+        return reader_signature_from_root(built, root_for_signature(built, scenario));
+    }
+    if (scenario == "plate" || scenario == "well") {
+        const auto& built = cached_hcs_scenario();
+        return reader_signature_from_root(built, root_for_signature(built, scenario));
+    }
     const auto built = build_scenario(scenario);
     return reader_signature_from_root(built, root_for_signature(built, scenario));
 }

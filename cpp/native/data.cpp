@@ -1,24 +1,82 @@
 #include "data.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 
 namespace ome_zarr_c::native_code {
+
+namespace {
+
+bool square_less_than(const std::int64_t value, const std::int64_t threshold) {
+    if (threshold <= 0) {
+        return false;
+    }
+    if (value == 0) {
+        return true;
+    }
+    return value <= (threshold - 1) / value;
+}
+
+std::int64_t largest_nonnegative_square_less_than(const std::int64_t threshold) {
+    auto candidate = static_cast<std::int64_t>(
+        std::sqrt(static_cast<long double>(threshold - 1)));
+    while (square_less_than(candidate + 1, threshold)) {
+        ++candidate;
+    }
+    while (!square_less_than(candidate, threshold)) {
+        --candidate;
+    }
+    return candidate;
+}
+
+}  // namespace
 
 std::vector<CirclePoint> circle_points(std::size_t height, std::size_t width) {
     const std::size_t cx = width / 2;
     const std::size_t cy = height / 2;
     const std::size_t radius = std::min(width, height) / 2;
     const std::size_t radius_squared = radius * radius;
+    const auto signed_cx = static_cast<std::int64_t>(cx);
+    const auto signed_cy = static_cast<std::int64_t>(cy);
+    const auto signed_radius_squared = static_cast<std::int64_t>(radius_squared);
+    const bool use_span_fill = radius > 16U;
 
     std::vector<CirclePoint> points;
+    if (height != 0 && width <= std::numeric_limits<std::size_t>::max() / height) {
+        const std::size_t total_pixels = height * width;
+        std::size_t circle_bound = radius_squared;
+        if (circle_bound <= std::numeric_limits<std::size_t>::max() / 4U) {
+            circle_bound *= 4U;
+        } else {
+            circle_bound = total_pixels;
+        }
+        points.reserve(std::min(total_pixels, circle_bound));
+    }
     for (std::size_t y = 0; y < height; ++y) {
-        for (std::size_t x = 0; x < width; ++x) {
-            const auto dx = static_cast<std::int64_t>(x) - static_cast<std::int64_t>(cx);
-            const auto dy = static_cast<std::int64_t>(y) - static_cast<std::int64_t>(cy);
-            if (dx * dx + dy * dy < static_cast<std::int64_t>(radius_squared)) {
-                points.push_back(CirclePoint{y, x});
+        const auto dy = static_cast<std::int64_t>(y) - signed_cy;
+        const auto dy_squared = dy * dy;
+        if (dy_squared >= signed_radius_squared) {
+            continue;
+        }
+        if (!use_span_fill) {
+            for (std::size_t x = 0; x < width; ++x) {
+                const auto dx = static_cast<std::int64_t>(x) - signed_cx;
+                if (dx * dx + dy_squared < signed_radius_squared) {
+                    points.push_back(CirclePoint{y, x});
+                }
             }
+            continue;
+        }
+        const auto max_dx =
+            largest_nonnegative_square_less_than(signed_radius_squared - dy_squared);
+        const auto first_x = signed_cx > max_dx ? signed_cx - max_dx : 0;
+        const auto last_x = std::min<std::int64_t>(
+            static_cast<std::int64_t>(width - 1),
+            signed_cx + max_dx);
+        for (auto x = first_x; x <= last_x; ++x) {
+            points.push_back(CirclePoint{y, static_cast<std::size_t>(x)});
         }
     }
     return points;

@@ -49,7 +49,10 @@ MISLEADING_BENCHMARK_LABEL_PATTERNS = (
     re.compile(r"\b(?:C\+\+|cpp)\s+harness\b", re.IGNORECASE),
     re.compile(r"\bC\+\+\s+median\b"),
     re.compile(r"\bGeometric-mean\s+C\+\+\s+relative speed vs Python\b"),
-    re.compile(r"\bCase classification:.*\bC\+\+\s+(?:faster|slower)\b"),
+    re.compile(r"\bnative C\+\+\s+relative speed vs Python\b", re.IGNORECASE),
+    re.compile(r"\bconverted relative speed vs Python\b", re.IGNORECASE),
+    re.compile(r"\bC\+\+\s+vs\s+Python\b", re.IGNORECASE),
+    re.compile(r"\b(?:above|below)\s+Python\b", re.IGNORECASE),
     re.compile(r"\bcompat/oracle\b", re.IGNORECASE),
 )
 STALE_NATIVE_BACKED_PATTERN = re.compile(r"\bnative[- ]backed\b", re.IGNORECASE)

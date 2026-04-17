@@ -1,5 +1,9 @@
 # C++ Porting Instructions
 
+Critical: do not spawn, delegate to, or coordinate with multiple AI agents,
+subagents, or separate agent sessions. Work in one session only unless the user
+explicitly revokes this rule in a later instruction.
+
 - Priority order:
   1. Preserve exact parity with the frozen Python upstream.
   2. Maximize measured performance only after parity is already proven.
