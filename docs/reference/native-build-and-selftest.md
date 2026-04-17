@@ -149,6 +149,11 @@ The native benchmark layer measures pure C++ semantic cost. Use the Python
 benchmark suite separately when you need end-to-end parity-harness timing or
 upstream-versus-port comparison on the same machine.
 
+Python-vs-native reports must show time terms first: Python time, native C++
+time, time saved per operation, and native C++ time reduction. If a ratio is
+included, label it as native C++ speedup over Python
+(`python_time / native_cpp_time`).
+
 ## Native C ABI Interop
 
 The build produces `ome_zarr_native_api` as a shared library. This target is a

@@ -19,6 +19,9 @@ Use this skill after parity has been demonstrated for a converted surface.
   path before widening to larger reports.
 - Run repeated measurements and report medians or geometric means, not one-off
   wall-clock numbers.
+- Report time terms first: Python time, native C++ time, time saved per
+  operation, and native C++ time reduction. If a ratio is included, label it
+  as native C++ speedup over Python (`python_time / native_cpp_time`).
 - Report version and environment details with the results.
 - If the benchmark points to boundary overhead instead of native arithmetic,
   load `cpp-performance-optimization` before changing code.

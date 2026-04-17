@@ -110,6 +110,18 @@ json load_json_or_empty(const fs::path& path) {
     return load_json_file(metadata_path.value());
 }
 
+std::optional<fs::path> dataset_metadata_path(const fs::path& path) {
+    const fs::path zarr_json = path / "zarr.json";
+    if (fs::exists(zarr_json)) {
+        return zarr_json;
+    }
+    const fs::path zarray = path / ".zarray";
+    if (fs::exists(zarray)) {
+        return zarray;
+    }
+    return std::nullopt;
+}
+
 struct GroupAttrsState {
     fs::path metadata_path;
     bool uses_zarr_json = false;
@@ -1322,6 +1334,34 @@ std::vector<char> decode_v3_chunk(
     return decoded;
 }
 
+std::vector<char> decode_chunk(
+    const std::vector<char>& source_bytes,
+    const json& source_metadata,
+    const fs::path& relative) {
+    if (source_metadata.contains("dtype")) {
+        return decode_v2_chunk(source_bytes, source_metadata, relative);
+    }
+    return decode_v3_chunk(source_bytes, source_metadata, relative);
+}
+
+std::vector<char> encode_zstd_chunk(const std::vector<char>& raw) {
+    const auto bound = ZSTD_compressBound(raw.size());
+    std::vector<char> encoded(bound);
+    const auto compressed = ZSTD_compress(
+        encoded.data(),
+        encoded.size(),
+        raw.data(),
+        raw.size(),
+        0);
+    if (ZSTD_isError(compressed) != 0U) {
+        throw std::runtime_error(
+            "ZSTD compress failed: " +
+            std::string(ZSTD_getErrorName(compressed)));
+    }
+    encoded.resize(compressed);
+    return encoded;
+}
+
 std::vector<char> read_binary_file(const fs::path& path) {
     std::ifstream stream(path, std::ios::binary);
     if (!stream) {
@@ -1342,12 +1382,14 @@ std::vector<char> transcode_chunk_to_v2(
     const std::vector<char>& source_bytes,
     const json& source_metadata,
     const fs::path& relative) {
-    const auto raw = decode_v3_chunk(source_bytes, source_metadata, relative);
+    const auto raw = decode_chunk(source_bytes, source_metadata, relative);
 
     ensure_blosc_initialized();
 
     std::vector<char> encoded(raw.size() + BLOSC_MAX_OVERHEAD);
-    const auto type_size = data_type_size(source_metadata.at("data_type").get<std::string>());
+    const auto type_size = source_metadata.contains("dtype")
+        ? data_type_size(source_metadata.at("dtype").get<std::string>())
+        : data_type_size(source_metadata.at("data_type").get<std::string>());
     const int compressed = blosc_compress_ctx(
         5,
         BLOSC_SHUFFLE,
@@ -1364,6 +1406,66 @@ std::vector<char> transcode_chunk_to_v2(
     }
     encoded.resize(static_cast<std::size_t>(compressed));
     return encoded;
+}
+
+std::vector<char> transcode_chunk_to_v3(
+    const std::vector<char>& source_bytes,
+    const json& source_metadata,
+    const fs::path& relative) {
+    return encode_zstd_chunk(decode_chunk(source_bytes, source_metadata, relative));
+}
+
+fs::path chunk_relative_as_slash_path(
+    const json& source_metadata,
+    const fs::path& relative) {
+    char separator = '.';
+    if (source_metadata.contains("chunk_key_encoding") &&
+        source_metadata["chunk_key_encoding"].is_object() &&
+        source_metadata["chunk_key_encoding"].contains("configuration") &&
+        source_metadata["chunk_key_encoding"]["configuration"].is_object() &&
+        source_metadata["chunk_key_encoding"]["configuration"].contains("separator") &&
+        source_metadata["chunk_key_encoding"]["configuration"]["separator"].is_string()) {
+        const auto configured = source_metadata["chunk_key_encoding"]["configuration"]["separator"]
+                                    .get<std::string>();
+        separator = configured == "." ? '.' : '/';
+    } else if (source_metadata.contains("dimension_separator") &&
+               source_metadata["dimension_separator"].is_string()) {
+        const auto configured = source_metadata["dimension_separator"].get<std::string>();
+        separator = configured == "/" ? '/' : '.';
+    }
+
+    const auto indices = chunk_indices_from_relative(relative, separator);
+    fs::path target;
+    for (const auto index : indices) {
+        target /= std::to_string(index);
+    }
+    return target;
+}
+
+bool v3_chunks_already_use_download_codecs(const json& source_metadata) {
+    if (source_metadata.contains("dtype") || !source_metadata.contains("codecs") ||
+        !source_metadata["codecs"].is_array()) {
+        return false;
+    }
+    const auto& codecs = source_metadata["codecs"];
+    if (codecs.size() != 2U) {
+        return false;
+    }
+    if (!codecs[0].is_object() || !codecs[0].contains("name") ||
+        codecs[0]["name"] != "bytes") {
+        return false;
+    }
+    if (!codecs[1].is_object() || !codecs[1].contains("name") ||
+        codecs[1]["name"] != "zstd") {
+        return false;
+    }
+    if (!codecs[1].contains("configuration") ||
+        !codecs[1]["configuration"].is_object()) {
+        return false;
+    }
+    const auto& config = codecs[1]["configuration"];
+    return config.value("level", -1) == 0 &&
+           config.value("checksum", true) == false;
 }
 
 void copy_dataset_chunks(
@@ -1388,29 +1490,80 @@ void copy_dataset_chunks(
         }
         const auto relative = fs::relative(entry.path(), source_chunk_root);
         const fs::path target =
-            output_zarr_format == 2 ? destination_dataset / relative : destination_dataset / "c" / relative;
+            output_zarr_format == 2
+                ? destination_dataset / chunk_relative_as_slash_path(source_metadata, relative)
+                : destination_dataset / "c" / chunk_relative_as_slash_path(source_metadata, relative);
         fs::create_directories(target.parent_path());
         if (output_zarr_format == 2) {
             write_binary_file(
                 target,
                 transcode_chunk_to_v2(read_binary_file(entry.path()), source_metadata, relative));
         } else {
-            fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+            if (v3_chunks_already_use_download_codecs(source_metadata)) {
+                fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+            } else {
+                write_binary_file(
+                    target,
+                    transcode_chunk_to_v3(read_binary_file(entry.path()), source_metadata, relative));
+            }
         }
     }
 }
 
+std::string bytes_codec_endian(const json& source_metadata) {
+    if (source_metadata.contains("codecs") && source_metadata["codecs"].is_array()) {
+        for (const auto& codec : source_metadata["codecs"]) {
+            if (!codec.is_object() || !codec.contains("name") ||
+                !codec["name"].is_string() ||
+                codec["name"].get<std::string>() != "bytes") {
+                continue;
+            }
+            if (codec.contains("configuration") &&
+                codec["configuration"].is_object() &&
+                codec["configuration"].contains("endian") &&
+                codec["configuration"]["endian"].is_string()) {
+                return codec["configuration"]["endian"].get<std::string>();
+            }
+        }
+    }
+    if (source_metadata.contains("dtype") && source_metadata["dtype"].is_string()) {
+        const auto dtype = source_metadata["dtype"].get<std::string>();
+        if (!dtype.empty() && dtype[0] == '>') {
+            return "big";
+        }
+    }
+    return "little";
+}
+
+json output_bytes_codec(const json& source_metadata) {
+    const auto type_name = source_metadata.contains("data_type")
+        ? source_metadata.at("data_type").get<std::string>()
+        : source_metadata.at("dtype").get<std::string>();
+    if (data_type_size(type_name) <= 1U) {
+        return json{{"name", "bytes"}};
+    }
+    return json{
+        {"name", "bytes"},
+        {"configuration", {{"endian", bytes_codec_endian(source_metadata)}}},
+    };
+}
+
 void write_dataset_metadata(
-    const fs::path& source_dataset,
     const fs::path& destination_dataset,
     const int output_zarr_format,
+    const json& source_metadata,
     const std::vector<std::string>& axis_names) {
-    const auto source_metadata = load_json_file(source_dataset / "zarr.json");
     if (output_zarr_format == 2) {
+        const auto chunk_shape = source_metadata.contains("chunks")
+            ? source_metadata.at("chunks")
+            : source_metadata.at("chunk_grid").at("configuration").at("chunk_shape");
+        const auto dtype = source_metadata.contains("dtype")
+            ? source_metadata.at("dtype").get<std::string>()
+            : zarr_v2_dtype_from_data_type(source_metadata.at("data_type").get<std::string>());
         json payload = {
             {"shape", source_metadata.at("shape")},
-            {"chunks", source_metadata.at("chunk_grid").at("configuration").at("chunk_shape")},
-            {"dtype", zarr_v2_dtype_from_data_type(source_metadata.at("data_type").get<std::string>())},
+            {"chunks", chunk_shape},
+            {"dtype", dtype},
             {"fill_value", source_metadata.contains("fill_value") ? source_metadata.at("fill_value") : json(0)},
             {"order", "C"},
             {"filters", nullptr},
@@ -1430,7 +1583,30 @@ void write_dataset_metadata(
         return;
     }
 
-    json payload = source_metadata;
+    json payload = source_metadata.contains("data_type")
+        ? source_metadata
+        : json{
+              {"shape", source_metadata.at("shape")},
+              {"data_type", v2_numeric_format(source_metadata.at("dtype").get<std::string>()).numpy_repr_name},
+              {"chunk_grid",
+               {{"name", "regular"},
+                {"configuration", {{"chunk_shape", source_metadata.at("chunks")}}}}},
+              {"chunk_key_encoding",
+               {{"name", "default"}, {"configuration", {{"separator", "/"}}}}},
+              {"fill_value",
+               source_metadata.contains("fill_value") ? source_metadata.at("fill_value") : json(0)},
+              {"attributes", json::object()},
+              {"zarr_format", 3},
+              {"node_type", "array"},
+              {"storage_transformers", json::array()},
+          };
+    payload["codecs"] = json::array({
+        output_bytes_codec(source_metadata),
+        json{
+            {"name", "zstd"},
+            {"configuration", {{"level", 0}, {"checksum", false}}},
+        },
+    });
     if (!axis_names.empty()) {
         payload["dimension_names"] = axis_names;
     }
@@ -1468,11 +1644,17 @@ void copy_multiscale_group(
     for (const auto& dataset_path : dataset_paths_from_metadata(metadata)) {
         const auto source_dataset = source_group / dataset_path;
         const auto destination_dataset = destination_group / dataset_path;
-        const auto source_dataset_metadata = load_json_file(source_dataset / "zarr.json");
+        const auto source_dataset_metadata_path = dataset_metadata_path(source_dataset);
+        if (!source_dataset_metadata_path.has_value()) {
+            throw std::runtime_error(
+                "Unable to find dataset metadata under: " + source_dataset.string());
+        }
+        const auto source_dataset_metadata =
+            load_json_file(source_dataset_metadata_path.value());
         write_dataset_metadata(
-            source_dataset,
             destination_dataset,
             output_zarr_format,
+            source_dataset_metadata,
             axis_names);
         copy_dataset_chunks(
             source_dataset,

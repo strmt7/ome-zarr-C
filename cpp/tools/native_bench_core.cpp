@@ -241,7 +241,10 @@ void write_u16_v2_array_fixture(
 const fs::path& bench_runtime_fixture_root() {
     static const fs::path root = [] {
         const fs::path root_path =
-            fs::temp_directory_path() / "ome_zarr_c_native_bench_runtime";
+            fs::temp_directory_path() /
+            ("ome_zarr_c_native_bench_runtime_" +
+             std::to_string(Clock::now().time_since_epoch().count()));
+        fs::remove_all(root_path);
         fs::create_directories(root_path);
 
         const fs::path info_v2 = root_path / "info_v2.zarr";

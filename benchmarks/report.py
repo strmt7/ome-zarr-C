@@ -33,13 +33,15 @@ def _split_name(name: str) -> tuple[str, str]:
 
 
 def _format_seconds(seconds: float) -> str:
-    if seconds < 1e-6:
-        return f"{seconds * 1e9:.2f} ns"
-    if seconds < 1e-3:
-        return f"{seconds * 1e6:.2f} us"
-    if seconds < 1:
-        return f"{seconds * 1e3:.2f} ms"
-    return f"{seconds:.3f} s"
+    sign = "-" if seconds < 0 else ""
+    magnitude = abs(seconds)
+    if magnitude < 1e-6:
+        return f"{sign}{magnitude * 1e9:.2f} ns"
+    if magnitude < 1e-3:
+        return f"{sign}{magnitude * 1e6:.2f} us"
+    if magnitude < 1:
+        return f"{sign}{magnitude * 1e3:.2f} ms"
+    return f"{sign}{magnitude:.3f} s"
 
 
 def _variant_label(variant: str) -> str:
@@ -51,9 +53,9 @@ def _variant_label(variant: str) -> str:
 def _status(relative_ratio: float, variant: str) -> str:
     label = _variant_label(variant)
     if relative_ratio >= 1.05:
-        return f"{label} above Python"
+        return f"{label} faster than Python"
     if relative_ratio <= 0.95:
-        return f"{label} below Python"
+        return f"{label} slower than Python"
     return "roughly equal"
 
 
@@ -65,10 +67,18 @@ def _format_relative_result(relative_ratio: float) -> str:
     return f"{relative_ratio:.3f}x"
 
 
+def _format_percent(value: float) -> str:
+    return f"{value:.1f}%"
+
+
 def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
     relative_ratios = [row["relative_ratio"] for row in paired_rows]
-    above = sum(1 for row in paired_rows if str(row["status"]).endswith("above Python"))
-    below = sum(1 for row in paired_rows if str(row["status"]).endswith("below Python"))
+    faster = sum(
+        1 for row in paired_rows if str(row["status"]).endswith("faster than Python")
+    )
+    slower = sum(
+        1 for row in paired_rows if str(row["status"]).endswith("slower than Python")
+    )
     equal = sum(1 for row in paired_rows if row["status"] == "roughly equal")
     variants = sorted({str(row["variant"]) for row in paired_rows})
     if variants == ["native"]:
@@ -85,13 +95,14 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
         "",
         f"- Paired cases: {len(paired_rows)}",
         (
-            f"- Geometric-mean {summary_label} relative speed vs Python: "
+            f"- Geometric-mean {summary_label} speedup over Python "
+            f"(`python_time / native_cpp_time`): "
             f"{_format_relative_result(_geometric_mean(relative_ratios))}"
         ),
         (
             "- Case classification: "
-            f"{above} above Python, {equal} roughly equal, "
-            f"{below} below Python"
+            f"{faster} {summary_label} faster, {equal} roughly equal, "
+            f"{slower} {summary_label} slower"
         ),
         "",
         "## Group Geometric Means",
@@ -108,19 +119,26 @@ def _render_markdown(paired_rows: list[dict[str, object]]) -> str:
             "",
             "## Cases",
             "",
-            "| Case | Variant | Python median | converted median | "
-            "converted relative speed vs Python | Status |",
-            "| --- | --- | ---: | ---: | ---: | --- |",
+            "| Case | Variant | Python time | native C++ time | time saved per op | "
+            "native C++ time reduction | native C++ speedup over Python "
+            "(`python_time / native_cpp_time`) | Status |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
     )
 
     for row in paired_rows:
+        python_median = row["python_median"]
+        converted_median = row["converted_median"]
+        time_saved = python_median - converted_median
+        time_reduction = 1.0 - (converted_median / python_median)
         lines.append(
             "| "
             f"{row['name']} | "
             f"{_variant_label(str(row['variant']))} | "
-            f"{_format_seconds(row['python_median'])} | "
-            f"{_format_seconds(row['converted_median'])} | "
+            f"{_format_seconds(python_median)} | "
+            f"{_format_seconds(converted_median)} | "
+            f"{_format_seconds(time_saved)} | "
+            f"{_format_percent(time_reduction * 100.0)} | "
             f"{_format_relative_result(row['relative_ratio'])} | "
             f"{row['status']} |"
         )

@@ -10,6 +10,8 @@
 - `docs/reference/native-cpp-debt-baseline.json`: ratcheting baseline for the
   remaining mixed C++ debt footprint
 - `docs/reference/benchmark-suite.md`: pyperf benchmark architecture and scope
+- `docs/reference/public-api-benchmark-results.md`: latest bounded local
+  public-API Python-vs-native-C++ timing results
 - `docs/reference/public-benchmark-fixtures.md`: provenance, licensing, and
   size notes for public real-data benchmark fixtures
 - `docs/reference/immutable-parity-proof.md`: content-addressed parity and

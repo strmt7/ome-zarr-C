@@ -21,8 +21,10 @@ Repo-local reusable skills live under `.agents/skills/`.
 - `cpp-performance-optimization`: optimize parity-proven native hot
   paths for real C++ performance gains without changing behavior
 - `benchmark-first`: benchmark before claiming native C++ is faster; report
-  slower native C++ cases as direct sub-`1.0` relative-speed ratios; native
-  C++ claims require standalone native executable/library timing
+  Python time, native C++ time, time saved, and time reduction first; any
+  ratio must be labeled as native C++ speedup over Python
+  (`python_time / native_cpp_time`); native C++ claims require standalone
+  native executable/library timing
 - `immutable-parity-proof`: verify the frozen snapshot manifest, use
   content-addressed parity evidence, and keep embedded-Python debt out of
   native-conversion counts

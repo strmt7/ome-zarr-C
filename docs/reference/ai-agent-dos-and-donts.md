@@ -65,11 +65,13 @@ porting work.
 - Do run a smart consistency sweep before pushing so docs, file names, function
   names, benchmark claims, and structural references still match the actual
   repo state.
-- Report pure-native benchmark results as absolute native C++ relative speed
-  vs Python: `python_time / native_cpp_time`. A ratio above `1.0` means native
-  C++ is faster; below `1.0` means native C++ is slower. Do not invert slower
-  cases into larger "slower" multipliers; report the direct ratio, for example
-  `0.748x`.
+- Report pure-native benchmark results in time terms first: Python time,
+  native C++ time, time saved per operation, and native C++ time reduction. If
+  you include a ratio, label it as native C++ speedup over Python:
+  `python_time / native_cpp_time`. A ratio above `1.0x` means native C++ is
+  faster; below `1.0x` means native C++ is slower. Do not use shorthand labels
+  that omit the ratio direction, and do not invert slower cases into larger
+  "slower" multipliers; report the direct speedup ratio, for example `0.748x`.
 - Label only standalone native C++ executable/library timings as native C++.
   Do not publish Python package-path converted timings.
 
@@ -105,6 +107,7 @@ porting work.
   consistent. Scan for stale names, removed files still mentioned in docs, and
   other contract drift before pushing.
 - Do not describe a slower C++ result as a performance gain or invert it into
-  a larger "slower" multiplier. Keep the direct relative-speed ratio.
+  a larger "slower" multiplier. Keep the direct speedup ratio and show the
+  actual Python and native C++ times.
 - Do not call a Python package-path timing a C++ timing just because it lives
   next to C++ parity work.

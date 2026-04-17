@@ -38,8 +38,11 @@ Each benchmark case has:
 - a verification hook that runs before timing.
 
 The native timer calls `ome_zarr_native_bench_core`; the Python timer imports
-only `source_code_v.0.15.0/ome_zarr`. Results are reported as native C++
-relative speed vs Python using `python_time / native_cpp_time`.
+only `source_code_v.0.15.0/ome_zarr`. Results must be reported in time terms:
+Python time, native C++ time, time saved per operation, and native C++ time
+reduction. If a ratio is included, label it as native C++ speedup over Python
+using `python_time / native_cpp_time`; never use a shorthand label that omits
+the ratio direction.
 
 ## Commands
 

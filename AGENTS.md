@@ -164,11 +164,14 @@ standalone C++ implementation under `cpp/native/`, `cpp/api/`, and
     in `docs/reference/native-dependency-manifest.json` as the source of truth.
     Do not rely on stale distro package versions for CMake, Ninja, Zstd, or
     c-blosc when the manifest specifies newer releases.
-49. Report pure-native benchmark outcomes as absolute native C++ relative
-    speed vs Python: `python_time / native_cpp_time`. A ratio above `1.0`
-    means native C++ is faster; below `1.0` means native C++ is slower. Do not
-    invert slower cases into larger "slower" multipliers; report them directly,
-    for example `0.748x`.
+49. Report pure-native benchmark outcomes in time terms first: Python time,
+    native C++ time, time saved per operation, and native C++ time reduction.
+    If a ratio is included, label it as native C++ speedup over Python:
+    `python_time / native_cpp_time`. A ratio above `1.0x` means native C++ is
+    faster; below `1.0x` means native C++ is slower. Do not use shorthand
+    labels that omit the ratio direction, and do not invert slower cases into
+    larger "slower" multipliers; report the direct speedup ratio, for example
+    `0.748x`.
 50. Never call a Python package-path timing "C++" or "native C++". Native C++
     benchmark claims require standalone native C++ executable/library timing.
 51. Keep all correctness tests in the root `tests/` folder. Do not hide tests

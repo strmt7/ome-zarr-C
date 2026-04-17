@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
+import struct
 import sys
 from pathlib import Path
-
-import zarr
 
 from tests import test_utils_equivalence as utils_eq
 from tests._outcomes import err, ok
@@ -17,9 +17,67 @@ _py_format = importlib.import_module("ome_zarr.format")
 _py_io = importlib.import_module("ome_zarr.io")
 
 
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, separators=(",", ":")))
+
+
+def _write_v2_group(root: Path, attrs: dict | None = None) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    _write_json(root / ".zgroup", {"zarr_format": 2})
+    _write_json(root / ".zattrs", attrs or {})
+
+
+def _write_v2_i4_array(root: Path, values: tuple[int, int, int, int]) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        root / ".zarray",
+        {
+            "chunks": [2, 2],
+            "compressor": None,
+            "dimension_separator": ".",
+            "dtype": "<i4",
+            "fill_value": 0,
+            "filters": None,
+            "order": "C",
+            "shape": [2, 2],
+            "zarr_format": 2,
+        },
+    )
+    (root / "0.0").write_bytes(struct.pack("<4i", *values))
+
+
+def _write_v3_i4_array(root: Path, values: tuple[int, int, int, int]) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        root / "zarr.json",
+        {
+            "attributes": {},
+            "chunk_grid": {
+                "configuration": {"chunk_shape": [2, 2]},
+                "name": "regular",
+            },
+            "chunk_key_encoding": {
+                "configuration": {"separator": "/"},
+                "name": "default",
+            },
+            "codecs": [{"configuration": {"endian": "little"}, "name": "bytes"}],
+            "data_type": "int32",
+            "fill_value": 0,
+            "node_type": "array",
+            "shape": [2, 2],
+            "storage_transformers": [],
+            "zarr_format": 3,
+        },
+    )
+    chunk = root / "c" / "0" / "0"
+    chunk.parent.mkdir(parents=True, exist_ok=True)
+    chunk.write_bytes(struct.pack("<4i", *values))
+
+
 def _write_minimal_v2_image(root: Path) -> None:
-    group = zarr.open_group(str(root), mode="w", zarr_format=2)
-    group.attrs.update(
+    _write_v2_group(
+        root,
         {
             "multiscales": [
                 {
@@ -28,50 +86,42 @@ def _write_minimal_v2_image(root: Path) -> None:
                     "datasets": [{"path": "0"}],
                 }
             ]
-        }
+        },
     )
-    array = zarr.open_array(
-        str(root / "0"),
-        mode="w",
-        shape=(2, 2),
-        chunks=(2, 2),
-        dtype="i4",
-    )
-    array[:] = [[1, 2], [3, 4]]
+    _write_v2_i4_array(root / "0", (1, 2, 3, 4))
 
 
 def _write_minimal_v3_image(root: Path) -> None:
-    group = zarr.open_group(str(root), mode="w", zarr_format=3)
-    group.attrs.update(
+    root.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        root / "zarr.json",
         {
-            "ome": {
-                "version": "0.5",
-                "multiscales": [
-                    {
-                        "axes": [
-                            {"name": "y", "type": "space"},
-                            {"name": "x", "type": "space"},
-                        ],
-                        "datasets": [
-                            {
-                                "path": "s0",
-                                "coordinateTransformations": [
-                                    {"type": "scale", "scale": [1, 1]}
-                                ],
-                            }
-                        ],
-                    }
-                ],
-            }
-        }
+            "attributes": {
+                "ome": {
+                    "version": "0.5",
+                    "multiscales": [
+                        {
+                            "axes": [
+                                {"name": "y", "type": "space"},
+                                {"name": "x", "type": "space"},
+                            ],
+                            "datasets": [
+                                {
+                                    "path": "s0",
+                                    "coordinateTransformations": [
+                                        {"type": "scale", "scale": [1, 1]}
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            },
+            "node_type": "group",
+            "zarr_format": 3,
+        },
     )
-    array = group.create_array(
-        name="s0",
-        shape=(2, 2),
-        chunks=(2, 2),
-        dtype="i4",
-    )
-    array[:] = [[5, 6], [7, 8]]
+    _write_v3_i4_array(root / "s0", (5, 6, 7, 8))
 
 
 def _location_signature(location) -> dict:
@@ -175,12 +225,12 @@ def test_zarr_location_matches_upstream_for_plate_root(tmp_path) -> None:
     root = tmp_path / "plate.zarr"
     field = root / "A" / "1" / "0"
     _write_minimal_v2_image(field)
-    well_group = zarr.open_group(str(root / "A" / "1"), mode="w", zarr_format=2)
-    well_group.attrs.update(
-        {"well": {"version": "0.4", "images": [{"path": "0", "acquisition": 1}]}}
+    _write_v2_group(
+        root / "A" / "1",
+        {"well": {"version": "0.4", "images": [{"path": "0", "acquisition": 1}]}},
     )
-    group = zarr.open_group(str(root), mode="w", zarr_format=2)
-    group.attrs.update(
+    _write_v2_group(
+        root,
         {
             "plate": {
                 "version": "0.4",
@@ -188,7 +238,7 @@ def test_zarr_location_matches_upstream_for_plate_root(tmp_path) -> None:
                 "columns": [{"name": "1"}],
                 "wells": [{"path": "A/1", "rowIndex": 0, "columnIndex": 0}],
             }
-        }
+        },
     )
 
     expected = _run_parse_url(_py_io.parse_url, root)

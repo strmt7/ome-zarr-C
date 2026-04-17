@@ -253,8 +253,10 @@ script:
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
 ```
 
-That script emits one table with frozen-upstream Python `pyperf` numbers and
-matching standalone-native benchmark numbers for the same touched surface.
+That script emits one table with frozen-upstream Python `pyperf` numbers,
+matching standalone-native benchmark numbers for the same touched surface,
+time saved per operation, native C++ time reduction, and native C++ speedup
+over Python using `python_time / native_cpp_time`.
 
 For direct Python-vs-native comparison on the real standalone runtime paths
 touched in the current iterations:
@@ -374,12 +376,13 @@ The real-data suite downloads public benchmark fixtures into
 that environment variable is set. An additional `455.3 MiB` BIA fixture is
 available only when `OME_ZARR_BENCH_INCLUDE_LARGE=1`.
 
-See `docs/reference/benchmark-suite.md` for the methodology and
-`docs/reference/public-benchmark-fixtures.md` for fixture provenance.
+See `docs/reference/benchmark-suite.md` for the methodology,
+`docs/reference/public-api-benchmark-results.md` for the latest bounded local
+public-API timing results, and `docs/reference/public-benchmark-fixtures.md`
+for fixture provenance.
 
-No tracked benchmark result snapshot is currently committed after retiring the
-old Python package-path benchmark layer. Generate fresh results before making a
-new performance claim:
+Refresh the tracked public-API benchmark result snapshot before making a new
+performance claim:
 
 ```bash
 .venv/bin/python -m benchmarks.run \
