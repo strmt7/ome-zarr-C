@@ -2,6 +2,7 @@
 
 - `docs/reference/architecture-first-porting.md`: architecture-first porting map
 - `docs/reference/standalone-cpp-target.md`: current-vs-target product shape for the standalone C++ migration
+- `docs/reference/cpp-user-guide.md`: comprehensive native C++ user guide for commands, concepts, and API entrypoints
 - `docs/reference/native-build-and-selftest.md`: standalone native build, self-test, and bounded benchmark workflow
 - `docs/reference/native-c-api-interop.md`: optional C ABI for external FFI, NumPy-style buffers, and local Zarr store interop
 - `docs/reference/native-dependency-manifest.json`: pinned latest native tool and library versions for the standalone C++ path
@@ -11,7 +12,7 @@
   remaining mixed C++ debt footprint
 - `docs/reference/benchmark-suite.md`: pyperf benchmark architecture and scope
 - `docs/reference/public-api-benchmark-results.md`: latest bounded local
-  public-API Python-vs-native-C++ timing results
+  public-API Python time, native C++ time, and speedup results
 - `docs/reference/public-benchmark-fixtures.md`: provenance, licensing, and
   size notes for public real-data benchmark fixtures
 - `docs/reference/immutable-parity-proof.md`: content-addressed parity and

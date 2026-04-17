@@ -149,8 +149,8 @@ The native benchmark layer measures pure C++ semantic cost. Use the Python
 benchmark suite separately when you need end-to-end parity-harness timing or
 upstream-versus-port comparison on the same machine.
 
-Python-vs-native reports must show time terms first: Python time, native C++
-time, time saved per operation, and native C++ time reduction. If a ratio is
+Benchmark reports must show time terms first: Python time, native C++ time,
+time saved per operation, and native C++ time reduction. If a ratio is
 included, label it as native C++ speedup over Python
 (`python_time / native_cpp_time`).
 
@@ -172,8 +172,7 @@ For a fast iteration comparison on the touched `format` hotspot:
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py --match format
 ```
 
-For direct Python-vs-native comparison on the current standalone-native
-benchmark cases:
+For direct time comparison on the current standalone-native benchmark cases:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \

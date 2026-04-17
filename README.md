@@ -47,6 +47,9 @@ directory.
 - `benchmarks/`: Python-upstream and native-C++ timing suites
 - `docs/`: project references, design notes, and benchmark material
 
+Start with `docs/reference/cpp-user-guide.md` when you need practical native
+C++ command, concept, and API usage guidance.
+
 ## Verified Parity Surfaces
 
 Verified surfaces are proven through root-level tests under `tests/` and the
@@ -258,8 +261,8 @@ matching standalone-native benchmark numbers for the same touched surface,
 time saved per operation, native C++ time reduction, and native C++ speedup
 over Python using `python_time / native_cpp_time`.
 
-For direct Python-vs-native comparison on the real standalone runtime paths
-touched in the current iterations:
+For direct time comparison on the real standalone runtime paths touched in the
+current iterations:
 
 ```bash
 timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
@@ -268,7 +271,7 @@ timeout 180s .venv/bin/python scripts/compare_iteration_benchmarks.py \
   --native-match format
 ```
 
-Current standalone native CLI commands:
+Native CLI quick examples:
 
 ```bash
 ./build-cpp/ome_zarr_native_cli info /tmp/demo/image.zarr
@@ -281,7 +284,7 @@ Current standalone native CLI commands:
 ./build-cpp/ome_zarr_native_cli csv_to_labels /tmp/demo/props.csv cell_id score#d /tmp/demo/image.zarr cell_id
 ```
 
-All upstream CLI commands now have standalone-native replacements.
+The documented CLI command set now has standalone-native replacements.
 
 Current optional native C ABI entrypoints:
 
