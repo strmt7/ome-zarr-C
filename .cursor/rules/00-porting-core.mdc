@@ -4,6 +4,7 @@ globs:
 alwaysApply: true
 ---
 
+- Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 - Never modify `source_code_v.0.15.0/`.
 - Port one upstream surface at a time.
 - Keep C ABI wrappers thin and preserve upstream behavior first.

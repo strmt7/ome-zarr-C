@@ -1,5 +1,7 @@
 # ome-zarr-C
 
+[![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
+
 > **Early alpha test:** this repository is an experimental porting workspace.
 > Many or most features may be incomplete, broken, inaccurate, unstable, or
 > behave differently from what users expect. It is provided as-is for testing

@@ -7,7 +7,8 @@ explicitly revokes this rule in a later instruction.
 Keep public-facing repository material professional. Do not expose internal
 reasoning, private discussions, transient process notes.
 
-Use `AGENTS.md` as the universal baseline. This file is only a thin adapter.
+Use `AGENTS.md` as the universal baseline, including its pinned Karpathy agent
+baseline. This file is only a thin adapter.
 
 ## Load order
 

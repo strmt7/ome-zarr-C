@@ -1,6 +1,7 @@
 # Repository Instructions
 
-Use [AGENTS.md](../AGENTS.md) as the universal project contract.
+Use [AGENTS.md](../AGENTS.md) as the universal project contract, including its
+pinned Karpathy agent baseline.
 
 ## Core rules
 

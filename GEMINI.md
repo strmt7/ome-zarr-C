@@ -7,8 +7,9 @@ explicitly revokes this rule in a later instruction.
 Keep public-facing repository material professional. Do not expose internal
 reasoning, private discussions, transient process notes.
 
-Use `AGENTS.md` as the universal project contract and
-`docs/reference/ai-agent-context-routing.md` to keep context narrow.
+Use `AGENTS.md` as the universal project contract, including its pinned
+Karpathy agent baseline, and `docs/reference/ai-agent-context-routing.md` to
+keep context narrow.
 
 ## Core rules
 
