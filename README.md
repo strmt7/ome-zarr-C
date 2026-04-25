@@ -1,6 +1,8 @@
 # ome-zarr-C
 
+<!-- BEGIN GENERATED BADGES -->
 [![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
+<!-- END GENERATED BADGES -->
 
 > **Early alpha test:** this repository is an experimental porting workspace.
 > Many or most features may be incomplete, broken, inaccurate, unstable, or

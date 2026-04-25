@@ -316,6 +316,7 @@ standalone C++ implementation under `cpp/native/`, `cpp/api/`, and
 - `tests/`: parity and regression tests
 - `benchmarks/`: Python-upstream and standalone-native benchmark code
 - `docs/`: repo rules, routing, and benchmarks
+- `tools/update_readme_badges.py`: generated README badge block
 - `.agents/skills/`: reusable repo-local workflows
 
 ## Verification minimum
@@ -338,6 +339,7 @@ timeout 180s .venv/bin/python -m pytest -q \
 .venv/bin/python scripts/check_native_cpp.py --all
 .venv/bin/python scripts/check_pure_native_cpp.py --enforce-pure-native-subtree --report-existing-debt
 .venv/bin/python scripts/check_repo_consistency.py
+.venv/bin/python tools/update_readme_badges.py --check
 .venv/bin/python -m ruff check .
 .venv/bin/python -m ruff format --check .
 ./scripts/install_latest_native_toolchain.sh /usr/local
