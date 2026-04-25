@@ -318,3 +318,4 @@ Run only the narrowest relevant suites while iterating, but report exactly what
 was verified. If running Ruff on a subset, pass only Python or Markdown-like
 paths explicitly and never include C++ files. Do not claim blocked
 store-backed lanes are green by implication.
+
